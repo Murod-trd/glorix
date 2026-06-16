@@ -16,6 +16,9 @@ import Support from './pages/Support';
 import Roadmap from './pages/Roadmap';
 import RelationshipManager from './pages/RelationshipManager';
 import Analytics from './pages/Analytics';
+import AccountVerification from './pages/AccountVerification';
+import DocumentCenter from './pages/DocumentCenter';
+import AccountSelect from './pages/AccountSelect';
 import './index.css';
 
 export default function App() {
@@ -23,6 +26,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/onboarding" element={<Onboarding />} />
+        <Route path="/account-select" element={<AccountSelect />} />
         <Route path="*" element={
           <div style={{ display: 'flex', minHeight: '100vh' }}>
             <Sidebar />
@@ -45,6 +49,8 @@ export default function App() {
                 <Route path="/roadmap" element={<Roadmap />} />
                 <Route path="/manager" element={<RelationshipManager />} />
                 <Route path="/analytics" element={<Analytics />} />
+                <Route path="/accounts" element={<AccountVerification />} />
+                <Route path="/documents" element={<DocumentCenter />} />
               </Routes>
             </main>
           </div>
