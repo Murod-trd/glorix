@@ -1,0 +1,96 @@
+export const categories = [
+  'Все категории','Агро / Продукты','Стройматериалы','Электроника','Химикаты','Текстиль','Металлы','Упаковка','Офисное','Оборудование','Другое'
+];
+
+export const products = [
+  {
+    id: 'p1',
+    title: 'Цемент М400 (мешки 50 кг)',
+    category: 'Стройматериалы',
+    seller: { country: 'UZ', flag: '🇺🇿', city: 'Ташкент', trustScore: 94, verified: true },
+    price: 6.5, currency: 'USD', unit: 'мешок', minOrder: 100,
+    stock: 12000, stockAuto: false,
+    images: ['🏗️'],
+    specs: [{ p: 'Марка', v: 'М400' }, { p: 'Вес', v: '50 кг' }, { p: 'Стандарт', v: 'ГОСТ 31108' }],
+    deliveryDays: { min: 1, max: 2 },
+    sanctions: false,
+    rating: 4.8, reviews: 34,
+    incoterms: ['EXW','DAP'],
+  },
+  {
+    id: 'p2',
+    title: 'Хлопковая пряжа Ne 30/1 (кипы)',
+    category: 'Текстиль',
+    seller: { country: 'UZ', flag: '🇺🇿', city: 'Фергана', trustScore: 88, verified: true },
+    price: 2.8, currency: 'USD', unit: 'кг', minOrder: 500,
+    stock: 45000, stockAuto: false,
+    images: ['🧵'],
+    specs: [{ p: 'Номер', v: 'Ne 30/1' }, { p: 'Состав', v: '100% хлопок' }, { p: 'Кипа', v: '~200 кг' }],
+    deliveryDays: { min: 2, max: 3 },
+    sanctions: false,
+    rating: 4.6, reviews: 18,
+    incoterms: ['FOB','DAP'],
+  },
+  {
+    id: 'p3',
+    title: 'Подсолнечное масло рафинированное (IBC 1000л)',
+    category: 'Агро / Продукты',
+    seller: { country: 'KZ', flag: '🇰🇿', city: 'Алматы', trustScore: 91, verified: true },
+    price: 1.05, currency: 'USD', unit: 'литр', minOrder: 1000,
+    stock: 80000, stockAuto: true,
+    images: ['🛢️'],
+    specs: [{ p: 'Тип', v: 'Рафинированное дезодорированное' }, { p: 'Упаковка', v: 'IBC 1000 л' }, { p: 'Кислотность', v: 'не более 0.3' }],
+    deliveryDays: { min: 3, max: 5 },
+    sanctions: false,
+    rating: 4.9, reviews: 52,
+    incoterms: ['CIF','DAP'],
+  },
+  {
+    id: 'p4',
+    title: 'Офисная бумага А4 80г/м² (коробки по 5 стоп)',
+    category: 'Офисное',
+    seller: { country: 'RU', flag: '🇷🇺', city: 'Москва', trustScore: 79, verified: true },
+    price: 38, currency: 'USD', unit: 'коробка', minOrder: 10,
+    stock: 3200, stockAuto: true,
+    images: ['📄'],
+    specs: [{ p: 'Формат', v: 'А4 (210×297 мм)' }, { p: 'Плотность', v: '80 г/м²' }, { p: 'В коробке', v: '5 стоп × 500 листов' }],
+    deliveryDays: { min: 1, max: 1 },
+    sanctions: false,
+    rating: 4.4, reviews: 91,
+    incoterms: ['DAP','DDP'],
+  },
+  {
+    id: 'p5',
+    title: 'Арматура А500С ф12 мм (прутки 12 м)',
+    category: 'Металлы',
+    seller: { country: 'UZ', flag: '🇺🇿', city: 'Бекабад', trustScore: 96, verified: true },
+    price: 680, currency: 'USD', unit: 'тонна', minOrder: 5,
+    stock: 850, stockAuto: false,
+    images: ['⚙️'],
+    specs: [{ p: 'Марка', v: 'А500С' }, { p: 'Диаметр', v: '12 мм' }, { p: 'Длина прутка', v: '12 м' }, { p: 'ГОСТ', v: '52544-2006' }],
+    deliveryDays: { min: 1, max: 3 },
+    sanctions: false,
+    rating: 4.7, reviews: 27,
+    incoterms: ['EXW','DAP'],
+  },
+  {
+    id: 'p6',
+    title: 'Полиэтиленовая плёнка упаковочная 100 мкм',
+    category: 'Упаковка',
+    seller: { country: 'KZ', flag: '🇰🇿', city: 'Шымкент', trustScore: 83, verified: true },
+    price: 1.9, currency: 'USD', unit: 'кг', minOrder: 200,
+    stock: 15000, stockAuto: true,
+    images: ['📦'],
+    specs: [{ p: 'Толщина', v: '100 мкм' }, { p: 'Ширина', v: '1500 мм' }, { p: 'Материал', v: 'LDPE' }],
+    deliveryDays: { min: 2, max: 4 },
+    sanctions: false,
+    rating: 4.5, reviews: 15,
+    incoterms: ['DAP'],
+  },
+];
+
+export function calcMarketplaceFee(amount) {
+  if (amount <= 5000) return 1.5;
+  if (amount >= 50000) return 0.5;
+  return +(1.5 - (1.5 - 0.5) * ((amount - 5000) / (50000 - 5000))).toFixed(2);
+}
