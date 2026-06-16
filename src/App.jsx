@@ -14,6 +14,8 @@ import Onboarding from './pages/Onboarding';
 import Legal from './pages/Legal';
 import Support from './pages/Support';
 import Roadmap from './pages/Roadmap';
+import RelationshipManager from './pages/RelationshipManager';
+import Analytics from './pages/Analytics';
 import './index.css';
 
 export default function App() {
@@ -41,6 +43,8 @@ export default function App() {
                 <Route path="/legal" element={<Legal />} />
                 <Route path="/support" element={<Support />} />
                 <Route path="/roadmap" element={<Roadmap />} />
+                <Route path="/manager" element={<RelationshipManager />} />
+                <Route path="/analytics" element={<Analytics />} />
               </Routes>
             </main>
           </div>

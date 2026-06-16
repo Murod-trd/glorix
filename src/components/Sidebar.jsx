@@ -10,12 +10,15 @@ const nav = [
   { divider: 'CIPS СТАНДАРТ' },
   { to: '/rfi', icon: '?', label: 'RFI', badge: 'CIPS' },
   { to: '/suppliers', icon: '◉', label: 'Scorecard', badge: 'CIPS' },
-  { divider: 'ИИ ИНСТРУМЕНТЫ' },
+  { divider: 'ИИ И АНАЛИТИКА' },
+  { to: '/analytics', icon: '📊', label: 'Аналитика закупок' },
   { to: '/ai-bots', icon: '🤖', label: 'ИИ-симуляция' },
   { to: '/ai-analysis', icon: '◎', label: 'ИИ-анализ оферт' },
   { divider: 'ФИНАНСЫ' },
   { to: '/deposit', icon: '○', label: 'Депозит' },
   { to: '/trust', icon: '◌', label: 'Рейтинг доверия' },
+  { divider: 'СЕРВИС' },
+  { to: '/manager', icon: '👤', label: 'Мой менеджер', badge: 'NEW' },
   { divider: 'ПЛАТФОРМА' },
   { to: '/roadmap', icon: '🗺', label: 'Roadmap' },
   { to: '/legal', icon: '⚖', label: 'Правовая база' },
@@ -37,7 +40,6 @@ export default function Sidebar() {
         <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2, letterSpacing: 1 }}>B2B TRADE PLATFORM · CIS</div>
       </div>
 
-      {/* Demo badge */}
       <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: 'var(--gold-dim)', border: '1px solid rgba(245,166,35,0.25)', borderRadius: 6 }}>
           <span style={{ fontSize: 11, color: 'var(--gold)', fontWeight: 600 }}>⚠ ДЕМО-ВЕРСИЯ</span>
@@ -61,7 +63,7 @@ export default function Sidebar() {
             })}>
               <span style={{ fontSize: 13, width: 16, textAlign: 'center' }}>{item.icon}</span>
               <span style={{ flex: 1 }}>{item.label}</span>
-              {item.badge && <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: 'rgba(99,179,237,0.15)', color: '#63B3ED', fontWeight: 700 }}>{item.badge}</span>}
+              {item.badge && <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: item.badge==='NEW'?'rgba(245,166,35,0.2)':'rgba(99,179,237,0.15)', color: item.badge==='NEW'?'var(--gold)':'#63B3ED', fontWeight: 700 }}>{item.badge}</span>}
             </NavLink>
           );
         })}
