@@ -9,6 +9,7 @@ import Profile from './pages/Profile';
 import Marketplace from './pages/Marketplace';
 import SupplierScorecard from './pages/SupplierScorecard';
 import RFIModule from './pages/RFIModule';
+import AIBots from './pages/AIBots';
 import './index.css';
 
 export default function App() {
@@ -29,6 +30,7 @@ export default function App() {
             <Route path="/profile" element={<Profile />} />
             <Route path="/suppliers" element={<SupplierScorecard />} />
             <Route path="/rfi" element={<RFIModule />} />
+            <Route path="/ai-bots" element={<AIBots />} />
           </Routes>
         </main>
       </div>
