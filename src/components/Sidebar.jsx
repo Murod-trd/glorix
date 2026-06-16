@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { currentUser } from '../data/mock';
 
 const nav = [
@@ -16,31 +16,44 @@ const nav = [
   { divider: 'ФИНАНСЫ' },
   { to: '/deposit', icon: '○', label: 'Депозит' },
   { to: '/trust', icon: '◌', label: 'Рейтинг доверия' },
+  { divider: 'ПЛАТФОРМА' },
+  { to: '/roadmap', icon: '🗺', label: 'Roadmap' },
+  { to: '/legal', icon: '⚖', label: 'Правовая база' },
+  { to: '/support', icon: '❓', label: 'Поддержка' },
   { to: '/profile', icon: '◍', label: 'Профиль' },
 ];
 
 export default function Sidebar() {
+  const navigate = useNavigate();
   const score = currentUser.trustScore;
   const color = score >= 70 ? '#00D4AA' : score >= 30 ? '#F5A623' : '#FF4D4D';
 
   return (
     <aside style={{ width: 220, minHeight: '100vh', background: '#0D1424', borderRight: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', position: 'fixed', top: 0, left: 0, zIndex: 100 }}>
-      <div style={{ padding: '22px 20px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      <div style={{ padding: '18px 20px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer' }} onClick={() => navigate('/')}>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, letterSpacing: 3, color: '#fff' }}>
           GLO<span style={{ color: 'var(--accent)' }}>RIX</span>
         </div>
         <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2, letterSpacing: 1 }}>B2B TRADE PLATFORM · CIS</div>
       </div>
 
-      <nav style={{ flex: 1, padding: '10px 10px', overflowY: 'auto' }}>
+      {/* Demo badge */}
+      <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: 'var(--gold-dim)', border: '1px solid rgba(245,166,35,0.25)', borderRadius: 6 }}>
+          <span style={{ fontSize: 11, color: 'var(--gold)', fontWeight: 600 }}>⚠ ДЕМО-ВЕРСИЯ</span>
+          <button onClick={() => navigate('/roadmap')} style={{ background: 'none', color: 'var(--gold)', fontSize: 10, cursor: 'pointer', textDecoration: 'underline' }}>Roadmap</button>
+        </div>
+      </div>
+
+      <nav style={{ flex: 1, padding: '8px 10px', overflowY: 'auto' }}>
         {nav.map((item, i) => {
           if (item.divider) return (
-            <div key={i} style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 700, letterSpacing: 1.5, padding: '12px 10px 4px' }}>{item.divider}</div>
+            <div key={i} style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 700, letterSpacing: 1.5, padding: '10px 10px 3px' }}>{item.divider}</div>
           );
           return (
             <NavLink key={item.to} to={item.to} end={item.to === '/'} style={({ isActive }) => ({
               display: 'flex', alignItems: 'center', gap: 8,
-              padding: '8px 10px', borderRadius: 8, marginBottom: 1,
+              padding: '7px 10px', borderRadius: 8, marginBottom: 1,
               fontSize: 13, fontWeight: isActive ? 500 : 400,
               color: isActive ? 'var(--accent)' : 'var(--text-2)',
               background: isActive ? 'rgba(0,212,170,0.08)' : 'transparent',
@@ -54,8 +67,8 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div style={{ padding: '12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+      <div style={{ padding: '10px 12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: 'pointer' }} onClick={() => navigate('/profile')}>
           <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--accent-dim)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>{currentUser.flag}</div>
           <div>
             <div style={{ fontSize: 11, fontWeight: 500 }}>{currentUser.name}</div>
@@ -70,6 +83,9 @@ export default function Sidebar() {
             <div style={{ height: '100%', width: `${score}%`, background: color, borderRadius: 2 }} />
           </div>
         </div>
+        <button onClick={() => navigate('/onboarding')} style={{ width: '100%', marginTop: 8, padding: '6px', background: 'none', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-3)', fontSize: 11, cursor: 'pointer' }}>
+          ↺ Онбординг / Регистрация
+        </button>
       </div>
     </aside>
   );
