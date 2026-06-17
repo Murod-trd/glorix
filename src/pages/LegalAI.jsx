@@ -17,17 +17,40 @@ function buildContract(f) {
   const sLaw = legalSources.find(s => s.code === sellerCountry);
   const bLaw = legalSources.find(s => s.code === buyerCountry);
   const iLaw = internationalLaw?.find(l => l.id === intLaw);
+  const sameCountry = sellerCountry && buyerCountry && sellerCountry === buyerCountry;
+
+  // Применимое право:
+  // — международная сделка (явно выбрана пользователем) → CISG/английское/швейцарское право + Incoterms
+  // — обе стороны из одной страны → национальный кодекс этой страны, Incoterms не нужны
+  // — стороны из разных стран, но "локальный" режим → право страны продавца (по умолчанию для трансграничных
+  //   сделок в СНГ), но это явно отдельный от "обе стороны одна страна" случай
   const appliedLaw = scope === 'international'
     ? `${iLaw?.name || 'КМКПТ/CISG'} + Incoterms 2020 (ICC)`
-    : `${sLaw?.mainCode || 'ГК РУз'}`;
+    : sameCountry
+      ? `${sLaw?.mainCode || '___'}`
+      : `${sLaw?.mainCode || '___'} (право продавца) + Incoterms 2020 (ICC) — трансграничная сделка СНГ`;
+
+  // Арбитраж:
+  // — международная сделка → арбитраж, привязанный к выбранному международному праву (LCIA/SCC/ICC/Swiss)
+  // — обе стороны из одной страны → национальный арбитраж именно этой страны
+  // — стороны из разных стран СНГ (но локальный режим) → национальный арбитраж страны продавца как основной,
+  //   с возможностью обращения в LCIA/SCC как запасной вариант — это не выдумка, а отражение реальной практики
+  //   трансграничных контрактов в СНГ, где стороны почти всегда фиксируют и запасной международный форум
   const arb = scope === 'international'
     ? (iLaw?.arbitration || 'ICC Арбитраж, Париж')
-    : 'Третейский суд при ТПП РУз → МКА при ТПП РФ (если поставщик — РФ) → LCIA Лондон → SCC Стокгольм';
+    : sameCountry
+      ? (sLaw?.nationalArbitration || `Третейский суд при ТПП ${sLaw?.country || ''}`)
+      : `${sLaw?.nationalArbitration || 'Третейский суд по месту продавца'} (основной) → LCIA Лондон / SCC Стокгольм (запасной, по соглашению сторон)`;
   const rate = penaltyRate || '0,1';
   const maxP = maxPenalty || '10';
   const amt = amount ? `${parseFloat(amount).toLocaleString('ru-RU')} ${currency}` : '___________';
   const d = date || new Date().toLocaleDateString('ru-RU');
   const num = contractNum || `ДКП-${Math.floor(Math.random()*9000+1000)}`;
+  // Условия поставки: Incoterms имеет смысл только для трансграничных/международных сделок.
+  // Для двух компаний в одной стране используем национальную формулировку условий поставки.
+  const deliveryTermsText = (scope === 'international' || !sameCountry)
+    ? `${incoterms} (Incoterms 2020, ICC)`
+    : `${incoterms === 'DAP' ? 'поставка на склад ПОКУПАТЕЛЯ' : incoterms === 'EXW' ? 'самовывоз со склада ПРОДАВЦА' : incoterms} согласно условиям настоящего Договора`;
 
   return `ДОГОВОР КУПЛИ-ПРОДАЖИ № ${num}
 
@@ -91,13 +114,13 @@ ${bLaw?.country || buyerCountry}, в лице ________________________________,
 2.1. Общая стоимость настоящего Договора составляет:
      ${amt}
      (${amount ? 'сумма прописью' : '___________________________'})
-     на условиях ${incoterms} (Incoterms 2020, ICC).
+     на условиях ${deliveryTermsText}.
 
 2.2. Указанная цена является ОКОНЧАТЕЛЬНОЙ и не подлежит
      одностороннему изменению после подписания Договора.
 
 2.3. Стоимость включает: упаковку, маркировку, погрузку,
-     все расходы ПРОДАВЦА по выполнению условий ${incoterms}.
+     все расходы ПРОДАВЦА по выполнению условий поставки.
 
 2.4. Сумма Договора включает все налоги, пошлины, сборы,
      подлежащие уплате ПРОДАВЦОМ в соответствии с
@@ -171,7 +194,7 @@ ${bLaw?.country || buyerCountry}, в лице ________________________________,
 
 5.1. Тара и упаковка должны обеспечивать сохранность Товара
      при транспортировке, погрузке, выгрузке и хранении
-     в соответствии с условиями ${incoterms}.
+     в соответствии с условиями ${deliveryTermsText}.
 
 5.2. Каждое грузовое место маркируется:
      — наименование и адрес ПОКУПАТЕЛЯ;
@@ -202,8 +225,8 @@ ${bLaw?.country || buyerCountry}, в лице ________________________________,
      рабочих дней с даты поступления предоплаты на счёт
      ПРОДАВЦА, если иное не указано в Спецификации.
 
-6.2. Условия поставки: ${incoterms} (Incoterms 2020, ICC,
-     Париж). Пункт назначения — согласно Спецификации
+6.2. Условия поставки: ${deliveryTermsText}.
+     Пункт назначения — согласно Спецификации
      (Приложение № 1).
 
 6.3. Поставка партиями допускается только при наличии
@@ -692,20 +715,28 @@ function buildOffer(f) {
   const sLaw = legalSources.find(s => s.code === sellerCountry);
   const bLaw = legalSources.find(s => s.code === buyerCountry);
   const iLaw = internationalLaw?.find(l => l.id === intLaw);
-  const appliedLaw = scope === 'international' ? `${iLaw?.name || 'КМКПТ/CISG'} + Incoterms 2020` : sLaw?.mainCode || 'ГК РУз';
+  const sameCountry = sellerCountry && buyerCountry && sellerCountry === buyerCountry;
+  const appliedLaw = scope === 'international'
+    ? `${iLaw?.name || 'КМКПТ/CISG'} + Incoterms 2020`
+    : sameCountry
+      ? (sLaw?.mainCode || '___')
+      : `${sLaw?.mainCode || '___'} (право продавца) + Incoterms 2020 (ICC) — трансграничная сделка СНГ`;
   const num = `ОФ-${Math.floor(Math.random()*9000+1000)}`;
   const d = new Date().toLocaleDateString('ru-RU');
   const validD = new Date(Date.now()+30*24*60*60*1000).toLocaleDateString('ru-RU');
   const amt = amount ? `${parseFloat(amount).toLocaleString('ru-RU')} ${currency}` : '___________';
   const rate = penaltyRate || '0,1';
   const maxP = maxPenalty || '10';
+  const deliveryTermsText = (scope === 'international' || !sameCountry)
+    ? `${incoterms} (Incoterms 2020)`
+    : `${incoterms === 'DAP' ? 'поставка на склад ПОКУПАТЕЛЯ' : incoterms === 'EXW' ? 'самовывоз со склада ПРОДАВЦА' : incoterms}`;
 
   return `ОФЕРТА № ${num}
 (Коммерческое предложение)
 
 г. ${f.city || 'Ташкент'}                             Дата: ${d}
 Действительна до: ${validD}
-Тип: ${scope === 'international' ? '🌍 Международная сделка' : '🏢 Локальная сделка (СНГ)'}
+Тип: ${scope === 'international' ? '🌍 Международная сделка' : sameCountry ? '🏢 Локальная сделка (внутри страны)' : '🌐 Трансграничная сделка (СНГ)'}
 
 ════════════════════════════════════════════════════
 ПРАВОВОЕ ОСНОВАНИЕ ОФЕРТЫ:
@@ -713,9 +744,12 @@ ${scope === 'international'
   ? `• Art. 14–24 КМКПТ/CISG — оферта и порядок акцепта
 • Incoterms 2020 (ICC, Париж) — условия поставки
 • ${iLaw?.fullName || 'КМКПТ/CISG'}`
-  : `• ${sLaw?.tradeArticles?.find(a=>a.topic.includes('Оферта'))?.art || 'Ст. 369'} ${sLaw?.mainCode || 'ГК РУз'} — понятие и форма оферты
-• ${sLaw?.tradeArticles?.find(a=>a.topic.includes('Момент'))?.art || 'Ст. 386'} ${sLaw?.mainCode || 'ГК РУз'} — момент заключения договора
-• Incoterms 2020 (ICC) — условия поставки`}
+  : sameCountry
+    ? `• ${sLaw?.tradeArticles?.find(a=>a.topic.includes('Оферта'))?.art || 'Ст. 369'} ${sLaw?.mainCode || '___'} — понятие и форма оферты
+• ${sLaw?.tradeArticles?.find(a=>a.topic.includes('Момент'))?.art || 'Ст. 386'} ${sLaw?.mainCode || '___'} — момент заключения договора`
+    : `• ${sLaw?.tradeArticles?.find(a=>a.topic.includes('Оферта'))?.art || 'Ст. 369'} ${sLaw?.mainCode || '___'} — понятие и форма оферты (право продавца)
+• ${sLaw?.tradeArticles?.find(a=>a.topic.includes('Момент'))?.art || 'Ст. 386'} ${sLaw?.mainCode || '___'} — момент заключения договора
+• Incoterms 2020 (ICC) — условия поставки (трансграничная сделка)`}
 Применимое право: ${appliedLaw}
 ════════════════════════════════════════════════════
 
@@ -732,7 +766,7 @@ ${scope === 'international'
 § 1. ПРЕДМЕТ ОФЕРТЫ
 ════════════════════════════════════════════════════
 Товар: ${goods || '________________________________'}
-Стоимость: ${amt} на условиях ${incoterms} (Incoterms 2020)
+Стоимость: ${amt} на условиях ${deliveryTermsText}
 Срок поставки: ${deliveryDays || '___'} рабочих дней с даты акцепта
 Условия оплаты: ${payTerms || '30% предоплата, 70% по факту отгрузки'}
 Технические характеристики: согласно Спецификации (Приложение № 1)
@@ -1002,6 +1036,8 @@ export default function LegalAI() {
   const [sourcesCountry, setSourcesCountry] = useState('UZ');
 
   const sellerLaw = legalSources.find(s => s.code === sellerCountry);
+  const buyerLaw = legalSources.find(s => s.code === buyerCountry);
+  const sameCountryUI = sellerCountry && buyerCountry && sellerCountry === buyerCountry;
   const viewSource = legalSources.find(s => s.code === sourcesCountry);
 
   const generate = () => {
@@ -1196,7 +1232,9 @@ export default function LegalAI() {
                 <div style={{ fontSize: 12, lineHeight: 1.8 }}>
                   Договор купли-продажи: 20 статей<br/>
                   Преамбула · Полная структура · Зеркальные штрафы<br/>
-                  {scope==='international'?'Международное право (CISG + Incoterms 2020)':sellerLaw?.mainCode+' · Арбитраж ТПП РУз'}
+                  {scope==='international'
+                    ? 'Международное право (CISG + Incoterms 2020)'
+                    : `${sellerLaw?.mainCode || ''} · Арбитраж: ${sameCountryUI ? (sellerLaw?.nationalArbitration || 'ТПП страны сторон') : `${sellerLaw?.nationalArbitration || 'ТПП продавца'} (трансгранично)`}`}
                 </div>
               </div>
             )}
