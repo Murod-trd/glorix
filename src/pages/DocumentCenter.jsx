@@ -285,7 +285,7 @@ ____________________     ____________________
                   <span className="badge badge-green" style={{ fontSize: 10 }}>✓ Верифицировано GLORIX</span>
                   <span className="badge badge-blue" style={{ fontSize: 10 }}>◎ ИИ-черновик</span>
                 </div>
-                <pre style={{ fontSize: 11, lineHeight: 1.8, color: 'var(--text-2)', background: 'var(--navy-3)', padding: '14px', borderRadius: 8, whiteSpace: 'pre-wrap', fontFamily: 'monospace', maxHeight: 500, overflowY: 'auto' }}>{generated}</pre>
+                <pre style={{ fontSize: 12, lineHeight: 1.8, color: 'var(--text)', background: 'var(--navy-3)', padding: '18px 22px', borderRadius: 8, whiteSpace: 'pre-wrap', fontFamily: 'Georgia, "Times New Roman", serif', maxHeight: 500, overflowY: 'auto' }}>{generated}</pre>
                 <div style={{ marginTop: 10, padding: '8px 12px', background: 'var(--gold-dim)', border: '1px solid rgba(245,166,35,0.2)', borderRadius: 7, fontSize: 11, color: 'var(--gold)' }}>
                   ⚠ Черновик. Проверьте данные, поставьте подпись и печать. В документе нигде не указано что создан ИИ.
                 </div>

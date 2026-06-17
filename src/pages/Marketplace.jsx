@@ -473,7 +473,7 @@ ____________________    ____________________
                     <span className="badge badge-green">✓ Верифицировано GLORIX</span>
                     <span className="badge badge-blue">◎ ИИ-черновик</span>
                   </div>
-                  <pre style={{ fontSize: 11, lineHeight: 1.8, color: 'var(--text-2)', background: 'var(--navy-3)', padding: '14px', borderRadius: 8, whiteSpace: 'pre-wrap', fontFamily: 'monospace', maxHeight: 360, overflowY: 'auto' }}>{kp}</pre>
+                  <pre style={{ fontSize: 12, lineHeight: 1.8, color: 'var(--text)', background: 'var(--navy-3)', padding: '18px 22px', borderRadius: 8, whiteSpace: 'pre-wrap', fontFamily: 'Georgia, "Times New Roman", serif', maxHeight: 360, overflowY: 'auto' }}>{kp}</pre>
                   <div style={{ marginTop: 10, fontSize: 11, color: 'var(--gold)', padding: '8px 12px', background: 'var(--gold-dim)', borderRadius: 6, lineHeight: 1.6 }}>
                     ⚠ Это черновик. Проверьте данные, поставьте подпись и печать. В КП нигде не указано что документ создан ИИ.
                   </div>

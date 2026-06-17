@@ -1249,7 +1249,7 @@ export default function LegalAI() {
 
             {result && (
               <div style={{ flex: 1 }}>
-                <pre style={{ fontSize: 11, lineHeight: 1.85, color: 'var(--text-2)', background: 'var(--navy-3)', padding: '16px', borderRadius: 8, whiteSpace: 'pre-wrap', fontFamily: '"Courier New", monospace', maxHeight: 680, overflowY: 'auto' }}>{result}</pre>
+                <pre style={{ fontSize: 12, lineHeight: 1.85, color: 'var(--text)', background: 'var(--navy-3)', padding: '20px 24px', borderRadius: 8, whiteSpace: 'pre-wrap', fontFamily: 'Georgia, "Times New Roman", serif', maxHeight: 680, overflowY: 'auto' }}>{result}</pre>
                 <div style={{ marginTop: 10, padding: '10px 14px', background: 'var(--gold-dim)', border: '1px solid rgba(245,166,35,0.2)', borderRadius: 8, fontSize: 12, color: 'var(--gold)', lineHeight: 1.6 }}>
                   ⚠ Черновик — рекомендуется проверка квалифицированным юристом перед подписанием. Ссылки на статьи актуальны на дату генерации.
                 </div>
