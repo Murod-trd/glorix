@@ -159,3 +159,83 @@ export const docTypes = [
   { id: 'claim', label: 'Претензия / Рекламация', icon: '⚠️' },
   { id: 'acceptance', label: 'Акцепт (принятие оферты)', icon: '✅' },
 ];
+
+export const internationalLaw = [
+  {
+    id: 'cisg',
+    name: 'КМКПТ / CISG',
+    fullName: 'Конвенция ООН о договорах международной купли-продажи товаров',
+    scope: 'Глобальный (94 страны)',
+    popularity: 'Высокая',
+    recommended: true,
+    pros: ['Автоматически применяется между странами-участниками', 'Нейтральный — не привязан к одной стране', 'Хорошо известен в СНГ', 'Бесплатный доступ к текстам'],
+    cons: ['Можно исключить в договоре', 'Не охватывает все вопросы'],
+    arbitration: 'ICC, LCIA, SCC, МКАС при ТПП РУз',
+    site: 'uncitral.un.org',
+  },
+  {
+    id: 'english',
+    name: 'Английское право',
+    fullName: 'Law of England and Wales',
+    scope: 'Международный',
+    popularity: 'Очень высокая',
+    recommended: false,
+    pros: ['Самое развитое торговое право в мире', 'Огромная судебная практика', 'Предпочтительно для крупных сделок'],
+    cons: ['Дорогие юристы', 'Лондонский арбитраж дорог', 'Менее знакомо в СНГ'],
+    arbitration: 'LCIA (Лондон)',
+    site: 'legislation.gov.uk',
+  },
+  {
+    id: 'swiss',
+    name: 'Швейцарское право',
+    fullName: 'Swiss Law (OR — Obligationenrecht)',
+    scope: 'Международный',
+    popularity: 'Высокая',
+    recommended: false,
+    pros: ['Политически нейтральная страна', 'Стабильная правовая система', 'Популярно в Европе и на Ближнем Востоке'],
+    cons: ['Менее известно в СНГ', 'Требует специалистов'],
+    arbitration: 'Swiss Arbitration Centre (Женева/Цюрих)',
+    site: 'fedlex.admin.ch',
+  },
+  {
+    id: 'swedish',
+    name: 'Шведское право',
+    fullName: 'Swedish Law',
+    scope: 'Международный, популярен в СНГ',
+    popularity: 'Средняя',
+    recommended: false,
+    pros: ['SCC арбитраж популярен в СНГ', 'Политически нейтральная страна', 'Эффективный арбитраж'],
+    cons: ['Менее развитое торговое право чем Англия'],
+    arbitration: 'SCC (Стокгольм)',
+    site: 'sccinstitute.com',
+  },
+  {
+    id: 'national_cis',
+    name: 'Национальное право СНГ',
+    fullName: 'ГК РУз / ГК РК / ГК РФ и другие',
+    scope: 'Локальные сделки СНГ',
+    popularity: 'Обязательно для локальных',
+    recommended: true,
+    pros: ['Обязательно для локальных сделок', 'Знакомо участникам', 'Дешёвый арбитраж — ТПП РУз'],
+    cons: ['Не подходит для глобальных сделок'],
+    arbitration: 'ТПП РУз → Арбитраж Москвы → Лондон → Стокгольм',
+    site: 'lex.uz / adilet.zan.kz / consultant.ru',
+  },
+];
+
+// Mirror penalties standard from uploaded documents analysis
+export const mirrorPenalties = {
+  description: 'Зеркальные штрафные санкции — равные для обеих сторон',
+  principle: 'Одно нарушение = одинаковый штраф для обеих сторон',
+  asymmetries_found: [
+    { doc: 'ТФД_более_40_млн', issue: 'Пеня поставщика 0.5%/день, покупателя 0.1%/день с лимитом 5% — НЕ зеркально' },
+    { doc: 'Договор_240', issue: 'Штраф за непоставку 10% только с поставщика — нет аналога для покупателя' },
+    { doc: 'Все_ТФД', issue: 'Покупатель может приостановить без штрафа, поставщик — нет' },
+  ],
+  glorix_standard: {
+    delivery_delay: { rate: '0.1%', per: 'день', max: '10%', both_sides: true },
+    non_delivery: { penalty: '10%', return_prepayment: true, symmetric: '10% за отказ от тендера обеих сторон' },
+    payment_delay: { rate: '0.1%', per: 'день', max: '10%', both_sides: true },
+    suspension: { allowed: 'обе стороны', notice: '5 рабочих дней', compensation: 'документально подтверждённые расходы' },
+  },
+};
