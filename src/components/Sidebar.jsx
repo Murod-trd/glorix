@@ -85,7 +85,7 @@ export default function Sidebar() {
   const nav = [...cfg.nav, ...commonNav];
 
   return (
-    <aside style={{ width: 220, minHeight: '100vh', background: '#0D1424', borderRight: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', position: 'fixed', top: 0, left: 0, zIndex: 100 }}>
+    <aside style={{ width: 220, height: '100vh', background: '#0D1424', borderRight: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', position: 'fixed', top: 0, left: 0, zIndex: 100, overflow: 'hidden' }}>
 
       {/* Logo */}
       <div style={{ padding: '16px 20px 10px', borderBottom: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer' }} onClick={() => navigate('/')}>
