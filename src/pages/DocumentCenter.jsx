@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { downloadTextAsPdf } from '../utils/pdfExport';
 
 // Mock ТН ВЭД database
 const tnved = [
@@ -254,7 +255,7 @@ ____________________     ____________________
               <div style={{ fontWeight: 600 }}>Результат КП</div>
               {generated && (
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn btn-ghost" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => alert('Скачивание PDF... (демо)')}>⬇ PDF</button>
+                  <button className="btn btn-ghost" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => downloadTextAsPdf(generated, 'glorix-kp.pdf')}>⬇ PDF</button>
                   <button className="btn btn-ghost" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => { navigator.clipboard?.writeText(generated); alert('Скопировано!'); }}>📋 Копировать</button>
                 </div>
               )}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { products, categories, calcMarketplaceFee } from '../data/marketplace';
+import { downloadTextAsPdf } from '../utils/pdfExport';
 
 const accountType = localStorage.getItem('glorix_account_type') || 'buyer';
 const canBuy = accountType === 'buyer' || accountType === 'both';
@@ -477,8 +478,8 @@ ____________________    ____________________
                     ⚠ Это черновик. Проверьте данные, поставьте подпись и печать. В КП нигде не указано что документ создан ИИ.
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                    <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center', fontSize: 12 }} onClick={() => alert('Скачивание PDF... (демо)')}>⬇ PDF</button>
-                    <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center', fontSize: 12 }} onClick={() => alert('Скопировано!')}>📋 Копировать</button>
+                    <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center', fontSize: 12 }} onClick={() => downloadTextAsPdf(kp, 'glorix-kp.pdf')}>⬇ PDF</button>
+                    <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center', fontSize: 12 }} onClick={() => { navigator.clipboard?.writeText(kp); alert('Скопировано!'); }}>📋 Копировать</button>
                   </div>
                 </div>
               )}
