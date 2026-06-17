@@ -40,8 +40,8 @@ function buildContract(f) {
   const arb = scope === 'international'
     ? (iLaw?.arbitration || 'ICC Арбитраж, Париж')
     : sameCountry
-      ? (sLaw?.nationalArbitration || `Третейский суд при ТПП ${sLaw?.country || ''}`)
-      : `${sLaw?.nationalArbitration || 'Третейский суд по месту продавца'} (основной) → LCIA Лондон / SCC Стокгольм (запасной, по соглашению сторон)`;
+      ? (sLaw?.nationalArbitration || '[АРБИТРАЖНЫЙ ИНСТИТУТ — ТРЕБУЕТСЯ УКАЗАТЬ ВРУЧНУЮ, страна не определена]')
+      : `${sLaw?.nationalArbitration || '[АРБИТРАЖНЫЙ ИНСТИТУТ ПРОДАВЦА — ТРЕБУЕТСЯ УКАЗАТЬ ВРУЧНУЮ]'} (основной) → LCIA Лондон / SCC Стокгольм (запасной, по соглашению сторон)`;
   const rate = penaltyRate || '0,1';
   const maxP = maxPenalty || '10';
   const amt = amount ? `${parseFloat(amount).toLocaleString('ru-RU')} ${currency}` : '___________';
@@ -1039,6 +1039,7 @@ export default function LegalAI() {
   const sellerLaw = legalSources.find(s => s.code === sellerCountry);
   const buyerLaw = legalSources.find(s => s.code === buyerCountry);
   const sameCountryUI = sellerCountry && buyerCountry && sellerCountry === buyerCountry;
+  const arbitrationUnverified = sellerLaw?.nationalArbitrationUnverified || buyerLaw?.nationalArbitrationUnverified;
   const viewSource = legalSources.find(s => s.code === sourcesCountry);
 
   const generate = () => {
@@ -1236,8 +1237,13 @@ export default function LegalAI() {
                   Преамбула · Полная структура · Зеркальные штрафы<br/>
                   {scope==='international'
                     ? 'Международное право (CISG + Incoterms 2020)'
-                    : `${sellerLaw?.mainCode || ''} · Арбитраж: ${sameCountryUI ? (sellerLaw?.nationalArbitration || 'ТПП страны сторон') : `${sellerLaw?.nationalArbitration || 'ТПП продавца'} (трансгранично)`}`}
+                    : `${sellerLaw?.mainCode || ''} · Арбитраж: ${sellerLaw?.nationalArbitration || ''}${sameCountryUI ? '' : ' (трансгранично)'}`}
                 </div>
+                {arbitrationUnverified && (
+                  <div style={{ marginTop: 8, fontSize: 11, color: 'var(--gold)', padding: '8px 10px', background: 'var(--gold-dim)', borderRadius: 6, lineHeight: 1.6 }}>
+                    ⚠ Для одной из выбранных стран арбитражный институт не подтверждён открытыми источниками на момент проверки. Рекомендуется юридическая консультация перед использованием в реальной сделке.
+                  </div>
+                )}
               </div>
             )}
 
