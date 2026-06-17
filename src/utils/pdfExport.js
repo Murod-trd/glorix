@@ -92,6 +92,7 @@ function extractTitleAndNum(text) {
 function isHeading(line) {
   const trimmed = line.trim();
   if (!trimmed) return false;
+  if (/^[—\-•]/.test(trimmed)) return false; // пункты списка, даже если в верхнем регистре, не заголовки
   if (/^(Статья|СТАТЬЯ|Преамбула|ПРЕАМБУЛА|ДОГОВОР|ОФЕРТА|ПРЕТЕНЗИЯ|§)/.test(trimmed)) return true;
   if (/^\d+\.\s*[А-ЯA-Z]/.test(trimmed) && trimmed.length < 90) return true;
   if (trimmed === trimmed.toUpperCase() && /[А-ЯA-Z]/.test(trimmed) && trimmed.length < 70) return true;

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { legalSources, internationalLaw } from '../data/legalSources';
 import { downloadTextAsPdf } from '../utils/pdfExport';
+import { downloadTextAsDocx } from '../utils/docxExport';
 
 const docTypes = [
   { id: 'offer', label: 'Оферта поставщика', icon: '📋' },
@@ -1221,6 +1222,7 @@ export default function LegalAI() {
                   <span className="badge badge-blue" style={{ fontSize: 10 }}>🔄 Зеркальные штрафы</span>
                   <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => { navigator.clipboard?.writeText(result); }}>📋 Копировать</button>
                   <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => downloadTextAsPdf(result, `glorix-${docType}.pdf`)}>⬇ PDF</button>
+                  <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => downloadTextAsDocx(result, `glorix-${docType}.docx`)}>⬇ Word</button>
                 </div>
               )}
             </div>
