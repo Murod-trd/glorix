@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { downloadTextAsPdf } from '../utils/pdfExport';
 import { downloadTextAsDocx } from '../utils/docxExport';
 
@@ -113,9 +114,18 @@ ____________________     ____________________
     <div className="fade-in" style={{ padding: '28px 36px' }}>
       <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 4, letterSpacing: 1 }}>DOCUMENT CENTER</div>
       <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 6 }}>Центр документов</h1>
-      <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 20 }}>
+      <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 14 }}>
         ИИ генерирует черновик · Вы редактируете и подписываете · Документ от вашей компании, не от ИИ
       </div>
+
+      <Link to="/legal-ai?type=specification" style={{ textDecoration: 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'rgba(0,212,170,0.06)', border: '1px solid rgba(0,212,170,0.2)', borderRadius: 8, marginBottom: 20, cursor: 'pointer', maxWidth: 560 }}>
+          <span style={{ fontSize: 16 }}>📊</span>
+          <div style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.5 }}>
+            Нужна официальная <b>Спецификация (Приложение № 1)</b> с привязкой к номеру и дате Договора, кодом ТН ВЭД и НДС-оговоркой? Она формируется в <span style={{ color: 'var(--accent)' }}>Legal AI →</span>
+          </div>
+        </div>
+      </Link>
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 0, background: 'var(--navy-3)', borderRadius: 10, padding: 4, marginBottom: 24, width: 'fit-content' }}>

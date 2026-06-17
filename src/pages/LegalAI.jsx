@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
 import { legalSources, internationalLaw } from '../data/legalSources';
 import { downloadTextAsPdf } from '../utils/pdfExport';
 import { downloadTextAsDocx } from '../utils/docxExport';
@@ -6,6 +7,7 @@ import { downloadTextAsDocx } from '../utils/docxExport';
 const docTypes = [
   { id: 'offer', label: 'Оферта поставщика', icon: '📋' },
   { id: 'contract', label: 'Договор купли-продажи', icon: '📄' },
+  { id: 'specification', label: 'Спецификация (Приложение № 1)', icon: '📊' },
   { id: 'claim', label: 'Претензия / Рекламация', icon: '⚠️' },
   { id: 'acceptance', label: 'Акцепт оферты', icon: '✅' },
 ];
@@ -518,40 +520,15 @@ ${bLaw?.country || buyerCountry}, в лице ________________________________,
          от третьей стороны.
 
 ════════════════════════════════════════════════════════════════
-СТАТЬЯ 14. НАЛОГОВАЯ ОГОВОРКА
+СТАТЬЯ 14. КОНФИДЕНЦИАЛЬНОСТЬ
 ════════════════════════════════════════════════════════════════
 
-14.1. Каждая Сторона самостоятельно исполняет свои
-      налоговые обязательства в соответствии с
-      законодательством страны своей регистрации.
-
-14.2. В случае если ПРОДАВЕЦ осуществляет деятельность
-      и/или оказывает услуги на территории Республики
-      Узбекистан, ПОКУПАТЕЛЬ вправе удержать налог у
-      источника в размере, установленном Налоговым кодексом
-      Республики Узбекистан (ставка 20% или пониженная
-      ставка по соглашению об избежании двойного
-      налогообложения между странами Сторон).
-
-14.3. Для применения пониженной ставки или освобождения
-      от налога ПРОДАВЕЦ предоставляет оригинал справки
-      о резидентстве (Certificate of Residence),
-      заверенной компетентным органом страны ПРОДАВЦА.
-
-14.4. Любой счёт-фактура, выставленный по настоящему
-      Договору, должен соответствовать требованиям
-      применимого налогового законодательства.
-
-════════════════════════════════════════════════════════════════
-СТАТЬЯ 15. КОНФИДЕНЦИАЛЬНОСТЬ
-════════════════════════════════════════════════════════════════
-
-15.1. Стороны признают конфиденциальной всю информацию,
+14.1. Стороны признают конфиденциальной всю информацию,
       полученную в связи с исполнением настоящего Договора,
       включая: коммерческие условия, цены, технические
       характеристики, информацию о контрагентах.
 
-15.2. Стороны обязуются:
+14.2. Стороны обязуются:
       а) не раскрывать конфиденциальную информацию
          третьим лицам без письменного согласия другой
          Стороны, за исключением случаев, предусмотренных
@@ -559,45 +536,45 @@ ${bLaw?.country || buyerCountry}, в лице ________________________________,
       б) принимать меры защиты, не менее строгие, чем
          те, что применяются для собственной информации.
 
-15.3. Обязательство по конфиденциальности действует
+14.3. Обязательство по конфиденциальности действует
       в течение 3 (трёх) лет после прекращения Договора.
 
 ════════════════════════════════════════════════════════════════
-СТАТЬЯ 16. АНТИКОРРУПЦИОННАЯ ОГОВОРКА
+СТАТЬЯ 15. АНТИКОРРУПЦИОННАЯ ОГОВОРКА
 ════════════════════════════════════════════════════════════════
 
-16.1. Стороны обязуются соблюдать применимое
+15.1. Стороны обязуются соблюдать применимое
       антикоррупционное законодательство, включая Закон
       Великобритании о взяточничестве 2010 г. (UK Bribery
       Act), Закон США о коррупции за рубежом (FCPA) и
       национальные антикоррупционные законы.
 
-16.2. Стороны не предлагают, не обещают, не дают и
+15.2. Стороны не предлагают, не обещают, не дают и
       не принимают взяток, незаконных вознаграждений
       или иных ненадлежащих выгод ни в какой форме.
 
-16.3. Нарушение данной статьи предоставляет другой
+15.3. Нарушение данной статьи предоставляет другой
       Стороне право немедленно расторгнуть Договор
       без каких-либо финансовых последствий для
       расторгающей Стороны.
 
 ════════════════════════════════════════════════════════════════
-СТАТЬЯ 17. ПРИМЕНИМОЕ ПРАВО И РАЗРЕШЕНИЕ СПОРОВ
+СТАТЬЯ 16. ПРИМЕНИМОЕ ПРАВО И РАЗРЕШЕНИЕ СПОРОВ
 ════════════════════════════════════════════════════════════════
 
-17.1. ПРИМЕНИМОЕ ПРАВО:
+16.1. ПРИМЕНИМОЕ ПРАВО:
       ${appliedLaw}
       ${scope === 'international' 
         ? 'Конвенция ООН о договорах международной купли-продажи товаров (КМКПТ/CISG, Вена, 1980) применяется в части, не урегулированной выбранным правом.'
         : `Законодательство ${sLaw?.country || sellerCountry} применяется субсидиарно.`}
 
-17.2. ЯЗЫКИ ДОГОВОРА:
+16.2. ЯЗЫКИ ДОГОВОРА:
       Настоящий Договор составлен на русском и английском
       языках. Оба текста имеют равную юридическую силу.
       При противоречии русский текст имеет приоритет
       для сделок в СНГ; английский — для международных.
 
-17.3. РАЗРЕШЕНИЕ СПОРОВ — ТРЁХЭТАПНАЯ ПРОЦЕДУРА:
+16.3. РАЗРЕШЕНИЕ СПОРОВ — ТРЁХЭТАПНАЯ ПРОЦЕДУРА:
 
       ЭТАП 1 — ПЕРЕГОВОРЫ (обязателен):
       Стороны обязаны предпринять добросовестные попытки
@@ -620,61 +597,61 @@ ${bLaw?.country || buyerCountry}, в лице ________________________________,
       ${scope === 'international' ? 'Признание и исполнение решений — по Нью-Йоркской конвенции 1958 г.' : ''}
 
 ════════════════════════════════════════════════════════════════
-СТАТЬЯ 18. ПЕРЕПИСКА МЕЖДУ СТОРОНАМИ
+СТАТЬЯ 17. ПЕРЕПИСКА МЕЖДУ СТОРОНАМИ
 ════════════════════════════════════════════════════════════════
 
-18.1. Официальная переписка направляется по реквизитам,
-      указанным в ст. 20, способами:
+17.1. Официальная переписка направляется по реквизитам,
+      указанным в ст. 19, способами:
       — курьерская служба (DHL, FedEx, EMS и аналоги);
       — заказное письмо с уведомлением о вручении;
       — email (для оперативной переписки, без юридических
         последствий, если иное не согласовано).
 
-18.2. Корреспонденция считается полученной:
+17.2. Корреспонденция считается полученной:
       — при курьерской доставке — в день вручения;
       — при почтовой отправке — на 7-й день с даты сдачи;
       — при отправке по email — в день отправки (при
         отсутствии уведомления о недоставке).
 
-18.3. Об изменении реквизитов Сторона уведомляет другую
+17.3. Об изменении реквизитов Сторона уведомляет другую
       Сторону в письменной форме в течение 3 рабочих дней.
 
 ════════════════════════════════════════════════════════════════
-СТАТЬЯ 19. ПРОЧИЕ УСЛОВИЯ
+СТАТЬЯ 18. ПРОЧИЕ УСЛОВИЯ
 ════════════════════════════════════════════════════════════════
 
-19.1. Настоящий Договор вступает в силу с даты подписания
+18.1. Настоящий Договор вступает в силу с даты подписания
       обеими Сторонами и действует до полного исполнения
       Сторонами всех обязательств по нему.
 
-19.2. Все изменения и дополнения к Договору действительны
+18.2. Все изменения и дополнения к Договору действительны
       только в письменной форме, подписанные уполномоченными
       представителями обеих Сторон.
 
-19.3. ПРОДАВЕЦ не вправе передавать права и обязанности
+18.3. ПРОДАВЕЦ не вправе передавать права и обязанности
       по настоящему Договору третьим лицам без
       письменного согласия ПОКУПАТЕЛЯ.
       ⚖ ЗЕРКАЛЬНО: ПОКУПАТЕЛЬ не вправе уступать права
       требования без письменного согласия ПРОДАВЦА.
 
-19.4. Недействительность одного или нескольких положений
+18.4. Недействительность одного или нескольких положений
       Договора не влечёт недействительности остальных
       положений. Стороны заменяют недействительные
       положения юридически действительными, максимально
       близкими по смыслу.
 
-19.5. Договор составлен в 2 (двух) экземплярах на
+18.5. Договор составлен в 2 (двух) экземплярах на
       русском и английском языках, имеющих равную
       юридическую силу, по одному экземпляру для
       каждой Стороны.
 
-19.6. Все предшествующие переговоры, соглашения и
+18.6. Все предшествующие переговоры, соглашения и
       переписка по предмету настоящего Договора
       утрачивают юридическую силу с момента его
       подписания.
 
 ════════════════════════════════════════════════════════════════
-СТАТЬЯ 20. РЕКВИЗИТЫ И ПОДПИСИ СТОРОН
+СТАТЬЯ 19. РЕКВИЗИТЫ И ПОДПИСИ СТОРОН
 ════════════════════════════════════════════════════════════════
 
 ПРОДАВЕЦ:                          ПОКУПАТЕЛЬ:
@@ -826,6 +803,134 @@ ${scope === 'international' ? 'Art. 18 КМКПТ/CISG — порядок акц
 ${seller || '________________________'}
 Дата: ${d}
 ════════════════════════════════════════════════════`;
+}
+
+function buildSpecification(f) {
+  const { seller, buyer, sellerCountry, buyerCountry, goods, amount, currency,
+    incoterms, deliveryDays, payTerms, contractNum, contractDate, city,
+    specNum, hsCode, unit, qty, unitPrice, vatRate, countryOfOrigin,
+    warrantyMonths, productionDays, consignee, destinationPoint } = f;
+
+  const sLaw = legalSources.find(s => s.code === sellerCountry);
+  const num = specNum || `СП-${Math.floor(Math.random()*9000+1000)}`;
+  const refContract = contractNum || '___________';
+  const refContractDate = contractDate
+    ? new Date(contractDate).toLocaleDateString('ru-RU')
+    : '___________ 20__ г.';
+  const d = new Date().toLocaleDateString('ru-RU');
+
+  const qtyNum = parseFloat(qty) || 0;
+  const priceNum = parseFloat(unitPrice) || 0;
+  const lineTotal = qtyNum * priceNum;
+  const vat = vatRate !== '' && vatRate !== undefined ? parseFloat(vatRate) : null;
+  const vatAmount = vat !== null ? lineTotal * (vat / 100) : null;
+  const totalWithVat = vat !== null ? lineTotal + vatAmount : null;
+
+  const fmt = (n) => n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  return `СПЕЦИФИКАЦИЯ № ${num}
+
+Приложение № 1 к Договору № ${refContract} от ${refContractDate}
+Дата составления: ${d}
+
+════════════════════════════════════════════════════════════════
+СТОРОНЫ
+════════════════════════════════════════════════════════════════
+
+ПРОДАВЕЦ: ${seller || '________________________________'}
+Страна: ${sLaw?.country || sellerCountry}
+
+ПОКУПАТЕЛЬ: ${buyer || '________________________________'}
+Страна: ${legalSources.find(s => s.code === buyerCountry)?.country || buyerCountry}
+
+════════════════════════════════════════════════════════════════
+1. ТОВАР И ХАРАКТЕРИСТИКИ
+════════════════════════════════════════════════════════════════
+
+Наименование: ${goods || '________________________________'}
+Код ТН ВЭД: ${hsCode || '____________ (требуется указать для таможенного оформления)'}
+Страна происхождения: ${countryOfOrigin || sLaw?.country || '___________'}
+Единица измерения: ${unit || '___________'}
+Количество: ${qty || '___'}
+
+════════════════════════════════════════════════════════════════
+2. ЦЕНА И СУММА
+════════════════════════════════════════════════════════════════
+
+Цена за единицу: ${priceNum ? fmt(priceNum) : '___________'} ${currency}
+Сумма без НДС: ${qtyNum && priceNum ? fmt(lineTotal) : '___________'} ${currency}
+${vat !== null
+  ? `НДС (${vat}%): ${fmt(vatAmount)} ${currency}\nСумма с НДС: ${fmt(totalWithVat)} ${currency}`
+  : `НДС: ___% (ставка определяется законодательством страны импорта/экспорта\nна дату поставки — Стороны указывают самостоятельно)`}
+
+⚠ Ставка НДС и порядок его применения зависят от налогового
+  законодательства страны Покупателя/Продавца и не определяются
+  платформой GLORIX. Итоговый размер таможенных платежей (включая
+  НДС при импорте и таможенную пошлину) рассчитывается таможенным
+  органом страны Покупателя на основании указанного кода ТН ВЭД —
+  это вопрос, решаемый Сторонами вне платформы при таможенном
+  оформлении.
+
+════════════════════════════════════════════════════════════════
+3. УСЛОВИЯ ПОСТАВКИ И ОПЛАТЫ
+════════════════════════════════════════════════════════════════
+
+Условия поставки: ${incoterms} (Incoterms 2020, ICC)
+Срок поставки/производства: ${productionDays || deliveryDays || '___'} дней
+  с даты подписания Спецификации и/или получения предоплаты
+Условия оплаты: ${payTerms || '___________'}
+
+════════════════════════════════════════════════════════════════
+4. ГАРАНТИЯ
+════════════════════════════════════════════════════════════════
+
+Гарантийный срок: ${warrantyMonths || '___'} месяцев с даты поставки
+  (отгрузки/приёмки — указать применимое).
+
+════════════════════════════════════════════════════════════════
+5. ГРУЗОПОЛУЧАТЕЛЬ И МЕСТО НАЗНАЧЕНИЯ
+════════════════════════════════════════════════════════════════
+
+Грузополучатель: ${consignee || '________________________________'}
+Пункт назначения: ${destinationPoint || '________________________________'}
+
+════════════════════════════════════════════════════════════════
+6. ДОКУМЕНТЫ, СОПРОВОЖДАЮЩИЕ ПОСТАВКУ
+════════════════════════════════════════════════════════════════
+
+— Счёт-фактура (инвойс) — 1 ориг. + 1 копия
+— Упаковочный лист (Packing List) — 1 ориг.
+— Сертификат происхождения (CT-1 / Form A / EUR.1 — применимый) — 1 ориг.
+— Сертификат качества / соответствия — 1 заверенная копия
+— Транспортная накладная (CMR / коносамент / накладная — применимая)
+
+════════════════════════════════════════════════════════════════
+7. ПРИМЕЧАНИЯ
+════════════════════════════════════════════════════════════════
+
+Настоящая Спецификация является неотъемлемой частью
+Договора № ${refContract} и не имеет самостоятельной юридической
+силы в его отсутствие. При противоречии между текстом Договора
+и настоящей Спецификацией в части характеристик и цены Товара
+применяются условия настоящей Спецификации как более позднего
+и детального документа.
+
+ПРОДАВЕЦ:                          ПОКУПАТЕЛЬ:
+${seller || '________________________'}    ${buyer || '________________________'}
+
+Подпись: ___________________       Подпись: ___________________
+Ф.И.О.: ____________________       Ф.И.О.: ____________________
+Должность: _________________       Должность: _________________
+Дата: ______________________       Дата: ______________________
+М.П.                               М.П.
+
+⚠ ПРИМЕЧАНИЕ GLORIX LEGAL AI:
+Документ сформирован автоматически на основе данных, введённых
+Сторонами. Код ТН ВЭД, ставка НДС и размер таможенных платежей
+требуют проверки специалистом по таможенному оформлению перед
+подачей декларации. Рекомендуется проверка квалифицированным
+юристом перед подписанием.
+Дата генерации: ${d}`;
 }
 
 function buildClaim(f) {
@@ -1019,7 +1124,11 @@ export default function LegalAI() {
   const [sellerCountry, setSellerCountry] = useState('UZ');
   const [buyerCountry, setBuyerCountry] = useState('KZ');
   const [intLaw, setIntLaw] = useState('cisg');
-  const [docType, setDocType] = useState('contract');
+  const [searchParams] = useSearchParams();
+  const initialDocType = ['contract','offer','specification','claim','acceptance'].includes(searchParams.get('type'))
+    ? searchParams.get('type')
+    : 'contract';
+  const [docType, setDocType] = useState(initialDocType);
   const [seller, setSeller] = useState('');
   const [buyer, setBuyer] = useState('');
   const [goods, setGoods] = useState('');
@@ -1032,6 +1141,18 @@ export default function LegalAI() {
   const [maxPenalty, setMaxPenalty] = useState('10');
   const [city, setCity] = useState('Ташкент');
   const [contractNum, setContractNum] = useState('');
+  const [contractDate, setContractDate] = useState('');
+  const [specNum, setSpecNum] = useState('');
+  const [hsCode, setHsCode] = useState('');
+  const [unit, setUnit] = useState('шт.');
+  const [qty, setQty] = useState('');
+  const [unitPrice, setUnitPrice] = useState('');
+  const [vatRate, setVatRate] = useState('');
+  const [countryOfOrigin, setCountryOfOrigin] = useState('');
+  const [warrantyMonths, setWarrantyMonths] = useState('12');
+  const [productionDays, setProductionDays] = useState('');
+  const [consignee, setConsignee] = useState('');
+  const [destinationPoint, setDestinationPoint] = useState('');
   const [result, setResult] = useState('');
   const [generating, setGenerating] = useState(false);
   const [sourcesCountry, setSourcesCountry] = useState('UZ');
@@ -1045,11 +1166,14 @@ export default function LegalAI() {
   const generate = () => {
     setGenerating(true);
     const f = { seller, buyer, sellerCountry, buyerCountry, goods, amount, currency,
-      incoterms, deliveryDays, payTerms, penaltyRate, maxPenalty, scope, intLaw, city, contractNum };
+      incoterms, deliveryDays, payTerms, penaltyRate, maxPenalty, scope, intLaw, city, contractNum, contractDate,
+      specNum, hsCode, unit, qty, unitPrice, vatRate, countryOfOrigin, warrantyMonths, productionDays,
+      consignee, destinationPoint };
     setTimeout(() => {
       let doc = '';
       if (docType === 'contract') doc = buildContract(f);
       else if (docType === 'offer') doc = buildOffer(f);
+      else if (docType === 'specification') doc = buildSpecification(f);
       else if (docType === 'claim') doc = buildClaim(f);
       else if (docType === 'acceptance') doc = buildAcceptance(f);
       setResult(doc);
@@ -1063,7 +1187,7 @@ export default function LegalAI() {
     <div className="fade-in" style={{ padding: '28px 36px' }}>
       <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 4, letterSpacing: 1 }}>ПРАВОВОЙ ИИ-АССИСТЕНТ</div>
       <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4 }}>Юридические документы · Международный стандарт</h1>
-      <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 20 }}>20 статей · Зеркальные штрафы · CISG + СНГ право · Без лазеек для обеих сторон</div>
+      <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 20 }}>19 статей · Зеркальные штрафы · CISG + СНГ право · Без лазеек для обеих сторон</div>
 
       <div style={{ display: 'flex', gap: 0, background: 'var(--navy-3)', borderRadius: 10, padding: 4, marginBottom: 24, width: 'fit-content' }}>
         {[['generator','⚖ Генератор'],['mirrors','🔄 Зеркальные штрафы'],['intlaw','🌍 Международное право'],['sources','📚 Правовые базы']].map(([v,l]) => (
@@ -1201,12 +1325,77 @@ export default function LegalAI() {
                     </div>
                   </div>
                 </div>
+
+                {docType === 'specification' && (
+                  <div style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-2)', borderRadius: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <div style={{ fontWeight: 600, fontSize: 12 }}>📊 Поля спецификации (Приложение № 1)</div>
+                      <Link to="/documents" style={{ fontSize: 11, color: 'var(--accent)', textDecoration: 'none' }}>Поиск ТН ВЭД в Document Center →</Link>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        <div>
+                          <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Номер спецификации</label>
+                          <input style={inp} placeholder='СП-001' value={specNum} onChange={e => setSpecNum(e.target.value)} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Дата Договора-основания</label>
+                          <input style={inp} type="date" value={contractDate} onChange={e => setContractDate(e.target.value)} />
+                        </div>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Код ТН ВЭД</label>
+                        <input style={inp} placeholder='84041000' value={hsCode} onChange={e => setHsCode(e.target.value)} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                        <div>
+                          <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Ед. измерения</label>
+                          <input style={inp} placeholder='шт. / кг / комплект' value={unit} onChange={e => setUnit(e.target.value)} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Количество</label>
+                          <input style={inp} type="number" placeholder='1' value={qty} onChange={e => setQty(e.target.value)} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Цена за ед.</label>
+                          <input style={inp} type="number" placeholder='11500' value={unitPrice} onChange={e => setUnitPrice(e.target.value)} />
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                        <div>
+                          <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>НДС, % (если применимо)</label>
+                          <input style={inp} placeholder='не указано — стороны заполняют' value={vatRate} onChange={e => setVatRate(e.target.value)} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Страна происхождения</label>
+                          <input style={inp} placeholder='Узбекистан' value={countryOfOrigin} onChange={e => setCountryOfOrigin(e.target.value)} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Гарантия, мес.</label>
+                          <input style={inp} type="number" value={warrantyMonths} onChange={e => setWarrantyMonths(e.target.value)} />
+                        </div>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Срок производства/поставки (дней)</label>
+                        <input style={inp} type="number" placeholder='оставьте пустым, чтобы использовать срок поставки выше' value={productionDays} onChange={e => setProductionDays(e.target.value)} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Грузополучатель (если отличается от Покупателя)</label>
+                        <input style={inp} placeholder='Оставьте пустым, если совпадает с Покупателем' value={consignee} onChange={e => setConsignee(e.target.value)} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Пункт назначения</label>
+                        <input style={inp} placeholder='Таможенный пост / склад / адрес доставки' value={destinationPoint} onChange={e => setDestinationPoint(e.target.value)} />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               <button className="btn btn-primary" onClick={generate} disabled={generating} style={{ width: '100%', justifyContent: 'center', marginTop: 14, padding: '13px', fontSize: 14 }}>
                 {generating ? '⚖ Составляю документ...' : `⚖ Сгенерировать — ${docTypes.find(d=>d.id===docType)?.label}`}
               </button>
               <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, textAlign: 'center' }}>
-                {docType === 'contract' ? '20 статей · Преамбула · Все пункты · Без лазеек' : ''}
+                {docType === 'contract' ? '19 статей · Преамбула · Все пункты · Без лазеек' : ''}
               </div>
             </div>
           </div>
@@ -1233,7 +1422,7 @@ export default function LegalAI() {
                 <div style={{ fontSize: 48, marginBottom: 16 }}>⚖</div>
                 <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Заполните форму и нажмите «Сгенерировать»</div>
                 <div style={{ fontSize: 12, lineHeight: 1.8 }}>
-                  Договор купли-продажи: 20 статей<br/>
+                  Договор купли-продажи: 19 статей<br/>
                   Преамбула · Полная структура · Зеркальные штрафы<br/>
                   {scope==='international'
                     ? 'Международное право (CISG + Incoterms 2020)'
