@@ -19,6 +19,7 @@ import Analytics from './pages/Analytics';
 import AccountVerification from './pages/AccountVerification';
 import DocumentCenter from './pages/DocumentCenter';
 import AccountSelect from './pages/AccountSelect';
+import LegalAI from './pages/LegalAI';
 import './index.css';
 
 export default function App() {
@@ -45,6 +46,7 @@ export default function App() {
                 <Route path="/rfi" element={<RFIModule />} />
                 <Route path="/ai-bots" element={<AIBots />} />
                 <Route path="/legal" element={<Legal />} />
+                <Route path="/legal-ai" element={<LegalAI />} />
                 <Route path="/support" element={<Support />} />
                 <Route path="/roadmap" element={<Roadmap />} />
                 <Route path="/manager" element={<RelationshipManager />} />

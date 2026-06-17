@@ -70,7 +70,8 @@ const commonNav = [
   { to: '/manager', icon: '👤', label: 'Мой менеджер', badge: 'NEW' },
   { divider: 'ПЛАТФОРМА' },
   { to: '/roadmap', icon: '🗺', label: 'Roadmap' },
-  { to: '/legal', icon: '⚖', label: 'Правовая база' },
+  { to: '/legal-ai', icon: '⚖', label: 'Правовой ИИ', badge: 'NEW' },
+  { to: '/legal', icon: '📜', label: 'Правовая база' },
   { to: '/support', icon: '❓', label: 'Поддержка' },
   { to: '/profile', icon: '◍', label: 'Профиль' },
 ];
