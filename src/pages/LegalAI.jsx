@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { legalSources, internationalLaw } from '../data/legalSources';
+import { buildContractStructured, LANG_NAMES } from '../data/contractData';
 import { downloadTextAsPdf } from '../utils/pdfExport';
 import { downloadTextAsDocx } from '../utils/docxExport';
+import { downloadContractAsPdf } from '../utils/contractPdfExport';
+import { downloadContractAsDocx } from '../utils/contractDocxExport';
 
 const docTypes = [
   { id: 'offer', label: 'Оферта поставщика', icon: '📋' },
@@ -11,6 +14,58 @@ const docTypes = [
   { id: 'claim', label: 'Претензия / Рекламация', icon: '⚠️' },
   { id: 'acceptance', label: 'Акцепт оферты', icon: '✅' },
 ];
+
+// Правило (подтверждено пользователем):
+// — Стороны из РАЗНЫХ стран → международная сделка, не регулируется внутренним языковым
+//   законом одной отдельной страны. Используется стандартный двуязычный формат RU/EN,
+//   как в реальном шаблоне (ТФД), независимо от национальных законов сторон.
+// — Стороны из ОДНОЙ страны → применяется именно закон этой страны:
+//     если закон допускает русский для B2B-договоров между резидентами → один язык (русский);
+//     если закон запрещает русский / требует только национальный → один язык (национальный),
+//     билингвальность в этом случае НЕ нужна.
+// Возвращает: { mode: 'mono'|'bilingual', primary, secondary, warning }
+function resolveContractLanguage(sellerCountry, buyerCountry) {
+  const sameCountry = sellerCountry && buyerCountry && sellerCountry === buyerCountry;
+
+  if (!sameCountry) {
+    return { mode: 'bilingual', primary: 'ru', secondary: 'en', warning: null };
+  }
+
+  const sLaw = legalSources.find(s => s.code === sellerCountry);
+  const cl = sLaw?.contractLanguage;
+  if (!cl) {
+    return { mode: 'mono', primary: 'ru', secondary: null, warning: null };
+  }
+
+  // Закон страны разрешает русский для B2B между резидентами — один язык, русский
+  if (cl.domesticRule === 'mono' || cl.domesticRule === 'bilingual_mandatory') {
+    // bilingual_mandatory (напр. Казахстан) формально требует двух языков по закону —
+    // это единственный случай внутристрановой сделки, где билингвальность обусловлена
+    // прямым требованием закона, а не нашим выбором. Юридический текст на втором языке
+    // (казахском) требует профессионального аккредитованного перевода — платформа GLORIX
+    // не генерирует юридический текст на языках, для которых нет верифицированного перевода,
+    // так как ошибка в формулировке (падеж, пунктуация) может изменить смысл обязательства.
+    if (cl.domesticRule === 'bilingual_mandatory') {
+      const [first, second] = cl.domesticLanguage.split('+');
+      return { mode: 'bilingual', primary: first, secondary: second, warning: null, mandatory: true, requiresCertifiedTranslation: true };
+    }
+    return { mode: 'mono', primary: 'ru', secondary: null, warning: cl.verified ? null : cl.note };
+  }
+
+  // Закон страны запрещает русский / требует только национальный язык — один язык, национальный
+  if (cl.domesticRule === 'national_required' || cl.domesticRule === 'national_must_prevail') {
+    return { mode: 'mono', primary: cl.domesticLanguage, secondary: null, warning: cl.note, nationalOnly: true };
+  }
+
+  // AZ/KG/TM — нет явного подтверждения ни в одну сторону; консервативно: национальный язык,
+  // с явным предупреждением, что требуется юридическая проверка перед использованием
+  if (cl.domesticRule === 'caution') {
+    const [national] = cl.domesticLanguage.split('+');
+    return { mode: 'mono', primary: national, secondary: null, warning: cl.note, unverifiedCaution: true };
+  }
+
+  return { mode: 'mono', primary: 'ru', secondary: null, warning: null };
+}
 
 function buildContract(f) {
   const { seller, buyer, sellerCountry, buyerCountry, goods, amount, currency,
@@ -812,12 +867,11 @@ function buildSpecification(f) {
     warrantyMonths, productionDays, consignee, destinationPoint } = f;
 
   const sLaw = legalSources.find(s => s.code === sellerCountry);
-  const num = specNum || `СП-${Math.floor(Math.random()*9000+1000)}`;
+  const num = specNum || `1`;
   const refContract = contractNum || '___________';
   const refContractDate = contractDate
     ? new Date(contractDate).toLocaleDateString('ru-RU')
     : '___________ 20__ г.';
-  const d = new Date().toLocaleDateString('ru-RU');
 
   const qtyNum = parseFloat(qty) || 0;
   const priceNum = parseFloat(unitPrice) || 0;
@@ -828,109 +882,41 @@ function buildSpecification(f) {
 
   const fmt = (n) => n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  return `СПЕЦИФИКАЦИЯ № ${num}
-
-Приложение № 1 к Договору № ${refContract} от ${refContractDate}
-Дата составления: ${d}
+  return `ПРИЛОЖЕНИЕ № 1 к Договору № ${refContract} от ${refContractDate}
+СПЕЦИФИКАЦИЯ № ${num} от ${refContractDate}
 
 ════════════════════════════════════════════════════════════════
-СТОРОНЫ
+| № | Наименование | Код ТН ВЭД | Ед. изм. | К-во | Цена за ед. (${currency}) | Сумма (${currency}) |
+|---|---|---|---|---|---|---|
+| 1 | ${goods || '________________________________'} | ${hsCode || '____________'} | ${unit || '___'} | ${qty || '___'} | ${priceNum ? fmt(priceNum) : '___________'} | ${qtyNum && priceNum ? fmt(lineTotal) : '___________'} |
 ════════════════════════════════════════════════════════════════
 
-ПРОДАВЕЦ: ${seller || '________________________________'}
-Страна: ${sLaw?.country || sellerCountry}
+ИТОГО без НДС: ${qtyNum && priceNum ? fmt(lineTotal) : '___________'} ${currency}
 
-ПОКУПАТЕЛЬ: ${buyer || '________________________________'}
-Страна: ${legalSources.find(s => s.code === buyerCountry)?.country || buyerCountry}
-
-════════════════════════════════════════════════════════════════
-1. ТОВАР И ХАРАКТЕРИСТИКИ
-════════════════════════════════════════════════════════════════
-
-Наименование: ${goods || '________________________________'}
-Код ТН ВЭД: ${hsCode || '____________ (требуется указать для таможенного оформления)'}
-Страна происхождения: ${countryOfOrigin || sLaw?.country || '___________'}
-Единица измерения: ${unit || '___________'}
-Количество: ${qty || '___'}
-
-════════════════════════════════════════════════════════════════
-2. ЦЕНА И СУММА
-════════════════════════════════════════════════════════════════
-
-Цена за единицу: ${priceNum ? fmt(priceNum) : '___________'} ${currency}
-Сумма без НДС: ${qtyNum && priceNum ? fmt(lineTotal) : '___________'} ${currency}
 ${vat !== null
-  ? `НДС (${vat}%): ${fmt(vatAmount)} ${currency}\nСумма с НДС: ${fmt(totalWithVat)} ${currency}`
-  : `НДС: ___% (ставка определяется законодательством страны импорта/экспорта\nна дату поставки — Стороны указывают самостоятельно)`}
+  ? `НДС (${vat}%): ${fmt(vatAmount)} ${currency}; Сумма с НДС: ${fmt(totalWithVat)} ${currency}`
+  : `НДС: ставка определяется налоговым законодательством страны Покупателя/Продавца на дату поставки — Стороны указывают самостоятельно. Размер импортной таможенной пошлины и НДС при импорте определяется таможенными органами страны Покупателя на основании указанного кода ТН ВЭД и не определяется платформой GLORIX.`}
 
-⚠ Ставка НДС и порядок его применения зависят от налогового
-  законодательства страны Покупателя/Продавца и не определяются
-  платформой GLORIX. Итоговый размер таможенных платежей (включая
-  НДС при импорте и таможенную пошлину) рассчитывается таможенным
-  органом страны Покупателя на основании указанного кода ТН ВЭД —
-  это вопрос, решаемый Сторонами вне платформы при таможенном
-  оформлении.
-
-════════════════════════════════════════════════════════════════
-3. УСЛОВИЯ ПОСТАВКИ И ОПЛАТЫ
-════════════════════════════════════════════════════════════════
-
-Условия поставки: ${incoterms} (Incoterms 2020, ICC)
-Срок поставки/производства: ${productionDays || deliveryDays || '___'} дней
-  с даты подписания Спецификации и/или получения предоплаты
+────────────────────────────────────────────────────────────────
+Для объекта: ${goods ? goods.split(' ').slice(0,4).join(' ') : '___________'}
+Условия поставки: ${incoterms} (Инкотермс 2020)
 Условия оплаты: ${payTerms || '___________'}
-
-════════════════════════════════════════════════════════════════
-4. ГАРАНТИЯ
-════════════════════════════════════════════════════════════════
-
-Гарантийный срок: ${warrantyMonths || '___'} месяцев с даты поставки
-  (отгрузки/приёмки — указать применимое).
-
-════════════════════════════════════════════════════════════════
-5. ГРУЗОПОЛУЧАТЕЛЬ И МЕСТО НАЗНАЧЕНИЯ
-════════════════════════════════════════════════════════════════
-
+Страна происхождения: ${countryOfOrigin || sLaw?.country || '___________'}
+Гарантийный срок: ${warrantyMonths ? `${warrantyMonths} месяцев с момента поставки` : '___________'}
+Срок производства: ${productionDays || '___'} дней после подписания Договора и Спецификации и получения предоплаты на счёт Продавца.
+Срок поставки: ${deliveryDays || '___'} дней с момента получения предоплаты на счёт Продавца.
 Грузополучатель: ${consignee || '________________________________'}
 Пункт назначения: ${destinationPoint || '________________________________'}
+────────────────────────────────────────────────────────────────
 
-════════════════════════════════════════════════════════════════
-6. ДОКУМЕНТЫ, СОПРОВОЖДАЮЩИЕ ПОСТАВКУ
-════════════════════════════════════════════════════════════════
+Продавец/Seller                              Покупатель/Buyer
+${seller || '________________________'}            ${buyer || '________________________'}
 
-— Счёт-фактура (инвойс) — 1 ориг. + 1 копия
-— Упаковочный лист (Packing List) — 1 ориг.
-— Сертификат происхождения (CT-1 / Form A / EUR.1 — применимый) — 1 ориг.
-— Сертификат качества / соответствия — 1 заверенная копия
-— Транспортная накладная (CMR / коносамент / накладная — применимая)
+_____________________                        _____________________
+/ ____________________ /                     / ___________________ /
+Должность                                     Должность
 
-════════════════════════════════════════════════════════════════
-7. ПРИМЕЧАНИЯ
-════════════════════════════════════════════════════════════════
-
-Настоящая Спецификация является неотъемлемой частью
-Договора № ${refContract} и не имеет самостоятельной юридической
-силы в его отсутствие. При противоречии между текстом Договора
-и настоящей Спецификацией в части характеристик и цены Товара
-применяются условия настоящей Спецификации как более позднего
-и детального документа.
-
-ПРОДАВЕЦ:                          ПОКУПАТЕЛЬ:
-${seller || '________________________'}    ${buyer || '________________________'}
-
-Подпись: ___________________       Подпись: ___________________
-Ф.И.О.: ____________________       Ф.И.О.: ____________________
-Должность: _________________       Должность: _________________
-Дата: ______________________       Дата: ______________________
-М.П.                               М.П.
-
-⚠ ПРИМЕЧАНИЕ GLORIX LEGAL AI:
-Документ сформирован автоматически на основе данных, введённых
-Сторонами. Код ТН ВЭД, ставка НДС и размер таможенных платежей
-требуют проверки специалистом по таможенному оформлению перед
-подачей декларации. Рекомендуется проверка квалифицированным
-юристом перед подписанием.
-Дата генерации: ${d}`;
+⚠ Код ТН ВЭД, ставка НДС и размер таможенных платежей требуют проверки специалистом по таможенному оформлению перед подачей декларации.`;
 }
 
 function buildClaim(f) {
@@ -1118,6 +1104,131 @@ ${buyer || '________________________'}
 Дата: ${d}`;
 }
 
+// Визуальный рендер договора в виде двухколоночной (или одноязычной) таблицы,
+// по образцу реального шаблона ТФД: заголовок раздела на всю ширину, затем
+// построчно пункт-на-русском | пункт-на-вторичном-языке (или один столбец для mono).
+function ContractTableView({ data }) {
+  const { contractLang } = data;
+  const isBilingual = contractLang.mode === 'bilingual';
+  const primaryLangName = LANG_NAMES[contractLang.primary] || contractLang.primary;
+  const secondaryLangName = isBilingual ? (LANG_NAMES[contractLang.secondary] || contractLang.secondary) : null;
+
+  const cellStyle = { padding: '10px 14px', verticalAlign: 'top', fontSize: 12.5, lineHeight: 1.7, whiteSpace: 'pre-wrap', borderBottom: '1px solid var(--border-2)' };
+  const headCellStyle = { ...cellStyle, fontWeight: 700, background: 'var(--navy-3)', borderBottom: '2px solid var(--accent)' };
+
+  // КРИТИЧЕСКИ ВАЖНО: GLORIX хранит проверенный юридический текст только на русском
+  // и английском (ru/en). Если язык колонки (primary ИЛИ secondary) — это не 'ru' и
+  // не 'en' (напр. казахский 'kk' для Казахстана), мы НЕ подставляем туда русский
+  // текст по умолчанию — это было бы изобретённым/неверным юридическим текстом на
+  // чужом языке. Вместо этого — честный плейсхолдер.
+  const resolveColumnText = (ruText, enText, lang) => {
+    if (lang === 'ru') return ruText;
+    if (lang === 'en') return enText;
+    return `[${LANG_NAMES[lang] || lang}: текст требует профессионального юридического перевода]`;
+  };
+
+  const preambleRu = `${data.seller}, юридическое лицо, надлежащим образом созданное и действующее в соответствии с законодательством ${data.sellerCountryName}, в лице ________________________________, действующего на основании _________________, именуемое в дальнейшем «ПРОДАВЕЦ», с одной стороны,\n\nи\n\n${data.buyer}, юридическое лицо, надлежащим образом созданное и действующее в соответствии с законодательством ${data.buyerCountryName}, в лице ________________________________, действующего на основании _________________, именуемое в дальнейшем «ПОКУПАТЕЛЬ», с другой стороны,\n\nсовместно именуемые «Стороны», а по отдельности «Сторона»,\n\nЗАКЛЮЧИЛИ настоящий Договор о нижеследующем:`;
+  const preambleEn = `${data.seller}, a legal entity duly established and operating under the laws of ${data.sellerCountryName}, represented by ________________________________, acting on the basis of _________________, hereinafter referred to as the "SELLER", of the one part,\n\nand\n\n${data.buyer}, a legal entity duly established and operating under the laws of ${data.buyerCountryName}, represented by ________________________________, acting on the basis of _________________, hereinafter referred to as the "BUYER", of the other part,\n\njointly referred to as the "Parties", and individually as a "Party",\n\nHAVE CONCLUDED this Contract as follows:`;
+  const sellerBlockRu = `ПРОДАВЕЦ: ${data.seller}\nЮр. адрес: ___________________\nИНН/ИД: _____________________\nБанк: _______________________\nСчёт: _______________________\nSWIFT/БИК: __________________\nEmail: ______________________\nТел.: _______________________\n\nПодпись: ___________________\nФ.И.О.: ____________________\nДолжность: _________________\nДата: ______________________\nМ.П.`;
+  const sellerBlockEn = `SELLER: ${data.seller}\nRegistered address: _______________\nTax ID: ____________________\nBank: ______________________\nAccount: ___________________\nSWIFT/BIC: _________________\nEmail: _____________________\nPhone: _____________________\n\nSignature: _________________\nFull name: _________________\nPosition: __________________\nDate: ______________________\nSeal`;
+  const buyerBlockRu = `ПОКУПАТЕЛЬ: ${data.buyer}\nЮр. адрес: ___________________\nИНН/ИД: _____________________\nБанк: _______________________\nСчёт: _______________________\nSWIFT/БИК: __________________\nEmail: ______________________\nТел.: _______________________\n\nПодпись: ___________________\nФ.И.О.: ____________________\nДолжность: _________________\nДата: ______________________\nМ.П.`;
+  const buyerBlockEn = `BUYER: ${data.buyer}\nRegistered address: _______________\nTax ID: ____________________\nBank: ______________________\nAccount: ___________________\nSWIFT/BIC: _________________\nEmail: _____________________\nPhone: _____________________\n\nSignature: _________________\nFull name: _________________\nPosition: __________________\nDate: ______________________\nSeal`;
+
+  return (
+    <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Georgia, "Times New Roman", serif' }}>
+      <thead>
+        <tr>
+          <th colSpan={isBilingual ? 2 : 1} style={{ padding: '14px', textAlign: 'center', background: 'var(--navy-3)' }}>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>{data.title.ru} № {data.num}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 4 }}>
+              г. {data.city}                              «___» __________ {data.year} г.
+            </div>
+          </th>
+        </tr>
+        {isBilingual && (
+          <tr>
+            <th style={headCellStyle}>{primaryLangName}</th>
+            <th style={headCellStyle}>{secondaryLangName}</th>
+          </tr>
+        )}
+      </thead>
+      <tbody>
+        {/* Преамбула */}
+        <tr>
+          <td colSpan={isBilingual ? 2 : 1} style={{ ...cellStyle, fontWeight: 700, textAlign: 'center', background: 'var(--navy-2)' }}>ПРЕАМБУЛА</td>
+        </tr>
+        <tr>
+          <td style={cellStyle}>
+            {resolveColumnText(preambleRu, preambleEn, contractLang.primary)}
+          </td>
+          {isBilingual && (
+            <td style={cellStyle}>
+              {resolveColumnText(preambleRu, preambleEn, contractLang.secondary)}
+            </td>
+          )}
+        </tr>
+
+        {/* Статьи */}
+        {data.sections.map((section, i) => (
+          <React.Fragment key={i}>
+            <tr>
+              <td colSpan={isBilingual ? 2 : 1} style={{ ...cellStyle, fontWeight: 700, textAlign: 'center', background: 'var(--navy-2)' }}>
+                {section.heading.ru}
+              </td>
+            </tr>
+            {section.clauses.map((clause, j) => (
+              <tr key={j}>
+                <td style={cellStyle}>{resolveColumnText(clause.ru, clause.en, contractLang.primary)}</td>
+                {isBilingual && (
+                  <td style={cellStyle}>{resolveColumnText(clause.ru, clause.en, contractLang.secondary)}</td>
+                )}
+              </tr>
+            ))}
+          </React.Fragment>
+        ))}
+
+        {/* Статья 19 — реквизиты и подписи */}
+        <tr>
+          <td colSpan={isBilingual ? 2 : 1} style={{ ...cellStyle, fontWeight: 700, textAlign: 'center', background: 'var(--navy-2)' }}>
+            СТАТЬЯ 19. РЕКВИЗИТЫ И ПОДПИСИ СТОРОН
+          </td>
+        </tr>
+        <tr>
+          <td style={cellStyle}>
+            {resolveColumnText(sellerBlockRu, sellerBlockEn, contractLang.primary)}
+          </td>
+          {isBilingual && (
+            <td style={cellStyle}>
+              {resolveColumnText(sellerBlockRu, sellerBlockEn, contractLang.secondary)}
+            </td>
+          )}
+        </tr>
+        <tr>
+          <td style={cellStyle}>
+            {resolveColumnText(buyerBlockRu, buyerBlockEn, contractLang.primary)}
+          </td>
+          {isBilingual && (
+            <td style={cellStyle}>
+              {resolveColumnText(buyerBlockRu, buyerBlockEn, contractLang.secondary)}
+            </td>
+          )}
+        </tr>
+
+        {/* Приложения и дисклеймер */}
+        <tr>
+          <td style={cellStyle}>{resolveColumnText(data.appendices.ru, data.appendices.en, contractLang.primary)}</td>
+          {isBilingual && <td style={cellStyle}>{resolveColumnText(data.appendices.ru, data.appendices.en, contractLang.secondary)}</td>}
+        </tr>
+        <tr>
+          <td colSpan={isBilingual ? 2 : 1} style={{ ...cellStyle, color: 'var(--gold)', borderBottom: 'none' }}>
+            {contractLang.primary === 'en' ? data.disclaimer.en : data.disclaimer.ru}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  );
+}
+
 export default function LegalAI() {
   const [activeTab, setActiveTab] = useState('generator');
   const [scope, setScope] = useState('local');
@@ -1154,6 +1265,7 @@ export default function LegalAI() {
   const [consignee, setConsignee] = useState('');
   const [destinationPoint, setDestinationPoint] = useState('');
   const [result, setResult] = useState('');
+  const [contractStructured, setContractStructured] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [sourcesCountry, setSourcesCountry] = useState('UZ');
 
@@ -1171,11 +1283,17 @@ export default function LegalAI() {
       consignee, destinationPoint };
     setTimeout(() => {
       let doc = '';
-      if (docType === 'contract') doc = buildContract(f);
-      else if (docType === 'offer') doc = buildOffer(f);
-      else if (docType === 'specification') doc = buildSpecification(f);
-      else if (docType === 'claim') doc = buildClaim(f);
-      else if (docType === 'acceptance') doc = buildAcceptance(f);
+      if (docType === 'contract') {
+        const structured = buildContractStructured(f);
+        setContractStructured(structured);
+        doc = null;
+      } else {
+        setContractStructured(null);
+        if (docType === 'offer') doc = buildOffer(f);
+        else if (docType === 'specification') doc = buildSpecification(f);
+        else if (docType === 'claim') doc = buildClaim(f);
+        else if (docType === 'acceptance') doc = buildAcceptance(f);
+      }
       setResult(doc);
       setGenerating(false);
     }, 1500);
@@ -1404,7 +1522,7 @@ export default function LegalAI() {
           <div className="card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', minHeight: 600 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ fontWeight: 600 }}>
-                {result ? docTypes.find(d=>d.id===docType)?.label : 'Документ'}
+                {(result || contractStructured) ? docTypes.find(d=>d.id===docType)?.label : 'Документ'}
               </div>
               {result && (
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -1415,9 +1533,21 @@ export default function LegalAI() {
                   <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => downloadTextAsDocx(result, `glorix-${docType}.docx`)}>⬇ Word</button>
                 </div>
               )}
+              {contractStructured && (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <span className="badge badge-green" style={{ fontSize: 10 }}>⚖ {scope==='international'?'CISG':sellerLaw?.mainCode}</span>
+                  <span className="badge badge-blue" style={{ fontSize: 10 }}>
+                    {contractStructured.contractLang.mode === 'bilingual'
+                      ? `${LANG_NAMES[contractStructured.contractLang.primary] || contractStructured.contractLang.primary} / ${LANG_NAMES[contractStructured.contractLang.secondary] || contractStructured.contractLang.secondary}`
+                      : `${LANG_NAMES[contractStructured.contractLang.primary] || contractStructured.contractLang.primary}`}
+                  </span>
+                  <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => downloadContractAsPdf(contractStructured, `glorix-contract.pdf`)}>⬇ PDF</button>
+                  <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => downloadContractAsDocx(contractStructured, `glorix-contract.docx`)}>⬇ Word</button>
+                </div>
+              )}
             </div>
 
-            {!result && !generating && (
+            {!result && !contractStructured && !generating && (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', color: 'var(--text-3)' }}>
                 <div style={{ fontSize: 48, marginBottom: 16 }}>⚖</div>
                 <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Заполните форму и нажмите «Сгенерировать»</div>
@@ -1447,6 +1577,27 @@ export default function LegalAI() {
             {result && (
               <div style={{ flex: 1 }}>
                 <pre style={{ fontSize: 12, lineHeight: 1.85, color: 'var(--text)', background: 'var(--navy-3)', padding: '20px 24px', borderRadius: 8, whiteSpace: 'pre-wrap', fontFamily: 'Georgia, "Times New Roman", serif', maxHeight: 680, overflowY: 'auto' }}>{result}</pre>
+                <div style={{ marginTop: 10, padding: '10px 14px', background: 'var(--gold-dim)', border: '1px solid rgba(245,166,35,0.2)', borderRadius: 8, fontSize: 12, color: 'var(--gold)', lineHeight: 1.6 }}>
+                  ⚠ Черновик — рекомендуется проверка квалифицированным юристом перед подписанием. Ссылки на статьи актуальны на дату генерации.
+                </div>
+              </div>
+            )}
+
+            {contractStructured && (
+              <div style={{ flex: 1 }}>
+                <div style={{ maxHeight: 680, overflowY: 'auto', border: '1px solid var(--border-2)', borderRadius: 8 }}>
+                  <ContractTableView data={contractStructured} />
+                </div>
+                {contractStructured.contractLang.warning && (
+                  <div style={{ marginTop: 10, padding: '10px 14px', background: 'rgba(245,166,35,0.1)', border: '1px solid rgba(245,166,35,0.3)', borderRadius: 8, fontSize: 12, color: 'var(--gold)', lineHeight: 1.6 }}>
+                    ⚠ {contractStructured.contractLang.warning}
+                  </div>
+                )}
+                {contractStructured.contractLang.requiresCertifiedTranslation && (
+                  <div style={{ marginTop: 10, padding: '10px 14px', background: 'rgba(245,166,35,0.1)', border: '1px solid rgba(245,166,35,0.3)', borderRadius: 8, fontSize: 12, color: 'var(--gold)', lineHeight: 1.6 }}>
+                    ⚠ Колонка на казахском языке требует профессионального юридического перевода — платформа GLORIX не генерирует юридический текст на языках без верифицированного перевода.
+                  </div>
+                )}
                 <div style={{ marginTop: 10, padding: '10px 14px', background: 'var(--gold-dim)', border: '1px solid rgba(245,166,35,0.2)', borderRadius: 8, fontSize: 12, color: 'var(--gold)', lineHeight: 1.6 }}>
                   ⚠ Черновик — рекомендуется проверка квалифицированным юристом перед подписанием. Ссылки на статьи актуальны на дату генерации.
                 </div>

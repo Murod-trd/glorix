@@ -1,6 +1,13 @@
 export const legalSources = [
   {
     country: 'Узбекистан', flag: '🇺🇿', code: 'UZ',
+    contractLanguage: {
+      verified: true,
+      domesticLanguage: 'ru',
+      domesticRule: 'mono',
+      foreignPartyRule: 'ru',
+      note: 'Закон «О государственном языке» РУз не требует обязательного заключения договора на государственном языке между резидентами; русский язык допускается. Источник: gratanet.com, ст. 23 Закона «О государственном языке».',
+    },
     sites: [
       { name: 'lex.uz', url: 'https://lex.uz', desc: 'Национальная база данных законодательства РУз', official: true, type: 'primary' },
       { name: 'regulation.gov.uz', url: 'https://regulation.gov.uz', desc: 'Портал проектов нормативно-правовых актов', official: true, type: 'secondary' },
@@ -20,6 +27,13 @@ export const legalSources = [
   },
   {
     country: 'Казахстан', flag: '🇰🇿', code: 'KZ',
+    contractLanguage: {
+      verified: true,
+      domesticLanguage: 'kk+ru',
+      domesticRule: 'bilingual_mandatory',
+      foreignPartyRule: 'kk+ru',
+      note: 'Ст. 15 Закона РК «О языках» №151: письменные сделки между резидентами РК излагаются на государственном (казахском) И русском языках; с иностранными лицами — на государственном и приемлемом для сторон языке, при этом казахский/русский должны превалировать. Источник: adilet.zan.kz (текст закона), dogovor24.kz.',
+    },
     sites: [
       { name: 'adilet.zan.kz', url: 'https://adilet.zan.kz', desc: 'Информационно-правовая система нормативных правовых актов РК', official: true, type: 'primary' },
       { name: 'egov.kz/law', url: 'https://egov.kz', desc: 'Портал электронного правительства РК — раздел законодательства', official: true, type: 'secondary' },
@@ -38,6 +52,13 @@ export const legalSources = [
   },
   {
     country: 'Россия', flag: '🇷🇺', code: 'RU',
+    contractLanguage: {
+      verified: true,
+      domesticLanguage: 'ru',
+      domesticRule: 'mono',
+      foreignPartyRule: 'ru',
+      note: '53-ФЗ «О государственном языке РФ», ст. 3: требование обязательного русского языка относится к потребительским отношениям и не распространяется на коммерческую деятельность между юридическими лицами. Источник: garant.ru (комментарий к 53-ФЗ).',
+    },
     sites: [
       { name: 'consultant.ru', url: 'https://www.consultant.ru', desc: 'КонсультантПлюс — крупнейшая правовая система РФ', official: true, type: 'primary' },
       { name: 'garant.ru', url: 'https://www.garant.ru', desc: 'Гарант — информационно-правовой портал', official: true, type: 'primary' },
@@ -58,6 +79,13 @@ export const legalSources = [
   },
   {
     country: 'Беларусь', flag: '🇧🇾', code: 'BY',
+    contractLanguage: {
+      verified: true,
+      domesticLanguage: 'ru',
+      domesticRule: 'mono',
+      foreignPartyRule: 'ru',
+      note: 'Белорусский и русский — оба государственные языки; договоры между резидентами могут вестись на любом из них. Обязательный билингвизм установлен только для отдельных видов договоров (строительный подряд, проектные работы с иностранным участником) — на договор купли-продажи не распространяется. Источник: gratanet.com «General rules for making a contract in Belarus».',
+    },
     sites: [
       { name: 'pravo.by', url: 'https://pravo.by', desc: 'Национальный правовой интернет-портал Республики Беларусь', official: true, type: 'primary' },
       { name: 'etalonline.by', url: 'https://etalonline.by', desc: 'Эталон-онлайн — правовая база данных Беларуси', official: true, type: 'primary' },
@@ -72,6 +100,13 @@ export const legalSources = [
   },
   {
     country: 'Азербайджан', flag: '🇦🇿', code: 'AZ',
+    contractLanguage: {
+      verified: false,
+      domesticLanguage: 'az+ru',
+      domesticRule: 'caution',
+      foreignPartyRule: 'az+ru',
+      note: 'Закон №365-IIQ «О государственном языке» (ст. 1.4) требует государственного языка для делопроизводства юридических лиц, действующих в Азербайджане; явного исключения для частных B2B/внешнеторговых договоров не найдено (в отличие от Узбекистана/России/Беларуси/Армении). Рекомендуется консервативный подход: включать азербайджанский текст наряду с русским, не полагаться на русский в одиночку. Требует юридической консультации перед использованием.',
+    },
     sites: [
       { name: 'e-qanun.az', url: 'https://e-qanun.az', desc: 'Электронная база законодательства Азербайджана', official: true, type: 'primary' },
       { name: 'taxes.gov.az', url: 'https://www.taxes.gov.az', desc: 'Государственная налоговая служба Азербайджана', official: true, type: 'secondary' },
@@ -86,6 +121,13 @@ export const legalSources = [
   },
   {
     country: 'Армения', flag: '🇦🇲', code: 'AM',
+    contractLanguage: {
+      verified: true,
+      domesticLanguage: 'ru',
+      domesticRule: 'mono',
+      foreignPartyRule: 'ru',
+      note: 'Законодательство РА не устанавливает языковых ограничений для частных коммерческих контрактов; договор может быть на любом языке, стороны вправе указать превалирующий язык. Армянский язык обязателен только если стороной договора выступает государственный орган. Источник: gratanet.com и GILS «Контрактное право: Армения» (два независимых согласующихся источника).',
+    },
     sites: [
       { name: 'arlis.am', url: 'https://www.arlis.am', desc: 'Армянская правовая информационная система', official: true, type: 'primary' },
     ],
@@ -98,6 +140,13 @@ export const legalSources = [
   },
   {
     country: 'Кыргызстан', flag: '🇰🇬', code: 'KG',
+    contractLanguage: {
+      verified: false,
+      domesticLanguage: 'ky+ru',
+      domesticRule: 'caution',
+      foreignPartyRule: 'ky+ru',
+      note: 'Конституционный закон «О государственном языке» (2023) относит делопроизводство и документооборот предприятий всех форм собственности к сферам обязательного применения кыргызского языка, но явного указания на то, распространяется ли это на частные B2B-договоры купли-продажи (в отличие от внутреннего документооборота), не найдено. Рекомендуется консервативный подход: включать кыргызский текст наряду с русским. Требует юридической консультации перед использованием.',
+    },
     sites: [
       { name: 'cbd.minjust.gov.kg', url: 'http://cbd.minjust.gov.kg', desc: 'База данных законодательства Министерства юстиции КР', official: true, type: 'primary' },
       { name: 'toktom.kg', url: 'https://www.toktom.kg', desc: 'Нормативные правовые акты Кыргызской Республики', official: true, type: 'primary' },
@@ -111,6 +160,13 @@ export const legalSources = [
   },
   {
     country: 'Таджикистан', flag: '🇹🇯', code: 'TJ',
+    contractLanguage: {
+      verified: true,
+      domesticLanguage: 'tg',
+      domesticRule: 'national_required',
+      foreignPartyRule: 'tg+ru',
+      note: 'Закон РТ №553 «О государственном языке» (2009 г., ст. 1) полностью исключает использование русского языка в документообороте всех организаций и учреждений на территории Таджикистана независимо от форм собственности — требование распространяется на все юридические лица. Источник: kdmid.ru (справка МИД РФ по стране), kumitaizabon.tj (текст закона). Таджикский язык обязателен; русский не может использоваться как единственный язык документа с участием таджикского юридического лица.',
+    },
     sites: [
       { name: 'adlia.tj', url: 'http://adlia.tj', desc: 'Централизованный банк правовой информации Таджикистана', official: true, type: 'primary' },
     ],
@@ -123,6 +179,13 @@ export const legalSources = [
   },
   {
     country: 'Молдова', flag: '🇲🇩', code: 'MD',
+    contractLanguage: {
+      verified: true,
+      domesticLanguage: 'ru',
+      domesticRule: 'mono',
+      foreignPartyRule: 'ru',
+      note: 'Закон №234/2020 «О функционировании языков», ст. 5: закон не регламентирует использование языков в сфере частной жизни. B2B-договор между частными юридическими лицами не подпадает под требования к госязыку. Источник: legis.md (текст закона).',
+    },
     sites: [
       { name: 'justice.gov.md', url: 'https://justice.gov.md', desc: 'Министерство юстиции Республики Молдова', official: true, type: 'primary' },
       { name: 'legis.md', url: 'https://www.legis.md', desc: 'Законодательство Республики Молдова онлайн', official: true, type: 'primary' },
@@ -135,6 +198,13 @@ export const legalSources = [
   },
   {
     country: 'Туркменистан', flag: '🇹🇲', code: 'TM',
+    contractLanguage: {
+      verified: false,
+      domesticLanguage: 'tk+ru',
+      domesticRule: 'caution',
+      foreignPartyRule: 'tk+ru',
+      note: 'Явного требования или разрешения относительно языка частных B2B-договоров не найдено ни в одном направлении — обзор договорного права Туркменистана (gratanet.com) описывает требования к регистрации/нотариальному удостоверению, но не затрагивает язык договора. Рекомендуется консервативный подход: включать туркменский текст наряду с русским и направить на юридическую проверку перед использованием.',
+    },
     sites: [
       { name: 'minjust.gov.tm', url: 'https://minjust.gov.tm', desc: 'Министерство юстиции Туркменистана', official: true, type: 'primary' },
     ],
@@ -148,6 +218,13 @@ export const legalSources = [
   },
   {
     country: 'Грузия', flag: '🇬🇪', code: 'GE',
+    contractLanguage: {
+      verified: true,
+      domesticLanguage: 'ka',
+      domesticRule: 'national_must_prevail',
+      foreignPartyRule: 'ka+ru',
+      note: 'Договор только на русском языке не имеет силы для грузинских госорганов и судов без нотариально удостоверенного перевода; юридическая практика Грузии рекомендует двуязычный договор с грузинским как приоритетным языком. Источник: newsgeorgia.ge (комментарий JUST Advisors, специализирующейся на языке деловых договоров в Грузии).',
+    },
     sites: [
       { name: 'matsne.gov.ge', url: 'https://matsne.gov.ge', desc: 'Законодательный вестник Грузии — официальный портал', official: true, type: 'primary' },
     ],
