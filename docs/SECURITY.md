@@ -1,30 +1,102 @@
 # GLORIX — Security
 
-## Current posture, stated plainly
+## Current Security Posture
 
-GLORIX today has essentially no security surface to defend, because it has no backend, no database, and no real authentication — and therefore also has no real protection against the things a production trade platform would need to defend against. This document records the current (correct-for-a-demo, inadequate-for-production) state and what real security work the MVP/Beta phases must include. None of this should be read as criticism of the current build; a frontend-only investor/partner demo does not need production-grade security, and adding it prematurely would be wasted effort. The risk is only in mistakenly treating the current state as more secure than it is.
+GLORIX today has **minimal security surface** because it has no backend, no database, and no real authentication. This section documents the current (correct for a demo, inadequate for production) state and what real security work is required.
 
-## What exists today
+---
 
-- **"Authentication"**: `AccountSelect.jsx` writes one of three fixed strings (`'buyer' | 'seller' | 'both'`) to `localStorage.getItem('glorix_account_type')`. There is no password, no identity verification, no session token, no expiry. Anyone with access to the deployed URL can "log in" as any of the three demo personas instantly, and can trivially edit the localStorage value via devtools to switch personas with no checks at all.
-- **Authorization**: `canBuy`/`canSell` flags are derived client-side from that same localStorage string and used purely to conditionally render UI. There is no server enforcing these permissions because there is no server — nothing stops a user from, say, viewing seller-only UI by editing local state, though since no real transactions occur this has no real-world consequence today.
-- **Data confidentiality**: all "tender anonymity" (sellers hidden from buyers until tender close, the anonymous RFI community forum) is purely a UI presentation choice over static mock data that is identical and fully visible in the bundled JavaScript for every visitor. There is no actual access control hiding any data from anyone.
-- **Input validation**: minimal to none. Form fields throughout (`CreateTender.jsx`, `LegalAI.jsx`, `DocumentCenter.jsx`, etc.) accept arbitrary text with no sanitization, but since nothing is persisted or sent to a server, there is no injection attack surface today (no SQL, no server-side template execution, no stored XSS — content is only ever interpolated back into the same client's own DOM/PDF/Word export).
-- **Secrets**: none exist in the codebase. No API keys, no `.env` file, no `import.meta.env` usage tied to credentials.
-- **Dependencies**: standard `npm` dependency tree (`docx`, `jspdf`, `lucide-react`, `react`, `react-dom`, `react-router-dom`); no automated dependency-vulnerability scanning is currently configured in this repo (no Dependabot config, no `npm audit` CI step observed).
+## ✅ What Exists (Demo Stage)
 
-## What real production security requires (MVP/Beta-phase scope)
+### "Authentication"
+`AccountSelect.jsx` writes one of `'buyer' | 'seller' | 'both'` to `localStorage.setItem('glorix_account_type', value)`.
+- No password
+- No identity verification
+- No session token
+- No expiry
+- Anyone can edit the value in browser devtools to switch personas
 
-This list is derived directly from the gaps above, cross-referenced against the Roadmap's own stated MVP items (real JWT auth, PostgreSQL, real government-registry verification) and Beta items (KYC/AML, real sanctions screening):
+### Authorization
+`canBuy`/`canSell` flags derived client-side from localStorage string. Used only to conditionally render UI.
+- No server enforcing these permissions
+- No server exists
 
-- **Real authentication**: server-issued session tokens (JWT or equivalent) with proper expiry/rotation, replacing the localStorage account-type string entirely. Passwords (or better, a real identity provider) must never be handled by Claude or any AI assistant directly per this project's standing safety rules — that applies to development assistance, not just runtime architecture.
-- **Real authorization**: every privileged action (creating a tender, submitting an offer, releasing escrow funds) must be authorized server-side against the authenticated user's actual role, never trusted from client-supplied state.
-- **Real KYC/company verification**: government-registry lookups (the Roadmap names `my.gov.uz`, `egov.kz`, `nalog.gov.ru`, `e-taxes.gov.az`, `napr.gov.ge` as the relevant registries per `Legal.jsx`'s jurisdiction table) must happen server-side against authoritative sources, not be simulated client-side as today.
-- **Real escrow / payment security**: once a real payment partner is integrated (see `INTEGRATIONS.md`), funds-handling code must follow that partner's security requirements (PCI-DSS scope minimization, idempotent transaction handling, reconciliation) — GLORIX itself should never directly handle raw card or bank credentials; this mirrors the platform-level safety rule that financial credentials are never entered or handled directly by any AI assistant on a user's behalf.
-- **Real sanctions/compliance screening**: against actual OFAC, EU Consolidated List, UN Sanctions List, and relevant national lists, replacing the static `aiCheck.sanctionsOk: true` flags currently hardcoded into every mock product.
-- **Data protection compliance**: `Legal.jsx` already commits, in its draft Oferta text, to compliance with Uzbekistan's personal data law, Russia's Federal Law No. 152-FZ, Kazakhstan's personal data law, and GDPR for EU participants — once real personal/company data is collected, this commitment needs real technical and contractual backing (data residency choices, breach-notification process, data-subject request handling), not just the current promissory text.
-- **Dependency and infrastructure hardening**: dependency-vulnerability scanning (e.g. Dependabot or equivalent) and standard backend hardening (rate limiting, audit logging, secrets management via a real secrets manager rather than `.env` files committed to source) should be in place before any real user data or money flows through the system.
+### Data Confidentiality
+"Tender anonymity" (sellers hidden from buyers until close, anonymous RFI forum) is a purely UI presentation choice over identical mock data visible to all visitors.
+- No actual access control
+- Full data visible in bundled JS
 
-## Guidance for this assistant when working on GLORIX security-adjacent tasks
+### Input Handling
+Form fields throughout accept arbitrary text with no sanitization.
+- No SQL injection attack surface (no SQL database)
+- No stored XSS (nothing persisted server-side)
+- Content only interpolated back into the same client's DOM/PDF/Word
 
-Per this assistant's standing behavioral rules (independent of this specific project): never enter, request, or handle financial credentials, passwords, or API keys/tokens on the user's behalf; never modify access-control or sharing permissions without explicit confirmation; treat any future backend/auth/payment work on this project as a Level 3 (critical) task under the founder's task-complexity classification, warranting full cross-module review rather than a quick edit.
+### Secrets
+None in the codebase. No API keys, no `.env` file, no `import.meta.env` credentials.
+
+### Dependencies
+Standard npm tree: `docx`, `jspdf`, `lucide-react`, `react`, `react-dom`, `react-router-dom`.
+- No automated vulnerability scanning configured (no Dependabot, no `npm audit` in CI)
+
+---
+
+## ❌ What Does Not Exist (Production Requirements)
+
+### Real Authentication (MVP Phase)
+- Server-issued JWT tokens with expiry and rotation
+- Passwords handled by identity provider (never by this assistant or any AI tool directly — standing project rule)
+- Or OAuth/SSO via government identity systems where available
+
+### Real Authorization (MVP Phase)
+- Every privileged action (create tender, submit offer, release escrow) authorized server-side against authenticated user's actual role
+- Never trust client-supplied account type or role claims
+
+### Real KYC / Company Verification (MVP Phase)
+- Government registry lookups server-side against:
+  - `my.gov.uz` (Uzbekistan)
+  - `egov.kz` (Kazakhstan)
+  - `nalog.gov.ru` (Russia)
+  - `e-taxes.gov.az` (Azerbaijan)
+  - `napr.gov.ge` (Georgia)
+- Currently simulated as static boolean flags in mock data
+
+### Real Escrow / Payment Security (Beta Phase)
+- PCI-DSS scope minimization (GLORIX should never handle raw card/bank credentials)
+- Idempotent transaction handling
+- Reconciliation against partner bank/payment system
+- Per standing project rule: financial credentials are never entered or handled by any AI assistant on the user's behalf
+
+### Real Sanctions Screening (Beta Phase)
+- OFAC (US Treasury), EU Consolidated Sanctions List, UN Sanctions List
+- Relevant national lists (CIS country-specific)
+- Currently: static `aiCheck.sanctionsOk: true` in every mock product
+
+### Data Protection Compliance (Production Phase)
+`Legal.jsx` commits to:
+- Uzbekistan personal data law
+- Russia Federal Law 152-FZ
+- Kazakhstan personal data law
+- GDPR (for EU participants)
+
+Real technical backing required when actual personal/company data is collected:
+- Data residency decisions
+- Breach notification process (72h under GDPR)
+- Data subject request handling
+- DPA with any sub-processors
+
+### Infrastructure Hardening (MVP Phase)
+- Dependency vulnerability scanning (Dependabot or equivalent)
+- Rate limiting on all API endpoints
+- Audit logging for all compliance-relevant actions
+- Secrets management via a real secrets manager (Vercel environment variables minimum; HashiCorp Vault or equivalent for production)
+
+---
+
+## Standing Rules for This Assistant on Security Topics
+
+Per project-wide standing rules (stored in memory and this document):
+1. **Never enter, request, or handle financial credentials, passwords, or API keys** on the user's behalf
+2. **Never modify access-control or sharing permissions** without explicit confirmation
+3. All future backend/auth/payment/escrow work = **Level 3 (critical) task** — full cross-module validation required before any change
+4. If building auth: stop and confirm identity provider choice with the founder before implementing — this is a major architectural decision with long-term lock-in implications

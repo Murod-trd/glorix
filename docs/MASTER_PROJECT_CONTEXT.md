@@ -1,44 +1,84 @@
-# GLORIX — Master Project Context
+# GLORIX Procurement OS — Master Project Context
 
-This document is the single entry point for understanding the GLORIX platform. Read this first; it links out to the other eleven documents in this `docs/` folder, each covering one dimension of the system in depth. All documents in this folder are kept in sync with the actual code in this repository — if something here ever disagrees with the code, the code is correct and this file is stale and should be fixed.
+**Status**: Frontend-only prototype (Demo phase) | **Production URL**: glorix-theta.vercel.app | **Repo**: github.com/Murod-trd/glorix (private)
 
-## What GLORIX is
+---
 
-GLORIX is a B2B trade platform concept for the CIS region (Uzbekistan, Kazakhstan, Russia, Azerbaijan, Georgia, Tajikistan, Kyrgyzstan, Turkmenistan, and neighboring markets). It lets verified companies run tenders, browse a wholesale marketplace, evaluate suppliers against procurement standards, and generate legal trade documents, with an escrow-style deposit mechanism intended to reduce fraud and a trust-score system intended to reward reliable counterparties.
+## Mission Statement
 
-The founder is Murod, a non-technical founder; his co-founder Нурбек is a procurement domain expert. The product's conceptual backbone is the CIPS (Chartered Institute of Procurement & Supply) 13-stage procurement cycle, and several modules (RFI, Supplier Scorecard 10C, ESG, KPI tracking) are deliberately modeled on CIPS methodology to give the platform credibility with procurement professionals.
+GLORIX is the only B2B procurement platform for the CIS region offering anonymous tenders, AI-driven TCO analysis, full CIPS-compatible procurement cycle, escrow-based fraud prevention, and bilingual legal document generation in a single integrated system.
 
-## What GLORIX currently is, technically — read this before anything else
+The three core pains GLORIX solves:
+1. **Corruption in tenders** → anonymous bidding until close
+2. **Hidden costs** → AI TCO + Incoterms analysis
+3. **Fraud** → company verification + escrow deposit system
 
-**This is a frontend-only demo/prototype.** There is no backend server, no database, no real authentication, no real payment or escrow rail, and no real AI/LLM integration anywhere in the running application. Every "AI" feature in the product (AI-Bots, the RFI community chatbot, the Support chat, the Relationship Manager chat, AI document drafting) is either a hardcoded scripted sequence with `setTimeout` delays or a `Math.random()` pick from a handful of pre-written response strings. All data (tenders, products, suppliers, users) lives in static JavaScript files under `src/data/` and is the same for every visitor; nothing persists except one localStorage key that remembers which of three demo accounts you last selected.
+---
 
-This is not a criticism of the work — it is an accurate, necessary description so that nobody (including a future session of this assistant) mistakes the demo for a production system. The product's own UI is honest about this in several places, e.g. Onboarding explicitly states real deposits and bank verification only arrive "in the production version," and the Sidebar carries a permanent "⚠ ДЕМО" badge linking to the Roadmap. See `ARCHITECTURE.md` and `AI_AGENTS.md` for the full breakdown of what is real code versus simulated behavior, and `DECISIONS.md` for why this is the correct state for the current stage.
+## Founders
 
-## Document map
+- **Murod** (GitHub: `Murod-trd`, email: `murodakbarov40@gmail.com`) — non-technical founder, product owner, final decision authority
+- **Нурбек** — co-founder, procurement domain expert (CIPS methodology)
 
-- **ARCHITECTURE.md** — tech stack, folder structure, routing, rendering model, what exists vs. does not exist (backend, DB, auth).
-- **SYSTEM_DESIGN.md** — design tokens, visual language, component conventions, the three trade-document renderers (screen/PDF/Word).
-- **BUSINESS_RULES.md** — every formula and policy: deposit tiers, marketplace fee tiers, trust score and its three zones, mirror-penalty contract standard, KYC document requirements, CIPS 10C/ESG/KPI scoring, tender lifecycle.
-- **API_REFERENCE.md** — there is no backend API; this document records the client-side function signatures that stand in for one, and the API shape implied by the data model for when a real backend is built.
-- **DATABASE_SCHEMA.md** — there is no database; this document records the as-is shape of the mock data in `src/data/` as the de facto schema, and flags it as the MVP-phase backend task.
-- **AI_AGENTS.md** — the full, honest inventory of every "AI" surface in the product and exactly how each one is faked today, plus what real integration would require.
-- **SECURITY.md** — current (near-absent) security posture, what is simulated, what real production security would require.
-- **DEPLOYMENT.md** — Vercel static-site deployment, build pipeline, environment.
-- **INTEGRATIONS.md** — third-party libraries in use today (`docx`, `jspdf`, `lucide-react`, `react-router-dom`) and the partner integrations named in the Roadmap as future plans (payment/escrow banks, logistics trackers, chambers of commerce, ERPs).
-- **CHANGELOG.md** — dated log of material changes to the codebase, maintained going forward.
-- **DECISIONS.md** — significant product and technical decisions with their rationale, including the bilingual contract language-resolution rule and the certified-translation safety mechanism.
+---
 
-## Repository basics
+## Current Technical Reality — Read This First
 
-- Repo: `https://github.com/Murod-trd/glorix.git` (private), default branch `main`.
-- Production: `glorix-theta.vercel.app`, auto-deploys from GitHub `main` via Vercel.
-- Local working branch convention used in assistant sessions: `main-restored`, pushed to remote `main` with `git push origin main-restored:main` (fast-forward only — always `git fetch origin` and compare `git log origin/main --oneline -1` immediately before every push).
-- Git identity for commits made in assistant sessions: `murodakbarov40@gmail.com`, GitHub account `Murod-trd`.
+**This is a frontend-only prototype.** Every item below marked ❌ or 🚧 is genuinely absent from the running application:
 
-## Working agreements for this project (from the founder)
+- ❌ No backend server or API
+- ❌ No database (SQL or NoSQL)
+- ❌ No real authentication (localStorage account-type string only)
+- ❌ No real payments or escrow
+- ❌ No real AI/LLM calls anywhere in the codebase
+- ❌ No file upload backend
+- ❌ No environment variables / secrets
+- ✅ Fully functional React SPA with complete UI for all features
+- ✅ All business logic formulas implemented client-side
+- ✅ Real PDF and Word document generation (client-side, no server)
+- ✅ Per-country bilingual contract system with legal language-law compliance
 
-- **No process narration in chat for GLORIX work.** Only final results or genuine blocking questions belong in the conversation; planning, debugging commentary, and step-by-step narration should happen silently.
-- **Zero tolerance for invented legal or tax content.** Every legal reference (arbitration body, civil code article, tax rule, named institution) must be real and verified, typically via web search. If a translation or legal claim cannot be verified, the system must show an explicit placeholder requiring professional review rather than generate unverified text. See the Kazakh-language certified-translation mechanism in `DECISIONS.md` and `BUSINESS_RULES.md` for the canonical example of this principle in code.
-- **Standard git safety workflow** before every push: fetch origin, compare against the last known `origin/main` commit, only fast-forward.
-- **Task complexity is classified before execution** (Level 1 simple text/UI edits, Level 2 moderate feature work touching a few modules, Level 3 critical work touching architecture, security, data, deployment, or multi-module integrations) and the depth of analysis is calibrated accordingly — minimal for Level 1, full cross-module verification for Level 3.
-- **This documentation set is the durable source of truth between sessions.** The assistant has no memory of past conversations beyond Anthropic's separate memory-fact system and whatever is actually committed to this repository. These twelve files, kept current, are what makes continuity possible — not narrative recall of old chats.
+All "AI" features are either hardcoded scripted sequences with `setTimeout` delays or `Math.random()` picks from pre-written response arrays. The Roadmap (visible at `/roadmap`) honestly discloses this to investors/partners.
+
+---
+
+## Document Map
+
+All 13 documents in `docs/` are the single source of truth. Consult before any significant change; update in the same commit after any change.
+
+| File | Covers |
+|---|---|
+| `MASTER_PROJECT_CONTEXT.md` | This file — orientation, founders, current state, document map |
+| `ARCHITECTURE.md` | Tech stack, folder structure, routing, what exists vs. doesn't |
+| `SYSTEM_DESIGN.md` | Design tokens, visual system, document-rendering architecture |
+| `BUSINESS_RULES.md` | All formulas, thresholds, policies |
+| `API_REFERENCE.md` | Client-side function signatures + implied future backend API |
+| `DATABASE_SCHEMA.md` | Mock data shapes as de facto current schema |
+| `AI_AGENTS.md` | Every "AI" surface and how it's actually implemented |
+| `SECURITY.md` | Current posture + production security requirements |
+| `DEPLOYMENT.md` | Vercel pipeline, build, environment |
+| `INTEGRATIONS.md` | Current npm libs + planned partner integrations |
+| `DECISIONS.md` | Significant decisions with rationale |
+| `ROADMAP.md` | Full 4-phase roadmap, competitive positioning, market data |
+| `CHANGELOG.md` | Dated log of all material changes |
+
+---
+
+## Standing Rules (Founder Instructions — Non-Negotiable)
+
+1. **Silent execution**: no process narration, progress updates, or step-by-step commentary in chat. Only final deliverables or genuine blocking questions.
+2. **Zero tolerance for invented legal/tax content**: every named law, arbitration body, civil code article, or government institution must be real and verified via search. If unverifiable → show explicit placeholder.
+3. **Git safety on every push**: `git fetch origin` + compare `git log origin/main --oneline -1` immediately before every push. Fast-forward only. Branch: `main-restored` pushed as `git push origin main-restored:main`.
+4. **Doc-first**: consult `docs/` before any significant change; update affected docs in the same commit.
+5. **No duplicate functionality**: extend/refactor existing systems. Never create parallel implementations. The only accepted exception is the two document-rendering pipelines (see `DECISIONS.md`).
+6. **Conflict checks**: before any significant change, verify it does not conflict with existing architecture, business rules, or recorded decisions. If it does, explain and get explicit approval — never silently overwrite.
+7. **Task complexity classification** before execution: Level 1 (text/UI edits, minimal analysis), Level 2 (feature additions, few modules), Level 3 (architecture, security, DB, payments, deployment — full cross-module validation).
+8. **Leadership board mode**: evaluate every request from all roles (CEO Advisor, CPO, Project Manager, BA, Solution Architect, Frontend Lead, Backend Lead, Mobile Lead, DevOps Lead, DBA, Cybersecurity Lead, QA Lead, UI/UX Director, Finance/Business Strategy, Legal/Compliance, Data/AI Lead). Deliver single unified output.
+
+---
+
+## Platform Positioning
+
+> "GLORIX — единственная B2B платформа для СНГ с прозрачными тендерами, ИИ-анализом реальной стоимости сделки и полным CIPS-совместимым закупочным циклом."
+
+Target market: $2.1T CIS B2B e-commerce (2026), 180,000+ exporting companies across CIS. GLORIX commission 0.5–1.5% vs. 3–5% industry average.

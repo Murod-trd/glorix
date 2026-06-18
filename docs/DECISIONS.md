@@ -1,35 +1,89 @@
 # GLORIX — Decisions
 
-This document records *why* significant choices were made, not just what they are (the *what* lives in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, and `SYSTEM_DESIGN.md`). Decisions are kept here permanently even after the immediate context fades, because the rationale is exactly the kind of thing that otherwise only exists in a chat transcript and gets lost.
+This document records *why* significant choices were made. The *what* lives in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, and `SYSTEM_DESIGN.md`. Rationale is preserved permanently here because it's exactly what otherwise only lives in a chat transcript and gets lost.
 
-## 1. Bilingual contract language-resolution rule
+---
 
-**Decision**: a contract's rendered language(s) are determined by a fixed rule, not left to free-form choice: cross-border deals (seller and buyer in different countries) always render bilingual Russian/English; same-country deals follow that specific country's actual domestic contract-language law; Kazakhstan is a hard-coded exception requiring Kazakh+Russian even domestically, because Kazakh law genuinely requires this.
+## Decision 1: Bilingual Contract Language Rule (Country-Law-Driven, Not Fixed)
 
-**Why**: a generic two-language contract template cannot correctly serve 11 different countries with different real legal requirements for what language a binding commercial contract must be in. Getting this wrong is not a cosmetic bug — it can make a contract legally deficient. The decision to encode this as a lookup-driven resolver (`resolveContractLanguage` in `src/data/contractData.js`), rather than a single global default, came directly from per-country legal research (`research/language_law_findings.md`) gathered and verified specifically because the founder's standing rule for this project is zero tolerance for invented or unverified legal claims.
+**Decision**: Contract language is determined by a country-law resolver, not a free-form user choice or a fixed default. Cross-border deals always render bilingual RU/EN. Same-country deals follow each country's actual domestic contract-language law.
 
-## 2. The certified-translation placeholder mechanism
+**Rationale**: A generic RU-only or RU/EN-only template cannot legally serve 11 CIS countries with different binding legal requirements for what language a commercial contract must be in. This is not a UX decision — it's a legal compliance decision. Getting it wrong can make a contract legally unenforceable or invalid. The research phase produced per-country verified legal source citations (stored in `legalSources.js` and `research/language_law_findings.md`) specifically to ground this rule in real law rather than assumption.
 
-**Decision**: for any language GLORIX does not have a verified professional legal translation for (today: Kazakh, Tajik, Georgian, Azerbaijani, Kyrgyz, Turkmen), every clause in that language renders as an explicit "`[<Language>: text requires professional legal translation]`" placeholder instead of any generated prose — even though it would have been technically easy to machine-translate or otherwise fabricate plausible-looking text in that language.
+**Implementation**: `resolveContractLanguage(sellerCountry, buyerCountry)` in `contractData.js`.
 
-**Why**: a single incorrect word or comma in a legal contract can change its enforceable meaning. GLORIX has no professional, verified translation pipeline for these languages today, so producing confident-looking but unverified text would be actively dangerous to the businesses relying on it — worse than an obvious placeholder, because a wrong-but-plausible contract clause might not get caught before causing real harm in a real dispute. This is the direct, contract-specific application of the founder's general standing rule for this project: never invent or approximate legal/tax facts; if something can't be verified, show that honestly rather than papering over the gap.
+---
 
-**The canonical cautionary example — the Kazakh primary/secondary bug**: during implementation, all three renderers (screen, PDF, Word) initially assumed the contract table's first column was always Russian and the second was always the "other" language. This silently broke for Kazakhstan, where the resolver correctly returns `primary: 'kk', secondary: 'ru'` — the bug caused real, correct Russian legal text to display mislabeled as Kazakh, which is exactly the kind of error this whole safety mechanism exists to prevent, just introduced by the rendering code itself rather than by content generation. It was caught by deliberately testing the Kazakhstan case with an isolated PDF/Word rendering harness and visually inspecting the output rather than assuming the existing single-language-tested code generalized correctly. The fix — a uniform `resolveColumnText(ruText, enText, lang)` helper applied independently to each column based on its own actual resolved language, never assuming position — is now the mandatory pattern for this kind of code; any future renderer touching bilingual contract content must follow the same pattern rather than re-introducing a column-order assumption.
+## Decision 2: Kazakhstan as the Mandatory Bilingual Exception
 
-## 3. Leaving Tajikistan/Georgia/Azerbaijan/Kyrgyzstan/Turkmenistan as placeholder-only for now
+**Decision**: Kazakhstan domestic B2B contracts must render both Kazakh and Russian (`primary: 'kk', secondary: 'ru'`), even when both parties are KZ companies.
 
-**Decision**: rather than blocking the bilingual contract redesign until verified translations exist for every CIS language, the founder explicitly accepted shipping with those five countries' domestic-mono contracts rendering as entirely placeholder text (since their only available column has no verified translation). His own words: "Оставить как есть (плейсхолдеры) — это demo, реальный перевод потом" (leave as-is, it's a demo, real translation comes later).
+**Rationale**: Kazakhstan's language law genuinely requires this for domestic business contracts — it is not a design choice but a legal requirement verified from the Kazakhstani legal sources in `legalSources.js`. This makes Kazakhstan the only country in the CIS where a same-country deal produces a bilingual document.
 
-**Why this is the right call for now, and what it means going forward**: shipping a safe-but-non-functional document for those five jurisdictions is strictly better than either blocking the entire feature indefinitely or shipping unverified text for them. It is a known, bounded, intentional gap — not an oversight — and should be treated that way: it does not need to be "discovered" again in a future session, and it should not be silently worked around by relaxing the translation-verification rule. The correct fix, when it happens, is to actually obtain and verify professional legal translations for these five languages (the Roadmap's stated path is real legal/professional involvement, not machine translation), at which point this limitation is lifted by adding verified language data, not by weakening the safety check.
+---
 
-## 4. Two parallel document-rendering pipelines (Pipeline A vs. Pipeline B)
+## Decision 3: The Certified-Translation Placeholder Mechanism
 
-**Decision**: the Contract document type was redesigned into a structured-data, three-renderer pattern (`contractData.js` + `contractPdfExport.js` + `contractDocxExport.js`), while the other four document types (Offer, Specification, Claim, Acceptance) remain on the older plain-text-template approach (`pdfExport.js`/`docxExport.js` with regex-based heading detection). These were deliberately *not* unified into one pipeline as part of this work.
+**Decision**: For any contract column whose resolved language is not `'ru'` or `'en'`, every clause renders as an explicit "[LanguageName: текст требует профессионального юридического перевода]" placeholder rather than any generated or approximated text.
 
-**Why**: the plain-text approach cannot safely support the per-country bilingual rendering the Contract needed — a single string can't represent "this clause has a Russian version and a Kazakh version that must render side-by-side and must independently apply the certified-translation safety check." Building the structured pipeline specifically for the Contract, rather than retrofitting all five document types into it in the same pass, kept the redesign scoped to the actual problem (contracts crossing 11 different legal-language jurisdictions) rather than triggering a much larger rewrite of every document type, several of which don't currently have a bilingual requirement at all. If any of the other four document types later need genuine multi-language support, they should be migrated to the Pipeline B structured pattern at that time — see `SYSTEM_DESIGN.md` for the technical detail of both pipelines.
+**Rationale**: GLORIX has no verified professional legal translator for Kazakh, Tajik, Georgian, Azerbaijani, Kyrgyz, or Turkmen. A wrong word in a legal contract can change its enforceable meaning and expose a business to legal liability. This is a direct application of the founder's standing rule: "zero tolerance for invented legal content — if something can't be verified, show that honestly rather than papering over the gap."
 
-## 5. Building this documentation system as real committed files, not narrative memory
+**Why not machine translation?**: Machine-translated legal text looks professional but may be legally wrong in subtle, case-specific ways that a non-native speaker of the target language would not catch. The consequence of a silently wrong contract clause is worse than an obviously incomplete one, because the former might not be challenged until there's an actual dispute.
 
-**Decision**: when the founder requested a "permanent project consolidation" mode with an internally-maintained knowledge base, this was implemented as twelve real files committed to the GLORIX repository (`docs/*.md`), rather than as an unstated assumption that some other persistent memory mechanism would carry this knowledge between sessions.
+---
 
-**Why**: an AI assistant's conversation memory does not actually persist as a full project model between sessions — only specific extracted facts persist via Anthropic's separate memory-fact system, and that system is explicitly not meant to substitute for genuine technical documentation. Telling the founder that internal narrative memory alone would satisfy his request would have been inaccurate and would have silently failed the very next time a new session started cold. Real files in the repository are the only mechanism that actually survives between sessions, can be reviewed/edited by the founder directly, and can be diffed against the actual code to catch drift — which is exactly what "single source of truth, kept synchronized with development" requires.
+## Decision 4: The Kazakh Column-Order Bug (Canonical Safety Example)
+
+**What happened**: During implementation of the bilingual contract system, all three renderers (screen, PDF, Word) initially assumed the table's first column was always Russian and the second was always the "other" language. This silently broke for Kazakhstan: the resolver correctly returns `primary: 'kk', secondary: 'ru'`, but the renderers were showing real Russian legal text mislabeled as Kazakh in column 1 and Kazakh placeholders labeled as Russian in column 2 — precisely the kind of legally dangerous mislabeling the safety mechanism was designed to prevent.
+
+**Discovery**: The bug was found by deliberately building an isolated Node test harness, generating real PDFs, rendering them to PNG with `pdftoppm`, and visually inspecting the Kazakhstan test case — not by code review or reasoning. The bug was invisible in code review because the assumption (column 1 = Russian) was local and seemed reasonable in isolation.
+
+**Fix**: A uniform `resolveColumnText(ruText, enText, lang)` helper applied independently per column based on each column's actual `contractLang.primary` / `contractLang.secondary` language code — never derived from column position (left vs. right). This pattern is now mandatory in all three renderers and must never be replaced with a position-assumption.
+
+**Lesson**: When building multi-language rendering, test with the language-combination that has a non-obvious column assignment (Kazakhstan KK+RU, not just the default RU+EN). Static code review is insufficient — render to the real output format and inspect it.
+
+---
+
+## Decision 5: Leaving TJ/GE/AZ/KG/TM as Placeholder-Only for Now
+
+**Decision**: Domestic contracts in Tajikistan, Georgia, Azerbaijan, Kyrgyzstan, and Turkmenistan (in `caution` mode) render as entirely placeholder documents — no usable legal text — rather than blocking the whole feature until verified translations are available.
+
+**Founder's words**: "Оставить как есть (плейсхолдеры) — это demo, реальный перевод потом."
+
+**Rationale**: Shipping a safe-but-non-functional document for 5 jurisdictions is strictly better than either (a) blocking the entire bilingual contract feature indefinitely, or (b) shipping legally unverifiable text. This is a known, bounded, intentional gap, not an oversight.
+
+**Correct future resolution**: Obtain and verify professional legal translations for these languages through an actual professional translation service (not machine translation), then add the verified text as additional language data in `contractData.js`. Do not resolve this by weakening the safety check.
+
+---
+
+## Decision 6: Two Parallel Document-Rendering Pipelines
+
+**Decision**: The Contract document was redesigned into a structured-data, three-renderer pattern (Pipeline B), while Offer/Specification/Claim/Acceptance remain on the plain-text-template pattern (Pipeline A). They were deliberately NOT unified.
+
+**Rationale**: The plain-text approach cannot safely support per-country bilingual rendering with per-column language safety checks — a single string cannot represent "this clause has a Russian version and a Kazakh version that must render side-by-side and independently apply the safety check." Migrating all five document types to Pipeline B in the same pass would have required a much larger rewrite of documents that don't currently have a bilingual requirement.
+
+**Future guidance**: If Offer/Specification/Claim/Acceptance ever need real multi-language support, migrate them to Pipeline B's structured pattern at that time. Do not try to extend Pipeline A to support this — that would re-introduce the exact fragility the structured approach was built to eliminate.
+
+---
+
+## Decision 7: This Documentation System as Real Committed Files
+
+**Decision**: The "permanent project knowledge base" requested by the founder is implemented as 13 real Markdown files committed to the repository, not as an assumption that AI session memory or conversation history will carry this knowledge.
+
+**Rationale**: An AI assistant has no true persistent memory between sessions beyond (a) Anthropic's separate memory-fact system, which stores extracted facts rather than full technical documents, and (b) whatever is actually committed to the repository. Telling the founder otherwise would be inaccurate and would silently fail the next time a session starts cold. Real files in git: can be reviewed/edited by the founder directly, can be diffed against the actual code to catch drift, survive across every session boundary, and are the only mechanism that actually satisfies "single source of truth, kept synchronized with development."
+
+---
+
+## Decision 8: All "AI" Features Are Honest Simulations
+
+**Decision**: The platform builds out full AI-style UX (chat interfaces, typing indicators, loading states, "AI is analyzing...") but implements all of it as hardcoded strings or random-picks, with no real LLM calls, for the Demo phase.
+
+**Rationale**: This is the correct tradeoff for an investor/partner demo. The UX shows investors what the product will feel like; the absence of real AI costs (API fees, latency, unpredictable outputs) keeps the demo reliable and cheap. The Roadmap is honest about when real AI arrives (Beta phase). The risk is in someone, including a future AI assistant, treating these simulations as real capabilities — which is why `AI_AGENTS.md` documents every surface explicitly.
+
+---
+
+## Decision 9: Mirror-Penalty as the Non-Negotiable Contract Standard
+
+**Decision**: GLORIX enforces symmetric penalty terms for both parties in every generated contract — 0.1%/day capped at 10%, non-delivery 10%, payment delay 0.1%/day capped at 10%, suspension rights equal. No user can configure asymmetric terms through the platform's standard contract flow.
+
+**Rationale**: The original source contracts analyzed ("ТФД contracts") had asymmetric terms that systematically disadvantaged suppliers — a common source of dispute and perceived unfairness in CIS B2B trade. GLORIX's stated differentiator is eliminating this. Making the mirror standard non-negotiable (rather than a default that can be changed) is the product expression of that commitment. Any future contract-customization feature must surface deviations from the mirror standard as explicit, named exceptions — not silently allow asymmetric terms to be reintroduced.

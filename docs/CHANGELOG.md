@@ -1,29 +1,119 @@
 # GLORIX — Changelog
 
-This file is a dated, human-readable log of material changes to the platform. It is maintained going forward from this point; entries before the "Documentation system" entry are reconstructed from git history for context and are not necessarily exhaustive of every commit, only the ones that changed product behavior or architecture in a notable way.
+New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
-## 2026-06-18 — Documentation system established
+---
 
-Created the full 12-file documentation system in `docs/` (`MASTER_PROJECT_CONTEXT.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, `BUSINESS_RULES.md`, `API_REFERENCE.md`, `DATABASE_SCHEMA.md`, `AI_AGENTS.md`, `SECURITY.md`, `DEPLOYMENT.md`, `INTEGRATIONS.md`, `CHANGELOG.md`, `DECISIONS.md`) as the project's single source of truth, built from a complete read-through of the codebase rather than from memory or assumption. This document set is intended to be the durable continuity mechanism between work sessions going forward.
+## 2026-06-18 — Full project documentation system (commit `9fbfecd`)
 
-## 2026-06-18 — Bilingual two-column contract redesign (commit `de7db0b`)
+Created 13-file documentation system in `docs/` as the single source of truth and durable continuity mechanism for future sessions. Built from a complete read-through of the entire codebase (every page, every data file, `App.jsx`, `package.json`, `vercel.json`, `vite.config.js`, full git history). Covers architecture, business rules, API reference, database schema, AI agents (honest inventory), security, deployment, integrations, decisions (with full rationale), roadmap, and this changelog. Replaces reliance on chat history for project continuity.
 
-Per-country contract-language law research, with verified sources gathered for all 11 CIS countries (`src/data/legalSources.js` → `contractLanguage` field per country). Built a language-resolution rule: cross-border deals always render bilingual Russian/English regardless of either party's national language law; same-country deals follow that country's actual legal rule (mono Russian where permitted, mono national language where legally required, bilingual-by-law only for Kazakhstan). Produced a full English legal translation of the contract preamble and all 19 articles. Introduced a new structured contract data model (`src/data/contractData.js`) consumed identically by three new renderers — screen (`ContractTableView` in `LegalAI.jsx`), PDF (`contractPdfExport.js`), Word (`contractDocxExport.js`) — to prevent the three output formats from drifting out of sync with each other. Added a safety mechanism so that any language without a verified legal translation (e.g. Kazakh, Tajik, Georgian) renders as an explicit certified-translation-required placeholder rather than fabricated legal text. During development, found and fixed a real bug where all three renderers wrongly assumed the first table column was always Russian, which silently mislabeled real Russian text as Kazakh for Kazakh-Kazakh domestic contracts — fixed via a uniform `resolveColumnText(ruText, enText, lang)` helper applied independently to each column based on the actual resolved language, never assumed column order. Verified the fix end-to-end with an isolated Node test harness rendering real PDFs (via `pdftoppm`) and Word documents (via LibreOffice headless conversion) for three scenarios: UZ–RU cross-border bilingual, KZ–KZ domestic mandatory-bilingual, TJ–TJ domestic mono-national (revealing, correctly, an entirely placeholder document since no verified Tajik translation exists yet — accepted as a known, intentional limitation for the current demo stage; see `DECISIONS.md`).
+**Files created**: All 13 files in `docs/`.
 
-## 2026-06-18 — Specification/date fixes and Document Center cross-link (commit `ec51eee`)
+---
 
-Removed an incorrect tax clause from the contract template, fixed a date bug in the Specification (Приложение № 1) document, and added a cross-link between the Specification generator and the Document Center page so users are pointed to the right tool for the right document.
+## 2026-06-18 — Bilingual two-column contract redesign — screen/PDF/Word (commit `de7db0b`)
 
-## Earlier history (reconstructed from git log, not exhaustively detailed)
+Major architectural addition to the document generation system (Pipeline B).
 
-- **Arbitration/applicable-law verification** (`44d228a`, `c165230`): verified and corrected the named national arbitration institutions for all 11 CIS countries, and fixed applicable-law/arbitration selection to be based on the actual contracting parties' countries rather than a fixed default.
-- **Word export added** (`4a4342f`): added `.docx` export alongside the existing PDF export, using the `docx` library.
-- **Branded PDF letterhead** (`7fa05c4`): introduced the professional PDF document design with the GLORIX letterhead, logo treatment, and embedded fonts.
-- **Cyrillic font embedding** (`86f680f`): added real PDF export with an embedded Cyrillic-capable font (Roboto), fixing earlier Cyrillic rendering issues in generated PDFs.
-- **SPA routing fix** (`6dd03ba`): added the `vercel.json` rewrite rule that fixes 404s on direct/deep-link route access — this is the rule documented in `DEPLOYMENT.md`.
-- **Legal AI module build-out** (`3c054fd`, `d8900be`, `dab7ce7`): built out the Legal AI document generator from an initial 20-article contract through the mirror-penalty standard, CISG/English/Swiss law options, and an 11-country CIS legal-source database, eventually becoming the article-based, multi-document-type generator (`LegalAI.jsx`) described in `SYSTEM_DESIGN.md`.
-- **Account/permissions fixes** (`ebb4146`, `5c9c0da`, `b2afdb5`): established the three-separate-account model (buyer/seller/both, each with its own nav config, mock company, and trust score), fixed buyer/seller permission gating (e.g. sellers being unable to create tenders), and added the Excel-paste / TN VED search / AI КП-generator features now found in `DocumentCenter.jsx` and `Marketplace.jsx`.
+**Research**: Per-country contract-language law research for all 11 CIS countries, with verified legal source citations stored in `legalSources.js` → `contractLanguage` field per country. Full verified English translation of all 19 contract articles produced (`research/contract_en_translation_draft.md`).
 
-## Format for future entries
+**New language resolver**: `resolveContractLanguage(sellerCountry, buyerCountry)` in `contractData.js`. Decision tree: cross-border → always bilingual RU/EN; same-country → follows actual domestic law; Kazakhstan → bilingual KK+RU mandatory.
 
-New entries go at the top, in `## YYYY-MM-DD — Short title (commit hash if applicable)` format, with enough prose detail that someone reading only this file (not the diff) understands what changed and, where relevant, why. When a change affects any rule in `BUSINESS_RULES.md`, any architectural fact in `ARCHITECTURE.md`/`SYSTEM_DESIGN.md`, or any decision rationale in `DECISIONS.md`, update those files in the same work session — this changelog records that something changed; the other documents must reflect the new current state.
+**New structured data model**: `buildContractStructured(f)` returns a typed object (18 articles, preamble, appendices, disclaimer, language metadata) consumed by all three renderers identically, eliminating screen/PDF/Word drift.
+
+**Three new renderers**: `ContractTableView` component in `LegalAI.jsx` (screen), `contractPdfExport.js` (PDF with jsPDF hand-drawn table + pagination), `contractDocxExport.js` (Word with `docx` library Table).
+
+**Safety mechanism**: `resolveColumnText(ruText, enText, lang)` helper — for any language other than `ru`/`en`, renders explicit certified-translation-required placeholder.
+
+**Bug found and fixed**: All three renderers initially assumed column 1 = Russian, silently mislabeling Russian text as Kazakh for Kazakhstan contracts. Fixed by applying `resolveColumnText` independently per column based on actual resolved language, never by position. Verified by rendering real PDFs with `pdftoppm` and Word via LibreOffice headless conversion.
+
+**PDF cosmetic fix**: `pdfSafeLangName()` map in `contractPdfExport.js` substitutes Russian-script column headers for languages whose scripts PT Serif lacks (Kazakh `Қ`, Tajik `ҷ/ӣ`, Georgian). Column headers only — not legal text.
+
+**Known limitation accepted**: TJ, GE, AZ, KG, TM domestic-mono contracts render entirely as placeholders — no verified translations available. Founder accepted explicitly: "Оставить как есть — это demo."
+
+**Files changed**: `src/data/legalSources.js`, `src/data/contractData.js` (new), `src/pages/LegalAI.jsx`, `src/utils/contractPdfExport.js` (new), `src/utils/contractDocxExport.js` (new), `research/contract_en_translation_draft.md` (new), `research/language_law_findings.md` (new).
+
+---
+
+## Earlier History (Reconstructed from Git Log)
+
+### 2025 — `ec51eee` — Contract/Specification fixes + Document Center cross-link
+
+Removed incorrect tax clause from contract template. Fixed date bug in Specification (Appendix №1) document. Added navigation cross-link between the Specification generator and Document Center.
+
+### 2025 — `44d228a` — Verified national arbitration institutions for all 11 CIS countries
+
+All named national arbitration bodies in the contract generator verified against real sources and corrected. Previously some entries had unverified or generic institution names — each is now the actual named body per that country's arbitration law.
+
+### 2025 — `4a4342f` — Word (.docx) export added
+
+Added `.docx` export alongside existing PDF export, using the `docx` library. This was the first iteration of Pipeline A's Word renderer (`docxExport.js`).
+
+### 2025 — `7fa05c4` — Branded PDF letterhead
+
+Professional PDF document design: GLORIX letterhead, logo treatment (GLO in text color, RIX in accent), PT Serif embedded font, page numbers, accent rule. Applied to both Pipeline A (`pdfExport.js`) and later Pipeline B.
+
+### 2025 — `c165230` — Arbitration and law based on actual party countries
+
+Fixed: applicable law and arbitration institution now derived from actual seller/buyer country data rather than a hardcoded default.
+
+### 2025 — `86f680f` — Real PDF with embedded Cyrillic font (Roboto)
+
+Replaced initial PDF approach (no font embedding, broken Cyrillic) with embedded Roboto font via base64 in `robotoFont.js`. PT Serif added later for legal documents.
+
+### 2025 — `6dd03ba` — Vercel.json SPA routing fix
+
+Added `vercel.json` with the `/(.*) → /index.html` rewrite rule. Fixes 404 on direct URL access or browser refresh on any deep-link route.
+
+### 2025 — `228edd6` — Scrollable sidebar navigation
+
+Fixed Sidebar overflow issue — nav items were getting cut off on shorter screens.
+
+### 2025 — `3c054fd` — GLORIX v14: LegalAI full 20-article contract
+
+Full 20-article (later 18-article after refactoring) contract in the Legal AI module, with proper preamble and article structure. First comprehensive contract template.
+
+### 2025 — `d8900be` — GLORIX v13: Mirror penalties + CISG/English/Swiss law options
+
+Added mirror-penalty standard (symmetric 0.1%/day, 10% cap, bilateral non-delivery penalty). Added international law selection options (CISG, English law, Swiss law) for cross-border contracts. Added TFD (real-contract) analysis that surfaced the original asymmetric penalty terms this standard fixes.
+
+### 2025 — `dab7ce7` — GLORIX v12: Legal AI with 11-country CIS law database
+
+11 CIS countries' legal source databases in `legalSources.js`. Article-based document generator for contract, oferta/offer, and claim document types. Foundation of the Legal AI module.
+
+### 2025 — `ebb4146` — GLORIX v11: Excel paste, TN VED search, КП table format
+
+Fixed: sellers couldn't create tenders (permission bug). Added Excel paste functionality and TN VED code search in Document Center. Reformatted commercial offer (КП) output as a structured table.
+
+### 2025 — `5c9c0da` — GLORIX v10: Buyer/seller permission fixes + AI КП generator
+
+Fixed buyer/seller permission gating. Added "Add product" form with AI-labeled КП generator (the first scripted-template document generator).
+
+### 2025 — `b2afdb5` — GLORIX v9: Three real separate accounts
+
+Three distinct demo accounts (buyer: Tashkent Agro LLC, seller: FerganaTex Export, both: BekabadMetal Group), each with own nav config, mock company profile, and trust score.
+
+### 2025 — `0981db5` — GLORIX v8: Account types, Document Center, origin certificates
+
+Three account types (buyer/seller/both) with KYC requirements. Document Center page. License verification flow. Certificate of origin types (CT-1, Form A, EUR.1, CT-EZ).
+
+### 2025 — `af9570b` — GLORIX v7: Relationship Manager, Analytics, Price Alerts
+
+Relationship Manager page (simulated). Analytics Dashboard (static). Price alerts concept.
+
+### 2025 — `b1a2a68` — GLORIX v6: Onboarding, Legal ToS, Support/FAQ, Roadmap
+
+5-step onboarding wizard. Platform Terms of Service / Oferta draft (`Legal.jsx`). Support + FAQ page. Roadmap and competitive analysis page. ⚠ ДЕМО badge on Sidebar.
+
+### 2025 — `99f1a0b` — GLORIX v5: RFI working buttons, anonymous community chat, AI bot replies
+
+RFI module: working "View answers" modal, anonymous community chat, first AI-bot reply simulation.
+
+### 2025 — `5aa6f5a` — GLORIX v4: Marketplace with photos/specs/reviews, AI Bots simulation
+
+Full Marketplace with product photos, grouped specs, reviews, `calcMarketplaceFee()`. AI Bots page with scripted scenario simulation.
+
+### 2025 — `c5c1391` — GLORIX v3: CIPS Scorecard, ESG, RFI, Anti-Fraud, KPI
+
+Supplier Scorecard with CIPS 10C / ESG / KPI / Anti-Fraud tabs. RFI module (initial). Full `cips.js` data model.

@@ -1,38 +1,101 @@
 # GLORIX — Integrations
 
-## Current real integrations (what's actually wired up today)
+## ✅ Current Real Integrations (npm Libraries Only)
 
-GLORIX has no third-party *service* integrations today — no payment processor, no bank, no logistics API, no government registry API, no AI provider. The only real integrations are client-side npm libraries bundled into the frontend:
+No third-party *service* integrations exist today. GLORIX makes zero external API calls of any kind.
 
-| Library | Purpose | Where used |
+| Library | Version | Purpose | Used In |
+|---|---|---|---|
+| `docx` | ^9.7.1 | Real `.docx` Word file generation, fully client-side | `utils/docxExport.js`, `utils/contractDocxExport.js` |
+| `jspdf` | ^4.2.1 | Real `.pdf` generation with embedded fonts, fully client-side | `utils/pdfExport.js`, `utils/contractPdfExport.js` |
+| `lucide-react` | ^1.18.0 | Icon set | Sidebar and some pages |
+| `react-router-dom` | ^7.17.0 | Client-side routing | `App.jsx`, navigation throughout |
+| `react` + `react-dom` | ^19.2.6 | UI framework | Everywhere |
+
+**Absent**: no analytics SDK (no GA, Mixpanel, Sentry), no map library, no HTTP client library (no axios/fetch wrapper — there is nothing to call), no auth library, no payment SDK.
+
+---
+
+## ❌ Not Integrated (Planned — See Roadmap Phases)
+
+### MVP Phase — Payments / Escrow
+
+| Partner | Country/Region | Integration Type | Role |
+|---|---|---|---|
+| Payme | Uzbekistan | REST API | Escrow deposits + payouts |
+| Click | Uzbekistan | REST API | Escrow alternative |
+| Kaspi Pay | Kazakhstan | REST API | Escrow for KZ |
+| Тинькофф | Russia | REST API | Escrow for RU |
+
+Currently simulated: `calcDeposit()` computes the deposit amount client-side but no money ever moves. The Onboarding page explicitly states: "В production версии потребуется верификация банковского счёта компании и внесение депозита через партнёрский банк."
+
+### MVP Phase — Government Registry Verification
+
+| Registry | Country | Endpoint type |
 |---|---|---|
-| `docx` (^9.7.1) | Generates real `.docx` Word files entirely client-side | `src/utils/docxExport.js`, `src/utils/contractDocxExport.js` |
-| `jspdf` (^4.2.1) | Generates real `.pdf` files entirely client-side, including embedded custom fonts | `src/utils/pdfExport.js`, `src/utils/contractPdfExport.js`, `src/utils/ptSerifFont.js`, `src/utils/robotoFont.js` |
-| `lucide-react` (^1.18.0) | Icon set | available throughout, though many pages currently use plain Unicode glyphs/emoji instead |
-| `react-router-dom` (^7.17.0) | Client-side routing | `App.jsx`, every page navigation |
-| `react` / `react-dom` (^19.2.6) | UI framework | everywhere |
+| my.gov.uz (UZINFOCOM) | Uzbekistan | REST API |
+| egov.kz | Kazakhstan | REST API |
+| nalog.gov.ru | Russia | REST API (FNS EGRUL) |
+| e-taxes.gov.az | Azerbaijan | REST API |
+| napr.gov.ge | Georgia | REST API |
 
-No backend SDKs, no payment SDKs, no analytics SDKs (no Google Analytics, no Mixpanel, no Sentry), no map/geolocation libraries are present, despite country flags and destinations appearing throughout the UI as plain emoji/text rather than any mapping integration.
+Currently simulated: Onboarding "ИИ проверит компанию через госреестр" is a progress-bar animation with no actual API call.
 
-## Future integrations named in the product's own Roadmap (`Roadmap.jsx`)
+### MVP Phase — Notifications
 
-These are the partner categories the founders themselves identified as targets — listed here as a faithful record of stated intent, not as integrations that exist or as commitments this document is making on the founders' behalf:
+| Channel | Notes |
+|---|---|
+| Email (transactional) | Tender stage changes, offer received, deposit confirmed. Provider TBD (SendGrid, Resend, etc.) |
+| Telegram bot | Alternative notification channel, common in CIS region |
 
-| Category | Named examples | Intended role |
+### Beta Phase — Real AI / LLM
+
+| Provider | Use Case |
+|---|---|
+| OpenAI (GPT-4) or Anthropic (Claude API) | Document drafting, TCO analysis, chat support |
+| Server-side only | API key never in frontend bundle |
+
+### Beta Phase — Sanctions Screening
+
+| List | Authority |
+|---|---|
+| SDN List | OFAC (US Treasury) |
+| EU Consolidated Sanctions List | European Union |
+| UN Sanctions List | United Nations |
+| National lists | Per-country (UZ, KZ, RU, AZ, GE) |
+
+### Beta Phase — Logistics Tracking
+
+| Partner | Notes |
+|---|---|
+| FESCO | Russian/CIS container shipping |
+| Globaltruck | CIS road freight |
+| Deliver | CIS last-mile/regional |
+
+### Production Phase — ERP Integration
+
+| System | Integration Type |
+|---|---|
+| 1С (1C Enterprise) | API / data exchange (standard for CIS SMBs) |
+| SAP | REST API |
+| Oracle | REST API |
+
+### Production Phase — Partner Organizations (non-technical, BD channel)
+
+| Organization | Type | Role |
 |---|---|---|
-| Banks / payment-escrow | Payme, Click, Kaspi, Тинькофф | Escrow and payment infrastructure (currently 100% simulated) |
-| Logistics | FESCO, Globaltruck, Deliver | Shipment tracking, waybill integration |
-| Chambers of commerce | ТПП Узбекистана (UzCCI), НПП «Атамекен» (Kazakhstan), ТПП РФ | Company verification, certificate-of-origin (CT-1) issuance, arbitration/mediation |
-| Customs brokers | GTL, AsstrA, Meridian | Customs clearance, compliance documentation |
-| ERP systems | 1С, SAP, Oracle | Procurement-process integration for larger corporate clients |
-| Business associations | UzCCI, KAZENERGY, РСПП | Customer acquisition channel, not a technical integration |
+| ТПП Узбекистана (UzCCI) | Chamber of Commerce | Company verification, CT-1 certificates, arbitration |
+| НПП «Атамекен» (Kazakhstan) | Chamber | Same for KZ |
+| ТПП РФ | Chamber | Same for RU |
+| GTL, AsstrA, Meridian | Customs brokers | Clearance + compliance documentation |
+| UzCCI, KAZENERGY, РСПП | Business associations | Customer acquisition channel |
 
-The Roadmap's MVP phase (Q3 2025 + 6 months per the in-product copy) also names: real JWT-based authentication, a PostgreSQL database, a Node.js backend API, real government-registry verification, "Payme / Kaspi (Escrow)" integration specifically, email/Telegram notifications, and a mobile PWA. The Beta phase additionally names a real AI integration ("OpenAI / Claude API" — see `AI_AGENTS.md`), real sanctions-list filtering, carrier-tracking API integration, a contract-builder tool, and KYC/AML verification.
+---
 
-## Government registries referenced (not yet integrated, referenced as data sources in UI copy)
+## Integration Security Rules (Standing)
 
-`Legal.jsx`'s jurisdiction table and `Onboarding.jsx`'s company-verification step reference, but do not call: `my.gov.uz` (Uzbekistan), `egov.kz` (Kazakhstan), `nalog.gov.ru` (Russia), `e-taxes.gov.az` (Azerbaijan), `napr.gov.ge` (Georgia). Real integration with these would be part of the MVP-phase "real government-registry verification" Roadmap item.
-
-## Guidance for adding any new integration
-
-Per this assistant's standing tool-use safety rules: connecting a new third-party service (an MCP connector, a payment API, a new npm package that talks to an external service) should go through the same evaluation any new dependency gets — check what data it would receive, whether it requires secrets (which must go in Vercel environment variables, never committed — see `DEPLOYMENT.md`), and whether the integration is something the founder explicitly asked for versus something picked unilaterally. Update this file the same day any new real integration is wired up, so it never drifts from being the accurate record of what's actually connected versus merely planned.
+Per project security policy (`SECURITY.md`):
+1. All payment/escrow integrations must go server-side — GLORIX frontend must never handle raw card or bank credentials
+2. All AI API keys must be server-side environment variables — never in the frontend Vite bundle (publicly readable in devtools)
+3. When connecting a new third-party service, update this file on the same day
+4. Any new npm dependency must be assessed for: data it could access, whether it requires secrets, whether it introduces a new attack surface

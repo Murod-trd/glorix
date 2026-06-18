@@ -1,79 +1,210 @@
 # GLORIX — API Reference
 
-## There is currently no backend API
+## ❌ No Backend API Exists
 
-This needs to be stated plainly: GLORIX has no server, no REST/GraphQL endpoint, no webhook receiver, and makes no `fetch`/`axios` calls to any first-party backend anywhere in the codebase. Every "request/response" interaction in the product is a client-side function call against in-memory JavaScript data, often wrapped in an artificial `setTimeout(..., 1500)` purely to simulate network latency for UX purposes. This document therefore has two purposes: (1) record the actual callable function signatures that exist today, since they are the real interface other code in this repo depends on, and (2) sketch the API surface that a real backend would need to expose, derived directly from what the current mock-data shape and UI flows already assume.
+GLORIX has no server, no REST/GraphQL endpoint, no webhook receiver, and makes zero `fetch`/`axios` calls to any first-party backend. Every "interaction" is a client-side function call against in-memory JavaScript data, often wrapped in artificial `setTimeout(..., 1500–2000)` to simulate network latency.
 
-## Part 1 — Existing client-side functions (the de facto "API" today)
+This document covers: (1) every real client-side function signature the code depends on today, and (2) the implied future backend API shape derived from current data flows.
+
+---
+
+## Part 1 — Client-Side Function Signatures (✅ Real, Implemented Today)
 
 ### `src/data/mock.js`
 
-- `calcDeposit(amount: number) → { rate: number, deposit: number }` — tender escrow deposit calculation. See `BUSINESS_RULES.md` §1.
-- `currentUser` — the active mock user object, derived from `localStorage.getItem('glorix_account_type')` at module load time.
-- `tenders` — static array of 3 mock tenders.
-- `aiAnalysis` — static object with 3 mock offers for the one demo tender, plus an `aiNote`/`recommended` flag per offer.
-- `depositRates` — the 4-tier rate table backing `calcDeposit` and the `/deposit` rate-table UI.
-- `stats` — static dashboard counters (`activeTenders`, `countries`, `totalVolume`, `avgTrustScore`).
+```ts
+calcDeposit(amount: number): { rate: number, deposit: number }
+```
+Tiered escrow deposit calculation. See `BUSINESS_RULES.md` §Rule 1 for full algorithm.
+
+**Exports**: `currentUser`, `tenders`, `stats`, `aiAnalysis`, `depositRates`, `calcDeposit`
+
+---
 
 ### `src/data/marketplace.js`
 
-- `calcMarketplaceFee(amount: number) → number` — marketplace transaction fee percentage. See `BUSINESS_RULES.md` §2.
-- `products` — static array of 6 mock marketplace listings, each with nested `seller`, `specs` (grouped), `certifications`, `reviewsList`, `aiCheck`.
-- `categories` — static category list used for marketplace filtering.
+```ts
+calcMarketplaceFee(amount: number): number  // returns rate as decimal, e.g. 1.5
+```
+Marketplace transaction fee rate. See `BUSINESS_RULES.md` §Rule 2.
 
-### `src/data/accounts.js`
+**Exports**: `products`, `categories`, `calcMarketplaceFee`
 
-- `accountTypes` — the 3 account-type definitions (buyer/seller/both) with `requiredDocs`, `categoryDocs`, `features`, `restrictions`.
-- `originCertTypes` — the 5 certificate-of-origin types (CT‑1, Form A, EUR.1, CT‑EZ, general).
-- `docTemplates` — the 7-entry document template catalog.
-
-### `src/data/cips.js`
-
-- `suppliers` — 3 mock suppliers with full CIPS 10C / ESG / KPI / Anti-Fraud nested data.
-- `rfiList`, `rfiAnswers` — mock RFI requests and their (anonymous) supplier answers, including pre-computed `aiScore`/`aiNote` per answer.
-- `kpiHistory` — 6 months of mock KPI trend data.
-- `antiFraudChecks` — the 10-check definition list.
-- `communityMessages` — seed messages for the anonymous RFI-page community chat.
-
-### `src/data/legalSources.js`
-
-- `legalSources` — per-country array (11 CIS countries) with cited legal-source links and a `contractLanguage` object per country (see `BUSINESS_RULES.md` §5).
-- `internationalSources`, `internationalLaw`, `docTypes` — supporting reference data for the Legal AI document generator's law-selection UI.
-- `mirrorPenalties` — the mirror-penalty standard object. See `BUSINESS_RULES.md` §4.
+---
 
 ### `src/data/contractData.js`
 
-- `resolveContractLanguage(sellerCountry: string, buyerCountry: string) → { mode, primary, secondary, warning, mandatory?, requiresCertifiedTranslation?, nationalOnly?, unverifiedCaution? }` — the bilingual-contract language decision function. See `BUSINESS_RULES.md` §5 and `DECISIONS.md`.
-- `buildContractStructured(formData: object) → ContractStructured` — builds the full structured contract object (18 articles + preamble + appendices + disclaimer + language metadata) consumed by all three contract renderers. See `SYSTEM_DESIGN.md`.
-- `LANG_NAMES` — language-code → native-script display-name map.
+```ts
+resolveContractLanguage(
+  sellerCountry: string,   // ISO 2-letter e.g. 'UZ', 'KZ'
+  buyerCountry: string
+): {
+  mode: 'bilingual' | 'mono',
+  primary: string,         // language code: 'ru' | 'en' | 'kk' | 'tg' | 'ka' | 'az' | 'ky' | 'tk'
+  secondary: string | null,
+  warning: string | null,
+  mandatory?: boolean,
+  requiresCertifiedTranslation?: boolean,
+  nationalOnly?: boolean,
+  unverifiedCaution?: boolean,
+}
+```
+Language-resolution rule. See `BUSINESS_RULES.md` §Rule 5.
 
-### `src/pages/LegalAI.jsx` (internal, not exported elsewhere)
+```ts
+buildContractStructured(formData: {
+  seller: string, buyer: string,
+  sellerCountry: string, buyerCountry: string,
+  goods: string, amount: string, currency: string,
+  incoterms: string, deliveryDays: string, payTerms: string,
+  penaltyRate: string, maxPenalty: string,
+  scope: 'international' | 'cis' | string,
+  intLaw: string,          // ID from internationalLaw array
+  contractNum: string, city: string, date: string,
+}): ContractStructured    // See DATABASE_SCHEMA.md for full shape
+```
 
-- `buildContract(formData) → string` — legacy plain-text contract builder, superseded by `buildContractStructured` for the screen/PDF/Word table renderers but still present in the file.
-- `buildOffer(formData) → string`, `buildSpecification(formData) → string`, `buildClaim(formData) → string`, `buildAcceptance(formData) → string` — the four remaining plain-text document builders (Pipeline A in `SYSTEM_DESIGN.md`).
+**Exports**: `LANG_NAMES`, `resolveContractLanguage`, `buildContractStructured`
 
-### `src/utils/`
+---
 
-- `downloadTextAsPdf(text: string, filename: string) → void` (`pdfExport.js`) — generic plain-text → branded PDF.
-- `downloadTextAsDocx(text: string, filename: string) → Promise<void>` (`docxExport.js`) — generic plain-text → branded Word document.
-- `downloadContractAsPdf(data: ContractStructured, filename: string) → void` (`contractPdfExport.js`) — structured bilingual contract → branded PDF table.
-- `downloadContractAsDocx(data: ContractStructured, filename: string) → Promise<void>` (`contractDocxExport.js`) — structured bilingual contract → branded Word table.
+### `src/pages/LegalAI.jsx` (internal functions, not exported)
 
-## Part 2 — Implied API surface for a real backend (MVP-phase planning reference)
+```ts
+buildContract(formData: object): string        // Legacy plain-text builder (mostly superseded)
+buildOffer(formData: object): string
+buildSpecification(formData: object): string
+buildClaim(formData: object): string
+buildAcceptance(formData: object): string
+```
+Pipeline A plain-text document builders. Return template-literal strings with form data substituted.
 
-This is a forward-looking sketch, not a contract anyone has committed to. It exists so that whoever builds the real backend (per the Roadmap's MVP phase) has a starting point derived from what the current frontend already assumes about shape and behavior, rather than designing from a blank page. Treat every endpoint below as a proposal to validate against real product requirements at MVP time, not as something already decided.
+---
 
-| Concern | Plausible endpoint(s) | Backed by current mock shape in |
+### `src/utils/pdfExport.js`
+
+```ts
+downloadTextAsPdf(text: string, filename: string): void
+```
+Renders a plain-text string into a branded PDF (GLORIX letterhead, PT Serif font, page numbers) and triggers browser download.
+
+---
+
+### `src/utils/docxExport.js`
+
+```ts
+downloadTextAsDocx(text: string, filename: string): Promise<void>
+```
+Renders a plain-text string into a branded Word `.docx` file and triggers browser download.
+
+---
+
+### `src/utils/contractPdfExport.js`
+
+```ts
+downloadContractAsPdf(data: ContractStructured, filename: string): void
+```
+Renders the structured bilingual contract object as a two-column PDF table (jsPDF hand-drawn, with row-height-aware pagination) and triggers browser download.
+
+---
+
+### `src/utils/contractDocxExport.js`
+
+```ts
+downloadContractAsDocx(data: ContractStructured, filename: string): Promise<void>
+```
+Renders the structured bilingual contract object as a real Word `.docx` table (`docx` library `Table`/`TableRow`/`TableCell`) and triggers browser download.
+
+---
+
+### `src/data/accounts.js`
+
+**Exports**: `accountTypes`, `originCertTypes`, `docTemplates`
+No functions — pure data constants.
+
+---
+
+### `src/data/cips.js`
+
+**Exports**: `suppliers`, `rfiList`, `rfiAnswers`, `kpiHistory`, `antiFraudChecks`, `communityMessages`
+No functions — pure data constants.
+
+---
+
+### `src/data/legalSources.js`
+
+**Exports**: `legalSources`, `internationalSources`, `docTypes`, `internationalLaw`, `mirrorPenalties`
+No functions — pure data constants.
+
+---
+
+## Part 2 — 🚧 Implied Future Backend API (MVP Phase Planning Reference)
+
+Not committed. Derived from current UI flows and mock data shapes. Validate against real MVP requirements before implementing.
+
+### Authentication
+
+| Method | Endpoint | Body | Response |
+|---|---|---|---|
+| POST | `/api/auth/register` | `{ companyName, taxId, country, email, password }` | `{ userId, token }` |
+| POST | `/api/auth/login` | `{ email, password }` | `{ token, user }` |
+| GET | `/api/auth/me` | — | `{ user }` |
+| POST | `/api/auth/logout` | — | `{ ok }` |
+
+### Company / KYC
+
+| Method | Endpoint | Notes |
 |---|---|---|
-| Auth / session | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` | `AccountSelect.jsx`, `Onboarding.jsx` |
-| Company verification | `POST /companies/verify` (registry lookup by country + tax ID) | `Onboarding.jsx` step 1, `AccountVerification.jsx` |
-| Tenders | `GET/POST /tenders`, `GET /tenders/:id`, `POST /tenders/:id/offers` | `mock.js` tenders shape, `Tenders.jsx`, `CreateTender.jsx` |
-| Marketplace | `GET/POST /products`, `POST /orders` | `marketplace.js` products shape, `Marketplace.jsx` |
-| Escrow / deposits | `POST /deposits`, `POST /deposits/:id/release` | `calcDeposit`, `DepositTrust.jsx`, Onboarding step 4 |
-| Trust score | `GET /users/:id/trust-score` (server-computed, not client-trusted) | `DepositTrust.jsx` formula |
-| RFI | `GET/POST /rfi`, `POST /rfi/:id/responses` | `cips.js` rfiList/rfiAnswers |
-| Supplier scorecard | `GET /suppliers/:id/scorecard` | `cips.js` suppliers shape |
-| Document generation | `POST /documents/generate` (type, formData) → file | `LegalAI.jsx`, `DocumentCenter.jsx` |
-| Sanctions screening | `POST /compliance/screen` (entity, country) against real OFAC/EU/UN lists | `Legal.jsx` §6, `Marketplace.jsx` `aiCheck.sanctionsOk` |
+| POST | `/api/companies/verify` | Registry lookup by country + taxId |
+| GET | `/api/companies/:id` | |
+| POST | `/api/companies/:id/documents` | Upload KYC docs |
+| GET | `/api/companies/:id/trust-score` | Server-computed, not client-trusted |
 
-Critically: trust score, deposit verification, and sanctions screening must be **server-computed and server-trusted** in any real implementation — none of the current client-side equivalents (`calcDeposit`, the trust-score arithmetic, the static `aiCheck.sanctionsOk` flags) should ever be taken as authoritative once a backend exists, since a client can trivially fabricate any value a backend would otherwise compute.
+### Tenders
+
+| Method | Endpoint | Notes |
+|---|---|---|
+| GET | `/api/tenders` | With filters: status, category, country |
+| POST | `/api/tenders` | Requires auth + deposit |
+| GET | `/api/tenders/:id` | |
+| POST | `/api/tenders/:id/offers` | Seller submits offer (anonymous until close) |
+| POST | `/api/tenders/:id/close` | D5 trigger: reveal identities, select winner |
+
+### Marketplace
+
+| Method | Endpoint | Notes |
+|---|---|---|
+| GET | `/api/products` | With filters |
+| POST | `/api/products` | Seller creates listing |
+| POST | `/api/orders` | Buyer purchases (triggers escrow flow) |
+
+### Escrow / Deposits
+
+| Method | Endpoint | Notes |
+|---|---|---|
+| POST | `/api/deposits` | Create escrow hold |
+| POST | `/api/deposits/:id/release` | Release to seller after delivery confirmed |
+| GET | `/api/deposits/:id/status` | |
+
+### Documents
+
+| Method | Endpoint | Notes |
+|---|---|---|
+| POST | `/api/documents/generate` | `{ type, formData }` → file URL or base64 |
+| GET | `/api/documents/:id` | Retrieve generated document |
+
+### Compliance
+
+| Method | Endpoint | Notes |
+|---|---|---|
+| POST | `/api/compliance/screen` | Sanctions screening against real OFAC/EU/UN lists |
+| GET | `/api/compliance/status/:companyId` | Current compliance status |
+
+### Critical: Fields That Must Be Server-Side Trusted
+
+The following must **never** be derived from client-supplied state in a real backend:
+- Trust score (currently a client-side formula — trivially fabricated by any client)
+- Deposit amounts (currently `calcDeposit()` on the client)
+- Sanctions status (currently static `aiCheck.sanctionsOk: true` flags)
+- Offer anonymity enforcement during tender (currently only a UI convention)
+- Account type / permissions (currently from an editable localStorage key)
