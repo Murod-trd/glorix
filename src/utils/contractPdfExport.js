@@ -74,6 +74,25 @@ function drawFooter(doc, pageWidth, pageHeight, margin, pageNum, totalPages) {
   doc.text(`${pageNum} / ${totalPages}`, pageWidth - margin, footerY + 9, { align: 'right' });
 }
 
+// Демо-платформа ещё не имеет юридически обязывающего статуса подписания —
+// документы не должны выглядеть как готовый к исполнению финальный контракт.
+// Водяной знак рисуется первым (под остальным контентом мы его не кладём,
+// jsPDF не поддерживает z-order слоями на одной странице, поэтому контент
+// дальше рисуется поверх с непрозрачным белым текстом — водяной знак бледный
+// и не мешает читаемости).
+function drawDraftWatermark(doc, pageWidth, pageHeight) {
+  doc.saveGraphicsState();
+  doc.setGState(new doc.GState({ opacity: 0.12 }));
+  doc.setFont('PTSerif', 'bold');
+  doc.setFontSize(72);
+  doc.setTextColor(...NAVY);
+  doc.text('ПРОЕКТ / DRAFT', pageWidth / 2, pageHeight / 2, {
+    align: 'center',
+    angle: 35,
+  });
+  doc.restoreGraphicsState();
+}
+
 // Шрифт PT Serif, встроенный в PDF, не содержит глифов для некоторых символов
 // казахской/таджикской кириллицы (Қ, ҷ, ӣ) и грузинского письма. Для подписи
 // колонки в PDF используем название языка на русском как шрифто-совместимый
@@ -263,6 +282,7 @@ export function downloadContractAsPdf(data, filename = 'glorix-contract.pdf') {
   const totalPages = pageNum;
   for (let p = 1; p <= totalPages; p++) {
     doc.setPage(p);
+    drawDraftWatermark(doc, pageWidth, pageHeight);
     drawFooter(doc, pageWidth, pageHeight, margin, p, totalPages);
   }
 

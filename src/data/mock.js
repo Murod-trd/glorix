@@ -118,15 +118,17 @@ export const depositRates = [
 ];
 
 export function calcDeposit(amount) {
-  if (amount <= 10000) return { rate: 15, deposit: amount * 0.15 };
-  if (amount <= 50000) {
-    const rate = 15 - (15 - 10) * ((amount - 10000) / (50000 - 10000));
-    return { rate: +rate.toFixed(2), deposit: +(amount * rate / 100).toFixed(0) };
+  const n = Number(amount);
+  if (!Number.isFinite(n) || n < 0) return { rate: 0, deposit: 0 };
+  if (n <= 10000) return { rate: 15, deposit: n * 0.15 };
+  if (n <= 50000) {
+    const rate = 15 - (15 - 10) * ((n - 10000) / (50000 - 10000));
+    return { rate: +rate.toFixed(2), deposit: +(n * rate / 100).toFixed(0) };
   }
-  if (amount <= 1000000) {
-    const rate = 10 - (10 - 5) * ((amount - 50000) / (1000000 - 50000));
-    return { rate: +rate.toFixed(2), deposit: +(amount * rate / 100).toFixed(0) };
+  if (n <= 1000000) {
+    const rate = 10 - (10 - 5) * ((n - 50000) / (1000000 - 50000));
+    return { rate: +rate.toFixed(2), deposit: +(n * rate / 100).toFixed(0) };
   }
-  const rate = Math.max(0.5, 5 - (5 - 0.5) * Math.min(1, (amount - 1000000) / 9000000));
-  return { rate: +rate.toFixed(2), deposit: +(amount * rate / 100).toFixed(0) };
+  const rate = Math.max(0.5, 5 - (5 - 0.5) * Math.min(1, (n - 1000000) / 9000000));
+  return { rate: +rate.toFixed(2), deposit: +(n * rate / 100).toFixed(0) };
 }

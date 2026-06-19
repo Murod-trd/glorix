@@ -1,7 +1,5 @@
 import { useState } from 'react';
 import { products, categories, calcMarketplaceFee } from '../data/marketplace';
-import { downloadTextAsPdf } from '../utils/pdfExport';
-import { downloadTextAsDocx } from '../utils/docxExport';
 
 const accountType = localStorage.getItem('glorix_account_type') || 'buyer';
 const canBuy = accountType === 'buyer' || accountType === 'both';
@@ -30,7 +28,10 @@ function ProductModal({ product, onClose }) {
           <div style={{ padding: 40, textAlign: 'center' }}>
             <div style={{ fontSize: 56, marginBottom: 16 }}>✓</div>
             <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--accent)', fontFamily: 'var(--font-display)', marginBottom: 8 }}>Заказ размещён</div>
-            <div style={{ color: 'var(--text-2)', marginBottom: 24 }}>${escrow.toLocaleString()} зачислено на Escrow · Продавец уведомлён</div>
+            <div style={{ color: 'var(--text-2)', marginBottom: 16 }}>${escrow.toLocaleString()} зачислено на Escrow · Продавец уведомлён</div>
+            <div style={{ display: 'inline-block', padding: '8px 14px', background: 'rgba(180,130,20,0.12)', border: '1px solid rgba(180,130,20,0.35)', borderRadius: 8, fontSize: 12, color: '#B48214', marginBottom: 24 }}>
+              ⚠ Демо-режим: реальная оплата не производилась, продавец не уведомлён
+            </div>
             <div style={{ background: 'var(--accent-dim)', border: '1px solid rgba(0,212,170,0.2)', borderRadius: 10, padding: 20, textAlign: 'left', maxWidth: 400, margin: '0 auto 24px' }}>
               {['Продавец отгружает товар','Загружает накладную + счёт-фактуру','Деньги мгновенно переходят продавцу','Вы получаете трекинг-номер'].map((s,i) => (
                 <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 8, fontSize: 13 }}>
@@ -141,6 +142,9 @@ function ProductModal({ product, onClose }) {
                     ? <button className="btn btn-primary" onClick={() => setStep(1)} style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: 15 }}>Купить</button>
                     : <div>
                         <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12, lineHeight: 1.6 }}>Оплачивая, вы соглашаетесь с условиями GLORIX. Деньги на Escrow — продавцу после накладной.</div>
+                        <div style={{ padding: '8px 12px', background: 'rgba(180,130,20,0.12)', border: '1px solid rgba(180,130,20,0.35)', borderRadius: 8, fontSize: 12, color: '#B48214', marginBottom: 12 }}>
+                          ⚠ Демо-режим: оплата не происходит реально, средства не списываются
+                        </div>
                         <div style={{ display: 'flex', gap: 8 }}>
                           <button className="btn btn-ghost" onClick={() => setStep(0)} style={{ flex: 1, justifyContent: 'center' }}>Назад</button>
                           <button className="btn btn-primary" onClick={() => setStep(2)} style={{ flex: 2, justifyContent: 'center' }}>Оплатить ${escrow.toLocaleString()} →</button>
@@ -363,7 +367,10 @@ ____________________    ____________________
             <div style={{ fontSize: 56, marginBottom: 16 }}>✓</div>
             <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent)', fontFamily: 'var(--font-display)', marginBottom: 8 }}>Товар размещён!</div>
             <div style={{ color: 'var(--text-2)', marginBottom: 8 }}>ИИ проверяет санкционные списки и спецификации...</div>
-            <div style={{ color: 'var(--accent)', fontSize: 13, marginBottom: 24 }}>◎ Верификация обычно занимает 2–5 минут</div>
+            <div style={{ color: 'var(--accent)', fontSize: 13, marginBottom: 16 }}>◎ Верификация обычно занимает 2–5 минут</div>
+            <div style={{ display: 'inline-block', padding: '8px 14px', background: 'rgba(180,130,20,0.12)', border: '1px solid rgba(180,130,20,0.35)', borderRadius: 8, fontSize: 12, color: '#B48214', marginBottom: 24 }}>
+              ⚠ Демо-режим: товар не публикуется реально, проверка не выполняется
+            </div>
             <button className="btn btn-primary" onClick={onClose} style={{ padding: '12px 32px' }}>Вернуться в маркетплейс</button>
           </div>
         ) : (
@@ -479,8 +486,8 @@ ____________________    ____________________
                     ⚠ Это черновик. Проверьте данные, поставьте подпись и печать. В КП нигде не указано что документ создан ИИ.
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                    <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center', fontSize: 12 }} onClick={() => downloadTextAsPdf(kp, 'glorix-kp.pdf')}>⬇ PDF</button>
-                    <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center', fontSize: 12 }} onClick={() => downloadTextAsDocx(kp, 'glorix-kp.docx')}>⬇ Word</button>
+                    <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center', fontSize: 12 }} onClick={() => import('../utils/pdfExport').then(m => m.downloadTextAsPdf(kp, 'glorix-kp.pdf'))}>⬇ PDF</button>
+                    <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center', fontSize: 12 }} onClick={() => import('../utils/docxExport').then(m => m.downloadTextAsDocx(kp, 'glorix-kp.docx'))}>⬇ Word</button>
                     <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center', fontSize: 12 }} onClick={() => { navigator.clipboard?.writeText(kp); alert('Скопировано!'); }}>📋 Копировать</button>
                   </div>
                 </div>

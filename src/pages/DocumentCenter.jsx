@@ -1,7 +1,5 @@
 import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { downloadTextAsPdf } from '../utils/pdfExport';
-import { downloadTextAsDocx } from '../utils/docxExport';
 
 // Mock ТН ВЭД database
 const tnved = [
@@ -266,8 +264,8 @@ ____________________     ____________________
               <div style={{ fontWeight: 600 }}>Результат КП</div>
               {generated && (
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn btn-ghost" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => downloadTextAsPdf(generated, 'glorix-kp.pdf')}>⬇ PDF</button>
-                  <button className="btn btn-ghost" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => downloadTextAsDocx(generated, 'glorix-kp.docx')}>⬇ Word</button>
+                  <button className="btn btn-ghost" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => import('../utils/pdfExport').then(m => m.downloadTextAsPdf(generated, 'glorix-kp.pdf'))}>⬇ PDF</button>
+                  <button className="btn btn-ghost" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => import('../utils/docxExport').then(m => m.downloadTextAsDocx(generated, 'glorix-kp.docx'))}>⬇ Word</button>
                   <button className="btn btn-ghost" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => { navigator.clipboard?.writeText(generated); alert('Скопировано!'); }}>📋 Копировать</button>
                 </div>
               )}

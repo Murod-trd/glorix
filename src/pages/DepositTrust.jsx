@@ -41,7 +41,7 @@ export function DepositCalculator() {
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
           <div style={{ background: 'var(--navy-3)', borderRadius: 10, padding: '16px 20px' }}>
-            <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 6 }}>Ставка ИИ</div>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 6 }}>Ставка депозита</div>
             <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--gold)', fontFamily: 'var(--font-display)' }}>{result.rate}%</div>
           </div>
           <div style={{ background: 'rgba(0,212,170,0.07)', border: '1px solid rgba(0,212,170,0.2)', borderRadius: 10, padding: '16px 20px' }}>

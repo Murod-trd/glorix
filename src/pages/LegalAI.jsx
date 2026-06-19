@@ -2,10 +2,6 @@ import React, { useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { legalSources, internationalLaw } from '../data/legalSources';
 import { buildContractStructured, LANG_NAMES } from '../data/contractData';
-import { downloadTextAsPdf } from '../utils/pdfExport';
-import { downloadTextAsDocx } from '../utils/docxExport';
-import { downloadContractAsPdf } from '../utils/contractPdfExport';
-import { downloadContractAsDocx } from '../utils/contractDocxExport';
 
 const docTypes = [
   { id: 'offer', label: 'Оферта поставщика', icon: '📋' },
@@ -1529,8 +1525,8 @@ export default function LegalAI() {
                   <span className="badge badge-green" style={{ fontSize: 10 }}>⚖ {scope==='international'?'CISG':sellerLaw?.mainCode}</span>
                   <span className="badge badge-blue" style={{ fontSize: 10 }}>🔄 Зеркальные штрафы</span>
                   <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => { navigator.clipboard?.writeText(result); }}>📋 Копировать</button>
-                  <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => downloadTextAsPdf(result, `glorix-${docType}.pdf`)}>⬇ PDF</button>
-                  <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => downloadTextAsDocx(result, `glorix-${docType}.docx`)}>⬇ Word</button>
+                  <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => import('../utils/pdfExport').then(m => m.downloadTextAsPdf(result, `glorix-${docType}.pdf`))}>⬇ PDF</button>
+                  <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => import('../utils/docxExport').then(m => m.downloadTextAsDocx(result, `glorix-${docType}.docx`))}>⬇ Word</button>
                 </div>
               )}
               {contractStructured && (
@@ -1541,8 +1537,8 @@ export default function LegalAI() {
                       ? `${LANG_NAMES[contractStructured.contractLang.primary] || contractStructured.contractLang.primary} / ${LANG_NAMES[contractStructured.contractLang.secondary] || contractStructured.contractLang.secondary}`
                       : `${LANG_NAMES[contractStructured.contractLang.primary] || contractStructured.contractLang.primary}`}
                   </span>
-                  <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => downloadContractAsPdf(contractStructured, `glorix-contract.pdf`)}>⬇ PDF</button>
-                  <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => downloadContractAsDocx(contractStructured, `glorix-contract.docx`)}>⬇ Word</button>
+                  <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => import('../utils/contractPdfExport').then(m => m.downloadContractAsPdf(contractStructured, `glorix-contract.pdf`))}>⬇ PDF</button>
+                  <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => import('../utils/contractDocxExport').then(m => m.downloadContractAsDocx(contractStructured, `glorix-contract.docx`))}>⬇ Word</button>
                 </div>
               )}
             </div>

@@ -91,6 +91,27 @@ export async function downloadContractAsDocx(data, filename = 'glorix-contract.d
 
   const rows = [];
 
+  // Демо-платформа: документ не имеет юридически обязывающего статуса до подписи
+  // сторон. Библиотека docx v9 не предоставляет API диагонального watermark на
+  // фоне страницы (в отличие от jsPDF), поэтому статус выражается явным баннером
+  // в начале документа — та же защитная цель, без претензии на технику, которой
+  // в этой библиотеке нет.
+  rows.push(new TableRow({
+    children: [
+      new TableCell({
+        columnSpan: isBilingual ? 2 : 1,
+        shading: { type: ShadingType.SOLID, color: GOLD_HEX, fill: GOLD_HEX },
+        margins: { top: 80, bottom: 80, left: 120, right: 120 },
+        children: [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new TextRun({ text: 'ПРОЕКТ / DRAFT — документ не подписан и не имеет юридической силы', bold: true, size: 20, font: 'Times New Roman', color: 'FFFFFF' })],
+          }),
+        ],
+      }),
+    ],
+  }));
+
   // Заголовок документа (на всю ширину, одна "строка" с одной объединённой ячейкой —
   // используем одну ячейку с columnSpan)
   rows.push(new TableRow({

@@ -153,7 +153,7 @@ export default function CreateTender() {
                   <div style={{ fontSize: 24, fontWeight: 700, fontFamily: 'var(--font-display)' }}>${budget.toLocaleString()}</div>
                 </div>
                 <div style={{ background: 'var(--gold-dim)', border: '1px solid rgba(245,166,35,0.2)', borderRadius: 10, padding: '20px' }}>
-                  <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 8 }}>Ставка ИИ</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 8 }}>Ставка депозита</div>
                   <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--gold)', fontFamily: 'var(--font-display)' }}>{dep.rate}%</div>
                 </div>
                 <div style={{ background: 'rgba(0,212,170,0.07)', border: '1px solid rgba(0,212,170,0.25)', borderRadius: 10, padding: '20px', gridColumn: '1/-1' }}>
@@ -170,6 +170,10 @@ export default function CreateTender() {
 
             <div style={{ padding: '14px 16px', background: 'var(--navy-3)', borderRadius: 8, fontSize: 13, color: 'var(--text-2)', marginBottom: 20 }}>
               Нажимая «Опубликовать тендер», вы соглашаетесь с условиями оферты платформы GLORIX, включая депозитные обязательства и рейтинговую систему доверия.
+            </div>
+
+            <div style={{ padding: '10px 16px', background: 'rgba(180,130,20,0.12)', border: '1px solid rgba(180,130,20,0.35)', borderRadius: 8, fontSize: 12.5, color: '#B48214', marginBottom: 20 }}>
+              ⚠ Демо-режим: тендер не будет опубликован реально и не виден другим пользователям. Депозит не списывается, оплата не происходит.
             </div>
 
             <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: 15 }}

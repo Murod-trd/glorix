@@ -4,6 +4,57 @@ New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format.
 
 ---
 
+## 2026-06-19 — index.html recovered, bundle size measured: 🔴 #4 fully closed (commit — see SESSION_STATE.md)
+
+`index.html` was missing from the handover snapshot used to start this session (flagged as a blocker in the previous two changelog entries). The founder supplied the actual original file content directly, confirmed as the real source rather than a reconstruction. It contains a Google Fonts CDN `<link>` (Inter + Space Grotesk via `fonts.googleapis.com`), which confirms open audit item 🟡 #15 (Google Fonts blocked in Russia) as a real, present issue rather than a hypothetical one — not addressed in this entry, left as its own open item.
+
+With `index.html` in place, `npm run build` succeeds. Measured the actual effect of the lazy-loading change made earlier in this session (previously logged as "not yet measured"):
+
+- **Before** (per original audit): 1.76MB single bundle.
+- **After**: the built `dist/index.html` loads only `index-DHuX0M06.js` (652KB raw, 171.25KB gzipped) plus a 2.65KB stylesheet on initial visit — confirmed by inspecting the generated HTML directly; no `modulepreload` hints point at the heavy chunks. `robotoFont.js` (734KB), jsPDF (360KB), `html2canvas` (200KB, a docx dependency), the `docx` library itself (151KB), and `purify.es` (26KB) — roughly 1.47MB combined — now load only when a user clicks a PDF/Word export button, not on page load.
+
+This closes 🔴 #4 fully (previously logged as partial, since the measurement was blocked).
+
+**Files changed**: `index.html` (new), `docs/SESSION_STATE.md`.
+
+---
+
+## 2026-06-19 — Inline demo disclaimers in CreateTender / Marketplace / AccountVerification (commit — see SESSION_STATE.md)
+
+Closed 🔴 #2 from the open audit list.
+
+Added inline gold-styled "⚠ Демо-режим" notices (same visual treatment already used for the contract disclaimer text) at the point of action in each of the three flagged flows:
+
+- **`CreateTender.jsx`** — above the "Опубликовать тендер" button.
+- **`Marketplace.jsx`** — three locations: the buy-confirmation success screen ("Заказ размещён"), the payment step right before "Оплатить", and the seller's list-product success screen ("Товар размещён!"). The existing `alert('... (демо)')` was left in place but is no longer the only signal — the inline block now carries the disclosure since a dismissible browser alert is easy to miss.
+- **`AccountVerification.jsx`** — near the required-documents upload checklist (clarifying the "Загрузить" buttons don't accept real files) and near "Активировать аккаунт продавца". This flow sits next to genuine legal text about administrative/criminal liability for unlicensed trading in most CIS countries, which made the missing disclaimer here the most consequential of the three.
+
+**Noted but not fixed in this pass**: confirmed while editing `Marketplace.jsx` that `localStorage.getItem('glorix_account_type')` is read at module scope (line 4, before component definition) — exactly the pattern described in open item 🟠 #6. Left untouched, out of scope for this fix; flagged as the next logical candidate.
+
+**Files changed**: `src/pages/CreateTender.jsx`, `src/pages/Marketplace.jsx`, `src/pages/AccountVerification.jsx`, `docs/SESSION_STATE.md`.
+
+---
+
+## 2026-06-19 — Audit fixes: misleading AI label, draft watermarks, lazy-loaded exports, calcDeposit validation (commit — see SESSION_STATE.md)
+
+Closed four items from the open audit list in `SESSION_STATE.md`.
+
+**🔴 #1 — Misleading "Ставка ИИ" label.** Renamed to "Ставка депозита" in `Tenders.jsx`, `DepositTrust.jsx`, `CreateTender.jsx`, and the matching phrase in `RelationshipManager.jsx`. The underlying value is a tiered linear interpolation in `calcDeposit()` (`mock.js`), not an AI computation — the label now matches what the code actually does. `Dashboard.jsx`'s "ИИ-анализ" text was left untouched: it refers to the separate offer-comparison mock (`aiAnalysis`), a genuinely distinct feature, not the same mislabeling.
+
+**🔴 #3 — No draft watermark on generated contracts.** PDF (`contractPdfExport.js`): added a diagonal "ПРОЕКТ / DRAFT" watermark on every page via jsPDF's `GState`/`saveGraphicsState` opacity API (verified present in installed jspdf 4.2.1). DOCX (`contractDocxExport.js`): the `docx` v9.7.1 library has no diagonal page-watermark API (verified directly against the package), so a prominent gold banner row — "ПРОЕКТ / DRAFT — документ не подписан и не имеет юридической силы" — was added at the top of the document body instead. Same protective intent, achieved with the technique each library actually supports.
+
+**🔴 #4 (partial) — 1.76MB bundle, fonts/jspdf/docx loaded eagerly.** `downloadTextAsPdf`, `downloadTextAsDocx`, `downloadContractAsPdf`, `downloadContractAsDocx` were statically imported at module top-level in `Marketplace.jsx`, `DocumentCenter.jsx`, `LegalAI.jsx` despite only being called inside `onClick` handlers. Converted all four call sites across the three files to dynamic `import()` inside the click handler. This removes jsPDF, `docx`, and the two embedded fonts (`robotoFont.js` 434KB + `ptSerifFont.js` 119KB) from the initial bundle of every page that has an export button — they now load only when the user actually clicks export. **Not yet measured**: the project's `index.html` is missing from the current working tree (not present in the handover snapshot used to start this session), so `npm run build` fails with `UNRESOLVED_ENTRY` and the new bundle size could not be verified end-to-end. Flagged in `SESSION_STATE.md` as an open blocker — needs either the original `index.html` recovered from GitHub history or an explicit decision on its contents (it likely contained the Google Fonts `<link>` tag relevant to audit item 🟡 #15, and writing a new one blind risks inventing content for that exact item).
+
+**🟠 #7 — `calcDeposit()` had no input validation.** Added: any non-finite or negative `amount` now returns `{ rate: 0, deposit: 0 }` instead of propagating `NaN` through the tiered-rate math.
+
+**Explicitly not touched, with reason:**
+- 🟡 #18 (Ukraine flag in `aiAnalysis` mock) — left untouched. This is a content judgment call with geopolitical sensitivity, not a bug; requires an explicit founder decision rather than being folded silently into an unrelated fix.
+- 🔴 #5 (escrow licensing) — legal question, out of scope for a code session.
+
+**Files changed**: `src/data/mock.js`, `src/pages/Tenders.jsx`, `src/pages/DepositTrust.jsx`, `src/pages/CreateTender.jsx`, `src/pages/RelationshipManager.jsx`, `src/utils/contractPdfExport.js`, `src/utils/contractDocxExport.js`, `src/pages/Marketplace.jsx`, `src/pages/DocumentCenter.jsx`, `src/pages/LegalAI.jsx`, `docs/SESSION_STATE.md`.
+
+---
+
 ## 2026-06-18 — Full project documentation system (commit `9fbfecd`)
 
 Created 13-file documentation system in `docs/` as the single source of truth and durable continuity mechanism for future sessions. Built from a complete read-through of the entire codebase (every page, every data file, `App.jsx`, `package.json`, `vercel.json`, `vite.config.js`, full git history). Covers architecture, business rules, API reference, database schema, AI agents (honest inventory), security, deployment, integrations, decisions (with full rationale), roadmap, and this changelog. Replaces reliance on chat history for project continuity.

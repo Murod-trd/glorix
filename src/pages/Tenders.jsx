@@ -170,7 +170,7 @@ export function TenderDetail() {
           <div className="card" style={{ borderColor: 'rgba(245,166,35,0.2)', background: 'var(--gold-dim)' }}>
             <div style={{ fontWeight: 600, marginBottom: 10, fontFamily: 'var(--font-display)' }}>Депозит</div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span style={{ fontSize: 13, color: 'var(--text-2)' }}>Ставка ИИ</span>
+              <span style={{ fontSize: 13, color: 'var(--text-2)' }}>Ставка депозита</span>
               <span style={{ fontWeight: 600, color: 'var(--gold)' }}>{tender.deposit.rate}%</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>

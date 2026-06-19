@@ -149,8 +149,11 @@ export default function AccountVerification() {
             {/* Required docs */}
             <div className="card" style={{ marginBottom: 16 }}>
               <div style={{ fontWeight: 600, marginBottom: 4, fontFamily: 'var(--font-display)' }}>Обязательные документы</div>
-              <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 16 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 12 }}>
                 Без этих документов аккаунт продавца не активируется. ИИ верифицирует через госреестры.
+              </div>
+              <div style={{ padding: '8px 12px', background: 'rgba(180,130,20,0.12)', border: '1px solid rgba(180,130,20,0.35)', borderRadius: 8, fontSize: 12, color: '#B48214', marginBottom: 16 }}>
+                ⚠ Демо-режим: кнопки «Загрузить» не принимают реальные файлы, проверка через госреестр не выполняется
               </div>
               {acct.requiredDocs.map(doc => (
                 <div key={doc.id} style={{
@@ -232,9 +235,14 @@ export default function AccountVerification() {
                 ))}
               </div>
               {verLevel === 'full' && (
-                <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: 14 }}>
-                  Активировать аккаунт продавца →
-                </button>
+                <>
+                  <div style={{ marginTop: 14, padding: '8px 12px', background: 'rgba(180,130,20,0.12)', border: '1px solid rgba(180,130,20,0.35)', borderRadius: 8, fontSize: 11.5, color: '#B48214' }}>
+                    ⚠ Демо-режим: активация не создаёт реальный продающий аккаунт
+                  </div>
+                  <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: 10 }}>
+                    Активировать аккаунт продавца →
+                  </button>
+                </>
               )}
             </div>
 
