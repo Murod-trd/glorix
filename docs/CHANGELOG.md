@@ -3,6 +3,26 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-19 — Marketplace catalog expanded from 6 to 32 products, all 8 categories filled
+
+Founder asked why SVG illustrations (from the #16 fix) were only created for 6 products. Investigation revealed a separate, real problem: the marketplace declares 8 product categories (agro, construction, electronics, chemicals, textile, metals, packaging, equipment), but only 6 products existed, covering just 6 of 8 categories -- "Electronics" and "Chemicals" were completely empty when filtered.
+
+Founder clarified the end goal (a marketplace with millions of products, like major international platforms) -- given an honest explanation: that volume gets populated by real sellers through the working "Add Product" form only once a backend exists (see critical gap #1 from this session's analysis), not manually by AI or a human. For the current demo phase, founder chose a realistic intermediate step: expand the catalog to 20-30 products, covering all 8 categories.
+
+**Implementation.** Created 26 new products (32 total, up from 6) -- 4 products evenly per each of the 8 categories. Each product has the same full data schema as the original 6 (seller from a realistic CIS country, technical specs, certifications, reviews, delivery terms) -- not simplified stubs. Expanded `src/components/ProductIllustration.jsx` with 26 new SVG illustrations (wheat, rice, spices, brick, metal roofing, tile, laptop, smartphone, cable, power supply, polypropylene, paint, fertilizer, acid, silk, clothing, synthetic fabric, steel sheet, aluminum profile, copper wire, cardboard box, PET bottle, PP bag, compressor, lathe, welding machine) in the same minimalist geometric style as the first 6, with zero external dependency.
+
+Verified: all 32 illustrations render without errors (direct server-side render test), all 8 categories now have 4 products each (none empty), the full marketplace page renders without errors with the complete catalog.
+
+Verified with `npm run build`: succeeds, main chunk 720.24KB (up from 688.21KB -- expected and acceptable, given 26 products with full data plus 26 new SVG illustrations).
+
+### Critical-gaps analysis delivered (founder request)
+
+Founder asked for the codebase sorted into frontend/backend and the critical gaps named. Answer given: all existing code is frontend (a React SPA with zero server-side component); backend is entirely absent. Gaps named by priority: 🔴 no backend at all (data doesn't persist across sessions/devices, two users can't see each other) -- a foundational gap, not a polish item; 🔴 escrow without a license -- a legal, not technical, blocker; 🟠 no authentication (role selection with no password); 🟠 no government-registry integration (verification is self-reported checkboxes); 🟡 zero payment providers technically integrated.
+
+**Files changed**: `src/components/ProductIllustration.jsx`, `src/data/marketplace.js`, `docs/SESSION_STATE.md`.
+
+---
+
 ## 2026-06-19 — Unsplash CDN dependency replaced with self-contained SVG illustrations (#16)
 
 All 6 marketplace products used photos from images.unsplash.com, which depends on Cloudflare/AWS infrastructure -- a real availability risk for users in Russia (which actively blocks resources using Cloudflare). Founder explicitly chose the solution: self-generated SVG illustrations instead of photos (safe, but visually less realistic than real photographs -- a deliberate tradeoff for the demo phase).
