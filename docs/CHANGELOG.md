@@ -3,6 +3,26 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-19 — Real HS code (ТН ВЭД) search across the full international nomenclature, replacing the 6-item hardcoded list
+
+Founder reported: the TNVED search in Document Center only found 6 hardcoded products (wheat, cement, rebar, polyethylene, sunflower oil, plus one textile item), even though the surrounding UI text claimed "AI will find the right code" for any product.
+
+**Fix.** Downloaded and integrated the real official international Harmonized System dataset (source: `datasets/harmonized-system` on GitHub, data from UN Comtrade, open ODC PDDL license) — 5,613 codes at the 6-digit level, the base of customs codes used across all CIS countries. Search now works across this full nomenclature instead of 6 items.
+
+**Bilingual handling.** Official descriptions in the dataset are in English (the international standard's language). The platform does not machine-translate ~5,600 entries itself — translating specialized customs terminology carries real risk of a substantive error that leads to misclassification (legally meaningful, since the wrong code means the wrong duty/tariff). Instead, a curated dictionary (~150 common product categories — grains, metals, textiles, petrochemicals, electronics, food, vehicles, construction materials, etc.) translates Russian search terms into English keywords for the official dataset. Direct code search and English-language search work without dictionary limits.
+
+**Honest UI disclosure.** The platform doesn't claim the matched code is the final word for customs purposes — explicit warning text states that final national-tariff classification should be confirmed by a customs declarant/broker. Also removed the fabricated "standard specifications" (moisture %, tensile strength, etc.) that were auto-filled for the old 6 items — the real dataset contains no technical specs, only code and name, so that field is now honestly left blank for manual entry.
+
+**Bundle-size protection.** The dataset is ~900KB as a file. It's lazy-loaded — fetched only when the user opens the TNVED search tab, not on every page load, which would otherwise double the platform's initial load size and undo the earlier bundle-size work (see 🔴#4 entries above). Confirmed: main chunk stays at 666.98KB, dataset is a separate 859.93KB chunk with no preload hint.
+
+**Search-quality bug found and fixed mid-implementation.** The first version matched translated terms as arbitrary substrings, causing false positives from short translations — "tin" (олово) matched inside "whitings", "car" (автомобиль) matched inside "carcasses" (meat). Fixed with word-boundary matching, with a stricter full-word-boundary rule specifically for short (3-4 character) terms to prevent mid-word false matches while still allowing plurals/suffixes for longer terms (e.g. "pump" matching inside "Pumps").
+
+Verified: key test queries (pump, tin, coffee, banana, fertiliser, direct code 8471) return relevant top results. Known limitation, disclosed in the UI: the dictionary covers common product categories, not all 5,613 entries — niche items may need an English term or direct code.
+
+**Files changed**: `src/data/hsCodesRaw.json` (new), `src/data/hsCodes.js` (new), `src/pages/DocumentCenter.jsx`, `docs/SESSION_STATE.md`.
+
+---
+
 ## 2026-06-19 — Critical regression fixed: Marketplace crashed on click (canBuy scope bug introduced in this session's earlier #6 fix)
 
 Founder reported: the marketplace page failed to load — black screen on click, platform completely unresponsive.

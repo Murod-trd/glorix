@@ -2,16 +2,7 @@ import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { getCurrentUser } from '../data/mock';
 import { useAccountType } from '../context/AccountContext';
-
-// Mock ТН ВЭД database
-const tnved = [
-  { code: '1001 99 000 0', name: 'Пшеница мягкая и меслин', specs: ['Влажность: ≤ 14%', 'Протеин: ≥ 10%', 'Клейковина: ≥ 18%', 'Натура: ≥ 730 г/л'] },
-  { code: '5205 12 000 0', name: 'Пряжа хлопчатобумажная одиночная 714.29–232.56 дтекс', specs: ['Состав: 100% хлопок', 'Влажность: ≤ 8.5%', 'Прочность на разрыв: ≥ 14 сН/текс'] },
-  { code: '7214 20 000 0', name: 'Прутки из железа, с выступами (арматура)', specs: ['Предел текучести: ≥ 500 МПа', 'Предел прочности: ≥ 550 МПа', 'Удлинение: ≥ 14%'] },
-  { code: '2523 29 000 0', name: 'Цемент портландский прочий', specs: ['Прочность 28 дней: ≥ 40 МПа', 'Начало схватывания: ≥ 60 мин', 'SO₃: ≤ 3.5%'] },
-  { code: '1512 11 910 0', name: 'Масло подсолнечное сырое', specs: ['Кислотное число: ≤ 0.3 мг KOH/г', 'Влага: ≤ 0.1%', 'Перекисное число: ≤ 5 ммоль/кг'] },
-  { code: '3901 10 100 0', name: 'Полиэтилен с уд.весом менее 0,94 (LDPE)', specs: ['Плотность: < 0.94 г/см³', 'Прочность на разрыв: ≥ 18 МПа', 'Удлинение: ≥ 300%'] },
-];
+import { searchHsCodes, hasKnownTranslation } from '../data/hsCodes';
 
 // Parse Excel-like paste (tab or comma separated)
 function parsePaste(text) {
@@ -53,10 +44,16 @@ export default function DocumentCenter() {
     if (parsed.length) { setItems(parsed); setShowPaste(false); setPasteText(''); }
   };
 
+  const [tnvedLoading, setTnvedLoading] = useState(false);
+
   const searchTnved = (q) => {
     setTnvedQuery(q);
     if (q.length < 2) { setTnvedResults([]); return; }
-    setTnvedResults(tnved.filter(t => t.name.toLowerCase().includes(q.toLowerCase()) || t.code.includes(q)));
+    setTnvedLoading(true);
+    searchHsCodes(q).then(results => {
+      setTnvedResults(results);
+      setTnvedLoading(false);
+    });
   };
 
   const totalAmount = items.reduce((s, item) => {
@@ -310,18 +307,25 @@ ____________________     ____________________
       {/* ТН ВЭД TAB */}
       {tab === 'tnved' && (
         <div style={{ maxWidth: 720 }}>
-          <div style={{ fontSize: 14, color: 'var(--text-2)', marginBottom: 20, lineHeight: 1.7 }}>
-            Введите название товара или код ТН ВЭД — ИИ найдёт правильный код и стандартные характеристики.
-            Вы также можете найти товар по коду чтобы узнать его название и спецификации.
+          <div style={{ fontSize: 14, color: 'var(--text-2)', marginBottom: 12, lineHeight: 1.7 }}>
+            Введите название товара (на русском или английском) или код — поиск идёт по полной официальной международной номенклатуре (Harmonized System, основа кодов ТН ВЭД во всех странах СНГ).
+          </div>
+
+          <div style={{ padding: '10px 14px', background: 'rgba(245,166,35,0.08)', border: '1px solid rgba(245,166,35,0.25)', borderRadius: 8, fontSize: 12, color: 'var(--gold)', marginBottom: 20, lineHeight: 1.6 }}>
+            ⚠ Официальные названия товаров — на английском (язык международного стандарта). Платформа не переводит каждое из более чем 5000 наименований — для частых товаров поиск понимает русские названия через словарь ключевых терминов. Найденный код — основа для классификации, но финальное решение по коду для таможенного оформления должен подтвердить декларант или таможенный брокер.
           </div>
 
           <div style={{ position: 'relative', marginBottom: 20 }}>
             <input value={tnvedQuery} onChange={e => searchTnved(e.target.value)}
-              placeholder="Введите название товара или код (напр.: пшеница или 1001)"
+              placeholder="Введите название товара или код (напр.: пшеница, цемент, насос, или 1001)"
               style={{ width: '100%', padding: '12px 16px', background: 'var(--navy-3)', border: '1px solid var(--border-2)', borderRadius: 10, color: 'var(--text)', fontSize: 14 }} />
           </div>
 
-          {tnvedResults.length > 0 && (
+          {tnvedLoading && (
+            <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-3)', fontSize: 13 }}>Поиск…</div>
+          )}
+
+          {!tnvedLoading && tnvedResults.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
               {tnvedResults.map((t, i) => (
                 <div key={i} onClick={() => setSelectedTnved(t)} style={{
@@ -329,32 +333,29 @@ ____________________     ____________________
                   border: `1px solid ${selectedTnved?.code === t.code ? 'rgba(0,212,170,0.4)' : 'var(--border)'}`,
                   borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s',
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <div style={{ fontWeight: 600 }}>{t.name}</div>
-                    <span style={{ fontFamily: 'monospace', fontSize: 13, color: 'var(--accent)', fontWeight: 700 }}>{t.code}</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{t.description}</div>
+                    <span style={{ fontFamily: 'monospace', fontSize: 13, color: 'var(--accent)', fontWeight: 700, flexShrink: 0 }}>{t.code}</span>
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-2)' }}>
-                    {t.specs.join(' · ')}
-                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Раздел {t.section} · официальное название (международный HS)</div>
                 </div>
               ))}
+              {tnvedResults.length >= 20 && (
+                <div style={{ fontSize: 12, color: 'var(--text-3)', textAlign: 'center', padding: '4px 0' }}>Показаны первые 20 совпадений — уточните запрос для более точного результата</div>
+              )}
             </div>
           )}
 
           {selectedTnved && (
             <div className="card" style={{ padding: '20px', borderColor: 'rgba(0,212,170,0.3)' }}>
               <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4, color: 'var(--accent)' }}>{selectedTnved.code}</div>
-              <div style={{ fontWeight: 600, marginBottom: 14 }}>{selectedTnved.name}</div>
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>СТАНДАРТНЫЕ ХАРАКТЕРИСТИКИ</div>
-                {selectedTnved.specs.map((s, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6, fontSize: 13, color: 'var(--text-2)' }}>
-                    <span style={{ color: 'var(--accent)' }}>✓</span>{s}
-                  </div>
-                ))}
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>{selectedTnved.description}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 16 }}>Раздел {selectedTnved.section} международной номенклатуры HS</div>
+              <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 16, lineHeight: 1.6 }}>
+                Технические характеристики товара (влажность, состав, прочность и т.п.) платформа не подбирает автоматически — укажите их вручную после добавления в КП, исходя из реальной спецификации вашего товара.
               </div>
               <button className="btn btn-primary" onClick={() => {
-                setItems(prev => [...prev, { name: selectedTnved.name, tnved: selectedTnved.code, qty: '', unit: 'кг', price: '', specs: selectedTnved.specs.join(', ') }]);
+                setItems(prev => [...prev, { name: selectedTnved.description, tnved: selectedTnved.code, qty: '', unit: 'кг', price: '', specs: '' }]);
                 setTab('kp');
                 setSelectedTnved(null);
               }} style={{ fontSize: 13 }}>
@@ -363,21 +364,21 @@ ____________________     ____________________
             </div>
           )}
 
-          {tnvedQuery.length > 1 && tnvedResults.length === 0 && (
+          {!tnvedLoading && tnvedQuery.length > 1 && tnvedResults.length === 0 && (
             <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-3)' }}>
               <div style={{ fontSize: 32, marginBottom: 10 }}>🔍</div>
-              <div>Попробуйте: пшеница, цемент, арматура, полиэтилен, масло подсолнечное</div>
+              <div>Ничего не найдено по запросу «{tnvedQuery}»</div>
+              <div style={{ fontSize: 12, marginTop: 8 }}>Попробуйте другое слово, английское название товара, или код напрямую</div>
             </div>
           )}
 
           {tnvedQuery.length === 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-              {tnved.map((t, i) => (
-                <div key={i} onClick={() => { setTnvedQuery(t.name); setTnvedResults([t]); }} style={{ padding: '12px 14px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s' }}
+              {['пшеница', 'цемент', 'арматура', 'полиэтилен', 'подсолнечное масло', 'хлопок', 'сталь', 'насос', 'удобрения'].map((label, i) => (
+                <div key={i} onClick={() => searchTnved(label)} style={{ padding: '12px 14px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s', textAlign: 'center' }}
                   onMouseEnter={e => e.currentTarget.style.borderColor='rgba(0,212,170,0.3)'}
                   onMouseLeave={e => e.currentTarget.style.borderColor='var(--border)'}>
-                  <div style={{ fontSize: 11, color: 'var(--accent)', fontFamily: 'monospace', marginBottom: 4 }}>{t.code}</div>
-                  <div style={{ fontSize: 12, fontWeight: 500 }}>{t.name.slice(0,40)}</div>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{label}</div>
                 </div>
               ))}
             </div>
