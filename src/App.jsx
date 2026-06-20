@@ -20,11 +20,14 @@ import AccountVerification from './pages/AccountVerification';
 import DocumentCenter from './pages/DocumentCenter';
 import AccountSelect from './pages/AccountSelect';
 import LegalAI from './pages/LegalAI';
+import NotFound from './pages/NotFound';
+import ErrorBoundary from './components/ErrorBoundary';
 import { AccountProvider } from './context/AccountContext';
 import './index.css';
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <AccountProvider>
     <BrowserRouter>
       <Routes>
@@ -55,6 +58,7 @@ export default function App() {
                 <Route path="/analytics" element={<Analytics />} />
                 <Route path="/accounts" element={<AccountVerification />} />
                 <Route path="/documents" element={<DocumentCenter />} />
+                <Route path="*" element={<NotFound />} />
               </Routes>
             </main>
           </div>
@@ -62,5 +66,6 @@ export default function App() {
       </Routes>
     </BrowserRouter>
     </AccountProvider>
+    </ErrorBoundary>
   );
 }

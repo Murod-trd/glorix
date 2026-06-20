@@ -3,6 +3,21 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-19 — ErrorBoundary + 404 page (#13); Legal.jsx overclaims and false present-tense data-storage claims fixed (#10)
+
+**#13 closed.** Added `ErrorBoundary` (`src/components/ErrorBoundary.jsx`, a class component -- React's documented requirement, function components cannot catch render errors via hooks) and a 404 page (`src/pages/NotFound.jsx`). `ErrorBoundary` wraps the whole app in `App.jsx`; `NotFound` is wired as the wildcard route inside the main layout. This is direct protection against a repeat of the session-6 incident (an unhandled error in Marketplace.jsx crashed the entire platform with a black screen, no message) -- a similar error now shows a clear screen with a way back to the homepage instead.
+
+**#10 closed.** `Legal.jsx` (the ToS) contained several present-tense claims about things that don't exist:
+- "ИИ-системой Платформы" (the platform's "AI system") for the deposit-rate formula -- renamed to "тарифом Платформы" (the platform's tariff), matching a rename already made in the code in an earlier session, which the ToS text hadn't caught up with
+- "ИИ-система Платформы автоматически проверяет каждую сделку" (AI system automatically checks every transaction) for sanctions compliance -- rewritten honestly to describe what actually runs (keyword screening for prohibited/export-controlled categories at product publication), dropping both the "AI" framing and the "every transaction" overclaim
+- The entire "Защита данных" (data protection) section described data collection/storage and server infrastructure as current reality ("Данные хранятся на серверах в юрисдикции участника" -- data is stored on servers) -- there is no backend at all, nothing is transmitted or stored beyond the user's browser. Added an explicit "Текущий статус (демо-версия)" disclosure at the top of the section, converted the remaining bullets to future tense ("будет собирать", "запланировано") describing the production plan rather than current behavior
+
+Verified with `npm run build`: succeeds, main chunk 683.41KB (modest growth from two small new components).
+
+**Files changed**: `src/components/ErrorBoundary.jsx` (new), `src/pages/NotFound.jsx` (new), `src/App.jsx`, `src/pages/Legal.jsx`, `docs/SESSION_STATE.md`.
+
+---
+
 ## 2026-06-19 — Official Russian ТН ВЭД group names (96 groups) added as the most authoritative search tier
 
 Founder flagged a real accuracy problem: Russian-language search sometimes surfaced wrong matches (e.g. searching "жемчуг"/pearl could surface tapioca, because the English dataset describes tapioca pearls using the word "pearls" too). Founder asked for backup translators and much broader dictionary coverage.
