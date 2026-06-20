@@ -2,15 +2,32 @@ import { useState } from 'react';
 import { getCurrentUser } from '../data/mock';
 import { useAccountType } from '../context/AccountContext';
 
+const PREFS_KEY = 'glorix_profile_prefs';
+
+function loadPrefs() {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 export default function Profile() {
   const { accountType } = useAccountType();
   const currentUser = getCurrentUser(accountType);
-  const [contractPref, setContractPref] = useState('own');
-  const [acceptTemplate, setAcceptTemplate] = useState(true);
-  const [law, setLaw] = useState('UZ');
+  const stored = loadPrefs();
+  const [contractPref, setContractPref] = useState(stored?.contractPref ?? 'own');
+  const [acceptTemplate, setAcceptTemplate] = useState(stored?.acceptTemplate ?? true);
+  const [law, setLaw] = useState(stored?.law ?? 'UZ');
   const [saved, setSaved] = useState(false);
 
-  const save = () => { setSaved(true); setTimeout(() => setSaved(false), 2000); };
+  const save = () => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ contractPref, acceptTemplate, law }));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
 
   const inputStyle = {
     width: '100%', padding: '10px 14px',

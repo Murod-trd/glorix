@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAccountType } from '../context/AccountContext';
 
@@ -80,27 +81,66 @@ const commonNav = [
 export default function Sidebar() {
   const navigate = useNavigate();
   const { accountType: type } = useAccountType();
+  const [mobileOpen, setMobileOpen] = useState(false);
   const cfg = configs[type] || configs.buyer;
   const score = cfg.score;
   const trustColor = score >= 70 ? '#00D4AA' : score >= 30 ? '#F5A623' : '#FF4D4D';
   const nav = [...cfg.nav, ...commonNav];
 
-  return (
-    <aside style={{ width: 220, height: '100vh', background: '#0D1424', borderRight: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', position: 'fixed', top: 0, left: 0, zIndex: 100, overflow: 'hidden' }}>
+  const goTo = (path) => {
+    setMobileOpen(false);
+    navigate(path);
+  };
 
-      {/* Logo */}
-      <div style={{ padding: '16px 20px 10px', borderBottom: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer' }} onClick={() => navigate('/')}>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, letterSpacing: 3 }}>
+  return (
+    <>
+      {/* Mobile top bar — only visible on small screens via CSS class */}
+      <div className="mobile-topbar">
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, letterSpacing: 2 }}>
           GLO<span style={{ color: 'var(--accent)' }}>RIX</span>
         </div>
-        <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1, letterSpacing: 1 }}>B2B TRADE PLATFORM · CIS</div>
+        <button
+          aria-label="Открыть меню"
+          onClick={() => setMobileOpen(true)}
+          style={{ background: 'none', border: 'none', color: 'var(--text)', fontSize: 22, cursor: 'pointer', padding: 4, lineHeight: 1 }}
+        >
+          ☰
+        </button>
+      </div>
+
+      {/* Backdrop, mobile only, shown when drawer is open */}
+      {mobileOpen && (
+        <div
+          className="mobile-backdrop"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      <aside className={`sidebar${mobileOpen ? ' sidebar-open' : ''}`} style={{ width: 220, height: '100vh', background: '#0D1424', borderRight: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', position: 'fixed', top: 0, left: 0, zIndex: 100, overflow: 'hidden' }}>
+
+      {/* Logo */}
+      <div style={{ padding: '16px 20px 10px', borderBottom: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }} onClick={() => goTo('/')}>
+        <div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, letterSpacing: 3 }}>
+            GLO<span style={{ color: 'var(--accent)' }}>RIX</span>
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1, letterSpacing: 1 }}>B2B TRADE PLATFORM · CIS</div>
+        </div>
+        <button
+          aria-label="Закрыть меню"
+          className="mobile-close-btn"
+          onClick={(e) => { e.stopPropagation(); setMobileOpen(false); }}
+          style={{ background: 'none', border: 'none', color: 'var(--text-2)', fontSize: 20, cursor: 'pointer', padding: 2, lineHeight: 1 }}
+        >
+          ×
+        </button>
       </div>
 
       {/* Account badge */}
       <div style={{ padding: '8px 10px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', background: `${cfg.color}18`, border: `1px solid ${cfg.color}55`, borderRadius: 8 }}>
           <span style={{ fontSize: 12, color: cfg.color, fontWeight: 700 }}>{cfg.icon} {cfg.label}</span>
-          <button onClick={() => navigate('/account-select')} style={{ background: 'none', color: cfg.color, fontSize: 10, cursor: 'pointer', opacity: 0.75, textDecoration: 'underline' }}>сменить</button>
+          <button onClick={() => goTo('/account-select')} style={{ background: 'none', color: cfg.color, fontSize: 10, cursor: 'pointer', opacity: 0.75, textDecoration: 'underline' }}>сменить</button>
         </div>
       </div>
 
@@ -108,7 +148,7 @@ export default function Sidebar() {
       <div style={{ padding: '5px 10px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 10px', background: 'var(--gold-dim)', border: '1px solid rgba(245,166,35,0.25)', borderRadius: 6 }}>
           <span style={{ fontSize: 10, color: 'var(--gold)', fontWeight: 600 }}>⚠ ДЕМО</span>
-          <button onClick={() => navigate('/roadmap')} style={{ background: 'none', color: 'var(--gold)', fontSize: 9, cursor: 'pointer', textDecoration: 'underline' }}>Roadmap</button>
+          <button onClick={() => goTo('/roadmap')} style={{ background: 'none', color: 'var(--gold)', fontSize: 9, cursor: 'pointer', textDecoration: 'underline' }}>Roadmap</button>
         </div>
       </div>
 
@@ -119,7 +159,7 @@ export default function Sidebar() {
             <div key={i} style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 700, letterSpacing: 1.5, padding: '9px 10px 3px' }}>{item.divider}</div>
           );
           return (
-            <NavLink key={`${item.to}-${i}`} to={item.to} end={item.to === '/'} style={({ isActive }) => ({
+            <NavLink key={`${item.to}-${i}`} to={item.to} end={item.to === '/'} onClick={() => setMobileOpen(false)} style={({ isActive }) => ({
               display: 'flex', alignItems: 'center', gap: 8,
               padding: '7px 10px', borderRadius: 8, marginBottom: 1,
               fontSize: 13, fontWeight: isActive ? 500 : 400,
@@ -142,7 +182,7 @@ export default function Sidebar() {
 
       {/* User */}
       <div style={{ padding: '10px 12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: 'pointer' }} onClick={() => navigate('/profile')}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: 'pointer' }} onClick={() => goTo('/profile')}>
           <div style={{ width: 32, height: 32, borderRadius: '50%', background: `${cfg.color}20`, border: `2px solid ${cfg.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>{cfg.flag}</div>
           <div>
             <div style={{ fontSize: 11, fontWeight: 600 }}>{cfg.name}</div>
@@ -158,10 +198,11 @@ export default function Sidebar() {
             <div style={{ height: '100%', width: `${score}%`, background: trustColor, borderRadius: 2 }} />
           </div>
         </div>
-        <button onClick={() => navigate('/account-select')} style={{ width: '100%', padding: '7px', background: `${cfg.color}15`, border: `1px solid ${cfg.color}44`, borderRadius: 7, color: cfg.color, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+        <button onClick={() => goTo('/account-select')} style={{ width: '100%', padding: '7px', background: `${cfg.color}15`, border: `1px solid ${cfg.color}44`, borderRadius: 7, color: cfg.color, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
           ⇄ Сменить аккаунт
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

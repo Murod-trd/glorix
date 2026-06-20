@@ -3,6 +3,18 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-19 — Mobile layout (#9) and profile persistence (#19)
+
+**#9 closed.** Added a collapsible mobile drawer for screens ≤900px: a fixed top bar with logo and a hamburger button, the sidebar now slides in as an overlay instead of always occupying space, with a backdrop and close button. Desktop (>900px) behavior is unchanged — purely additive via a media query in `index.css`. Deleted the dead `App.css` (re-confirmed it was never imported anywhere).
+
+**#19 closed.** Profile settings (contract preference, template acceptance, applicable law) now persist to `localStorage` and reload automatically on return visits. Previously the "Сохранить" button only toggled a 2-second visual confirmation with no actual persistence — selections were lost on every page refresh.
+
+Verified with `npm run build`: succeeds, main chunk 660.63KB (small increase from the mobile CSS, bundle optimization from 🔴#4 unaffected).
+
+**Files changed**: `src/components/Sidebar.jsx`, `src/App.jsx`, `src/index.css`, `src/App.css` (deleted), `src/pages/Profile.jsx`, `docs/SESSION_STATE.md`.
+
+---
+
 ## 2026-06-19 — Sanctions/export-control screening added (founder-reported critical gap); seller permission bug fixed (#11); dead code removed (#8, #21); roadmap dates updated (#12)
 
 **Sanctions screening — the headline fix.** The founder personally tested the platform by attempting to create a tender and list a marketplace product with clearly sanctioned/export-controlled content. Neither was blocked, and no warning appeared — confirming that `sanctions: false` and `aiCheck.sanctionsOk: true` in `marketplace.js` are static demo values with zero connection to actual user input. This had already been flagged as a known limitation in `BUSINESS_RULES.md` (Sanctions list absence row, and the Legal.jsx sanctions-claim line) but never actually fixed. Left unaddressed, this is not just a missing feature — it is a real path for the platform itself to become a target of sanctions enforcement once it handles real trade.
