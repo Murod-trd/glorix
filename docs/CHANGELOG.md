@@ -3,6 +3,30 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-19 — Official Russian ТН ВЭД group names (96 groups) added as the most authoritative search tier
+
+Founder flagged a real accuracy problem: Russian-language search sometimes surfaced wrong matches (e.g. searching "жемчуг"/pearl could surface tapioca, because the English dataset describes tapioca pearls using the word "pearls" too). Founder asked for backup translators and much broader dictionary coverage.
+
+**Approach, agreed step-by-step with the founder.** Rather than machine-translating all 5,613 entries of the international dataset (real risk of a translation error per entry) or manually collecting all 5,613 entries from an official source (not feasible in any single session -- would require thousands of page fetches), the **top level** was collected: all 96 official Russian товарная группа names (2-digit group level) from classifikators.ru, which references the official Decision of the Eurasian Economic Commission Council No. 80 of 14.09.2021. These are genuine official Russian names, not a translation -- so they're checked before the dictionary, as the most trustworthy tier.
+
+**Search now has four tiers instead of three:**
+1. Direct numeric code -- unchanged
+2. **New.** Official ТН ВЭД group name match (96 groups) -- if the query matches an official group name, results are immediately scoped to that group's code prefix -- precise, no translation risk
+3. Local dictionary (459 terms) -- as before, for specific products that don't match a whole group's name
+4. Live automatic translation (unofficial Google endpoint) -- as before, last resort
+
+**Confirmed accuracy improvement.** "Олово" (tin) now returns the precise `800110 - Tin; unwrought` (group 80, "Tin and articles thereof") instead of dictionary-driven near-misses. Same improvement for "оружие" (weapons), "обувь" (footwear), "мебель" (furniture), "часы" (clocks/watches), "удобрения" (fertilizers), "кофе" (coffee) -- all now resolve through the official group tier first.
+
+**Honest limitation, recorded for future sessions.** Only the top level was collected (96 groups out of 5,613 total entries) -- deeper levels (4-digit headings, ~1,200 entries; 6-digit specifics, all 5,613) remain for gradual collection in future sessions, as explicitly agreed with the founder (incrementally, not all at once). Specific products within a group still resolve via the dictionary/live-translate tiers until that deeper level exists.
+
+**Backup translators -- requested, not implemented this session.** Founder asked for alternative translators (DeepL and others) as a fallback if Google is unavailable. This remains an open task; the system currently has only one live-translation provider (Google's unofficial endpoint), behind the now-more-reliable dictionary and official-group tiers.
+
+Verified with `npm run build`: succeeds, main chunk 679.74KB (modest growth), new `tnvedGroupsRu.json` (96 groups, 14KB) is a separate lazy-loaded chunk (13.48KB built), not preloaded -- same discipline as `hsCodesRaw.json`.
+
+**Files changed**: `src/data/tnvedGroupsRu.json` (new), `src/data/hsCodes.js`, `src/pages/DocumentCenter.jsx`, `docs/SESSION_STATE.md`.
+
+---
+
 ## 2026-06-19 — TNVED search: dictionary expanded to 459 terms, live translation fallback with multi-candidate selection
 
 Founder proposed: Russian query → translate → search English nomenclature → if ambiguous, show multiple matches for the user to pick from. Also explicitly approved using a free external translator and expanding the dictionary toward 500+ terms, accepting this moves to a real backend eventually.

@@ -293,12 +293,36 @@ function normalize(s) {
 }
 
 let cachedData = null;
+let cachedRuGroups = null;
 
 async function loadDataset() {
   if (cachedData) return cachedData;
   const mod = await import('./hsCodesRaw.json');
   cachedData = mod.default;
   return cachedData;
+}
+
+/**
+ * Загружает официальные русские названия 96 товарных групп ТН ВЭД ЕАЭС
+ * (2-значный уровень — например '01' → 'Живые животные'). Источник —
+ * classifikators.ru, который ссылается на официальное Решение Совета
+ * Евразийской экономической комиссии от 14.09.2021 №80. Это подлинные
+ * официальные русские названия, не машинный перевод — поэтому проверяются
+ * раньше словаря и живого перевода: если запрос совпадает с названием
+ * группы, результат ограничивается товарами из этой группы (по 2-значному
+ * префиксу кода), что даёт точное соответствие без риска ошибки перевода.
+ *
+ * Это покрывает только верхний уровень (96 групп из 5613 позиций
+ * международного датасета) — собрать полный 6-значный уровень на русском
+ * вручную нереалистично за одну сессию (тысячи отдельных страниц).
+ * Дальнейшее расширение глубины (4-значный, затем 6-значный уровень)
+ * запланировано как постепенная работа в будущих сессиях.
+ */
+async function loadRuGroups() {
+  if (cachedRuGroups) return cachedRuGroups;
+  const mod = await import('./tnvedGroupsRu.json');
+  cachedRuGroups = mod.default;
+  return cachedRuGroups;
 }
 
 /**
@@ -364,13 +388,16 @@ function matchByTerms(hsCodesRaw, terms) {
  * по требованию при первом вызове, дальше берётся из памяти.
  *
  * Порядок попыток для русского текстового запроса (не код, не латиница):
- *   1) прямое совпадение в датасете (на случай смешанного текста);
- *   2) локальный словарь — мгновенно, без сети;
- *   3) если словарь не дал совпадений — живой перевод (см. liveTranslateRuToEn)
- *      как запасной вариант; при неудаче возвращается пустой список с
- *      понятным указанием причины через поле `translationUnavailable`.
+ *   1) официальные русские названия 96 товарных групп ТН ВЭД ЕАЭС —
+ *      подлинные названия, не перевод (см. loadRuGroups), самый надёжный
+ *      уровень, проверяется первым;
+ *   2) локальный словарь (~459 терминов) — мгновенно, без сети;
+ *   3) если ни группа, ни словарь не дали совпадений — живой перевод
+ *      (см. liveTranslateRuToEn) как запасной вариант; при неудаче
+ *      возвращается пустой список с понятным указанием причины через
+ *      поле `translationUnavailable`.
  *
- * @returns {Promise<{results: Array<{code, description, section}>, source: 'code'|'dictionary'|'live-translate'|'direct', translationUnavailable?: boolean}>}
+ * @returns {Promise<{results: Array<{code, description, section}>, source: 'code'|'official-ru-group'|'dictionary'|'live-translate'|'direct', translationUnavailable?: boolean}>}
  */
 export async function searchHsCodes(query) {
   const q = normalize(query);
@@ -391,7 +418,22 @@ export async function searchHsCodes(query) {
     return { results: direct.slice(0, 20), source: 'direct' };
   }
 
-  // Русский запрос — сначала пробуем словарь
+  // Русский запрос — сначала проверяем официальные названия групп ТН ВЭД
+  // (96 групп, подлинные русские названия из ЕАЭС-классификатора, не
+  // перевод) — это самый надёжный уровень, проверяется раньше словаря.
+  const ruGroups = await loadRuGroups();
+  const matchedGroupCodes = Object.entries(ruGroups)
+    .filter(([, name]) => normalize(name).includes(q))
+    .map(([code]) => code);
+
+  if (matchedGroupCodes.length > 0) {
+    const groupMatches = hsCodesRaw.filter(r => matchedGroupCodes.includes(r.code.slice(0, 2)));
+    if (groupMatches.length > 0) {
+      return { results: groupMatches.slice(0, 20), source: 'official-ru-group' };
+    }
+  }
+
+  // Официальная группа не совпала — пробуем словарь
   const dictTerms = [];
   for (const [ru, en] of Object.entries(RU_EN_TERMS)) {
     if (q.includes(ru)) dictTerms.push(...en.split(' '));
