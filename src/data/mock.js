@@ -5,6 +5,12 @@
 // src/context/AccountContext.jsx) и сами выбирают нужного пользователя через
 // getCurrentUser(accountType) — закрывает аудит-пункт 🟠#6.
 
+// Закрывает аудит-пункт 🟡#17 — раньше все три демо-аккаунта были
+// узбекскими компаниями, хотя платформа заявлена как продукт для всего
+// региона СНГ (см. MASTER_PROJECT_CONTEXT.md). Теперь три аккаунта
+// представляют три разные страны региона — это и более честная
+// демонстрация позиционирования платформы, и более убедительный пример
+// для потенциальных партнёров/инвесторов не из Узбекистана.
 const users = {
   buyer: {
     id: 'u1', name: 'Tashkent Agro LLC', country: 'UZ', flag: '🇺🇿',
@@ -13,13 +19,13 @@ const users = {
     joined: '2024-03-15',
   },
   seller: {
-    id: 'u2', name: 'FerganaTex Export', country: 'UZ', flag: '🇺🇿',
+    id: 'u2', name: 'KazSteel Trading', country: 'KZ', flag: '🇰🇿',
     role: 'seller', roleLabel: 'Продавец',
     trustScore: 91, totalDeals: 45, successDeals: 43, verified: true,
     joined: '2023-08-01',
   },
   both: {
-    id: 'u3', name: 'BekabadMetal Group', country: 'UZ', flag: '🇺🇿',
+    id: 'u3', name: 'Sibmetall Group', country: 'RU', flag: '🇷🇺',
     role: 'both', roleLabel: 'Покупатель + Продавец',
     trustScore: 96, totalDeals: 89, successDeals: 87, verified: true,
     joined: '2022-11-10',
@@ -29,6 +35,8 @@ const users = {
 export function getCurrentUser(accountType) {
   return users[accountType] || users.buyer;
 }
+
+export { users };
 
 export const tenders = [
   {

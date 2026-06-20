@@ -1,13 +1,12 @@
 import { useNavigate } from 'react-router-dom';
 import { useAccountType } from '../context/AccountContext';
+import { users } from '../data/mock';
 
 const accounts = [
   {
     id: 'buyer',
     icon: '🛒',
     title: 'Покупатель',
-    company: 'Tashkent Agro LLC',
-    flag: '🇺🇿',
     color: '#63B3ED',
     bg: 'rgba(99,179,237,0.08)',
     border: 'rgba(99,179,237,0.4)',
@@ -21,8 +20,6 @@ const accounts = [
     id: 'seller',
     icon: '🏭',
     title: 'Продавец',
-    company: 'FerganaTex Export',
-    flag: '🇺🇿',
     color: '#00D4AA',
     bg: 'rgba(0,212,170,0.08)',
     border: 'rgba(0,212,170,0.4)',
@@ -36,8 +33,6 @@ const accounts = [
     id: 'both',
     icon: '🔄',
     title: 'Покупатель + Продавец',
-    company: 'BekabadMetal Group',
-    flag: '🇺🇿',
     color: '#F5A623',
     bg: 'rgba(245,166,35,0.08)',
     border: 'rgba(245,166,35,0.4)',
@@ -95,7 +90,7 @@ export default function AccountSelect() {
               </div>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 16, color: a.color }}>{a.title}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>{a.flag} {a.company}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>{users[a.id]?.flag} {users[a.id]?.name}</div>
               </div>
             </div>
 

@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { getCurrentUser } from '../data/mock';
+import { useAccountType } from '../context/AccountContext';
 
 const monthlyData = [
   { month: 'Янв', spend: 48000, deals: 3, saved: 4200 },
@@ -20,7 +22,7 @@ const categorySpend = [
 
 const topSuppliers = [
   { name: 'AgroTrade KZ', country: '🇰🇿', deals: 8, volume: 185000, avgScore: 94, onTime: 96 },
-  { name: 'BekabadMetal', country: '🇺🇿', deals: 5, volume: 98000, avgScore: 96, onTime: 98 },
+  { name: 'Sibmetall Trading', country: '🇷🇺', deals: 5, volume: 98000, avgScore: 91, onTime: 98 },
   { name: 'UzBuild LLC', country: '🇺🇿', deals: 4, volume: 124000, avgScore: 91, onTime: 94 },
 ];
 
@@ -33,6 +35,8 @@ const alerts = [
 const maxSpend = Math.max(...monthlyData.map(d => d.spend));
 
 export default function Analytics() {
+  const { accountType } = useAccountType();
+  const currentUser = getCurrentUser(accountType);
   const [period, setPeriod] = useState('7m');
 
   const totalSpend = monthlyData.reduce((s, d) => s + d.spend, 0);
@@ -46,7 +50,7 @@ export default function Analytics() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 4 }}>Дашборд закупок</h1>
-          <div style={{ fontSize: 14, color: 'var(--text-2)' }}>Tashkent Agro LLC · 2025 год</div>
+          <div style={{ fontSize: 14, color: 'var(--text-2)' }}>{currentUser.name} · {new Date().getFullYear()} год</div>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {[['7m','7 мес'], ['3m','3 мес'], ['1m','1 мес']].map(([v,l]) => (

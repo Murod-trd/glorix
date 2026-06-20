@@ -148,7 +148,7 @@ export const products = [
     id: 'p4',
     title: 'Арматура А500С ф12 мм — прутки 12 м',
     category: 'metals',
-    seller: { id: 's4', name: 'BekabadMetal', country: 'UZ', flag: '🇺🇿', city: 'Бекабад', trustScore: 96, verified: true, totalDeals: 203 },
+    seller: { id: 's4', name: 'Sibmetall Trading', country: 'RU', flag: '🇷🇺', city: 'Новосибирск', trustScore: 91, verified: true, totalDeals: 203 },
     price: 680, currency: 'USD', unit: 'тонна', minOrder: 5, maxOrder: 5000,
     stock: 850, stockAuto: false,
     photo: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&q=80',

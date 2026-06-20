@@ -3,6 +3,28 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-19 — Demo accounts diversified across CIS countries (#17); found and fixed company-data duplication across 5 files
+
+All three demo accounts were Uzbek companies despite the platform being positioned as a CIS-wide product. Now: buyer = Tashkent Agro LLC (UZ, stays Uzbek -- the platform originates there), seller = KazSteel Trading (KZ), both = Sibmetall Group (RU).
+
+**Found and fixed an architectural duplication problem directly violating the project's no-duplicate-functionality rule.** The same demo company data (name, country, flag) was hardcoded independently in 5 different files: `mock.js`, `Sidebar.jsx`, `marketplace.js`, `Analytics.jsx`, `AccountSelect.jsx`. Centralized: `mock.js` now exports a single `users` object, and the other files read from it instead of keeping their own copies.
+
+**Found and fixed two real bugs uncovered while removing the duplication:**
+- `Marketplace.jsx` -- the commercial-proposal template had "FerganaTex Export" hardcoded regardless of which account was actually logged in. Now uses the real current user's name.
+- `Analytics.jsx` -- the dashboard header showed a frozen "Tashkent Agro LLC · 2025 год" for any account and any year. Now shows the real current user and the real current year.
+
+**Found and fixed a balance issue introduced as a side effect of the first version of this fix.** Renaming the seller account to "KazSteel Trading" (KZ) unintentionally left 3 of 6 marketplace sellers as Kazakh companies (KazOil, KazSteel, KazPack) -- not the goal of this fix, and it would have undermined the diversity the fix was meant to add. Renamed to "Sibmetall Trading" (RU), synced with `Analytics.jsx`. Final marketplace seller distribution: 2x UZ, 2x KZ, 1x RU, 1x AZ.
+
+Verified via direct server-side rendering for all three account types (buyer/seller/both) across Sidebar, Analytics, Marketplace, and AccountSelect pages -- all render without errors, confirmed all three flags (🇺🇿🇰🇿🇷🇺) present in AccountSelect.
+
+**Open question, explicitly left unresolved rather than decided unilaterally.** `marketplace.js` still has a "FerganaTex" seller (cotton yarn, UZ) -- kept as an independent marketplace seller not tied to the current buyer/seller demo account, which is architecturally sound (a real platform has many sellers besides the current account holder), but this was decided independently and not explicitly confirmed by the founder.
+
+Verified with `npm run build`: succeeds, main chunk 687.18KB (slightly smaller than before, due to the removed code duplication).
+
+**Files changed**: `src/data/mock.js`, `src/components/Sidebar.jsx`, `src/data/marketplace.js`, `src/pages/Analytics.jsx`, `src/pages/AccountSelect.jsx`, `src/pages/Marketplace.jsx`, `docs/SESSION_STATE.md`.
+
+---
+
 ## 2026-06-19 — Google Fonts CDN dependency removed, self-hosted instead (#15)
 
 Founder asked why this matters when they're based in Uzbekistan, not Russia -- important clarification: GLORIX is documented in MASTER_PROJECT_CONTEXT.md as a product for the entire CIS region (180,000+ companies), not just Uzbekistan, and Google is officially blocked at the state level in Russia and Turkmenistan -- both part of the platform's stated target market. The `fonts.googleapis.com` dependency risked real future customers in those markets seeing a broken or slow-loading interface.

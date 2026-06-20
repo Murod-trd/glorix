@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { products, categories, calcMarketplaceFee } from '../data/marketplace';
+import { getCurrentUser } from '../data/mock';
 import { useAccountType } from '../context/AccountContext';
 import { screenForSanctions } from '../utils/sanctionsScreening';
 
@@ -312,6 +313,8 @@ export default function Marketplace() {
 
 // Add Product Modal with AI КП helper
 function AddProductModal({ onClose }) {
+  const { accountType } = useAccountType();
+  const currentSeller = getCurrentUser(accountType);
   const [step, setStep] = useState(0); // 0=form, 1=ai-kp, 2=done
   const [form, setForm] = useState({ title: '', category: '', price: '', unit: 'кг', minOrder: '', stock: '', incoterms: 'DAP', deliveryDays: '3', description: '', specs: [{ p: '', v: '' }] });
   const [kp, setKp] = useState('');
@@ -332,7 +335,7 @@ function AddProductModal({ onClose }) {
     setTimeout(() => {
       setKp(`КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ
 
-От: FerganaTex Export (Продавец GLORIX)
+От: ${currentSeller.name} (Продавец GLORIX)
 Дата: ${new Date().toLocaleDateString('ru-RU')}
 Действительно: 30 дней
 

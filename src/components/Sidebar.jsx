@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAccountType } from '../context/AccountContext';
+import { users } from '../data/mock';
 
 const configs = {
   buyer: {
     color: '#63B3ED', icon: '🛒', label: 'Покупатель',
-    name: 'Tashkent Agro LLC', flag: '🇺🇿', score: 87,
     nav: [
       { to: '/', icon: '⬡', label: 'Дашборд' },
       { divider: 'ЗАКУПКИ' },
@@ -26,7 +26,6 @@ const configs = {
   },
   seller: {
     color: '#00D4AA', icon: '🏭', label: 'Продавец',
-    name: 'FerganaTex Export', flag: '🇺🇿', score: 91,
     nav: [
       { to: '/', icon: '⬡', label: 'Дашборд' },
       { divider: 'МОИ ПРОДАЖИ' },
@@ -44,7 +43,6 @@ const configs = {
   },
   both: {
     color: '#F5A623', icon: '🔄', label: 'Покуп. + Продавец',
-    name: 'BekabadMetal Group', flag: '🇺🇿', score: 96,
     nav: [
       { to: '/', icon: '⬡', label: 'Дашборд' },
       { divider: 'ТОРГОВЛЯ' },
@@ -83,7 +81,8 @@ export default function Sidebar() {
   const { accountType: type } = useAccountType();
   const [mobileOpen, setMobileOpen] = useState(false);
   const cfg = configs[type] || configs.buyer;
-  const score = cfg.score;
+  const user = users[type] || users.buyer;
+  const score = user.trustScore;
   const trustColor = score >= 70 ? '#00D4AA' : score >= 30 ? '#F5A623' : '#FF4D4D';
   const nav = [...cfg.nav, ...commonNav];
 
@@ -183,9 +182,9 @@ export default function Sidebar() {
       {/* User */}
       <div style={{ padding: '10px 12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: 'pointer' }} onClick={() => goTo('/profile')}>
-          <div style={{ width: 32, height: 32, borderRadius: '50%', background: `${cfg.color}20`, border: `2px solid ${cfg.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>{cfg.flag}</div>
+          <div style={{ width: 32, height: 32, borderRadius: '50%', background: `${cfg.color}20`, border: `2px solid ${cfg.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>{user.flag}</div>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 600 }}>{cfg.name}</div>
+            <div style={{ fontSize: 11, fontWeight: 600 }}>{user.name}</div>
             <div style={{ fontSize: 10, color: cfg.color }}>{cfg.icon} {cfg.label}</div>
           </div>
         </div>
