@@ -403,9 +403,9 @@ async function loadRuGroups() {
  *
  * @returns {Promise<string|null>} переведённый текст или null при ошибке
  */
-async function translateViaGoogle(text) {
+async function translateViaGoogle(text, sourceLang, targetLang) {
   try {
-    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=ru&tl=en&dt=t&q=${encodeURIComponent(text)}`;
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang}&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4000);
     const res = await fetch(url, { signal: controller.signal });
@@ -414,7 +414,7 @@ async function translateViaGoogle(text) {
     const data = await res.json();
     // Формат ответа: [[[translated, original, ...], ...], ...]
     const translated = data?.[0]?.map(chunk => chunk[0]).join('') ?? null;
-    return translated ? translated.toLowerCase() : null;
+    return translated || null;
   } catch {
     return null;
   }
@@ -429,9 +429,9 @@ async function translateViaGoogle(text) {
  *
  * @returns {Promise<string|null>} переведённый текст или null при ошибке
  */
-async function translateViaMyMemory(text) {
+async function translateViaMyMemory(text, sourceLang, targetLang) {
   try {
-    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=ru%7Cen`;
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${sourceLang}%7C${targetLang}`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4000);
     const res = await fetch(url, { signal: controller.signal });
@@ -442,24 +442,54 @@ async function translateViaMyMemory(text) {
     // случаях ("200" при лимите) — сравниваем как строку для надёжности.
     if (String(data?.responseStatus) !== '200') return null;
     const translated = data?.responseData?.translatedText;
-    return translated ? translated.toLowerCase() : null;
+    return translated || null;
   } catch {
     return null;
   }
 }
 
 /**
- * Пробует перевести текст по очереди через доступных живых провайдеров.
- * Возвращает null только если ВСЕ провайдеры недоступны или вернули ошибку.
+ * Пробует перевести текст по очереди через доступных живых провайдеров,
+ * в любом направлении (используется и для перевода запроса RU→EN при
+ * поиске, и для перевода найденного товара EN→RU при отображении
+ * результата). Возвращает null только если ВСЕ провайдеры недоступны
+ * или вернули ошибку.
  */
-async function liveTranslateRuToEn(text) {
-  const google = await translateViaGoogle(text);
+async function liveTranslate(text, sourceLang, targetLang) {
+  const google = await translateViaGoogle(text, sourceLang, targetLang);
   if (google) return google;
 
-  const myMemory = await translateViaMyMemory(text);
+  const myMemory = await translateViaMyMemory(text, sourceLang, targetLang);
   if (myMemory) return myMemory;
 
   return null;
+}
+
+async function liveTranslateRuToEn(text) {
+  const result = await liveTranslate(text, 'ru', 'en');
+  return result ? result.toLowerCase() : null;
+}
+
+/**
+ * Переводит название найденного товара с английского на русский для
+ * показа пользователю — основатель явно одобрил это как машинный перевод
+ * без гарантии 100% точности для каждой позиции (в отличие от
+ * groupNameRu, который остаётся подлинным официальным названием, не
+ * переводом). Кэшируется в памяти на время сессии страницы, чтобы не
+ * переводить одно и то же название повторно при повторном выборе того
+ * же товара.
+ *
+ * @returns {Promise<string|null>} переведённое название или null, если
+ *   оба провайдера недоступны — в этом случае UI должен честно показать
+ *   английский оригинал, а не пустоту или ошибку.
+ */
+const translationCache = new Map();
+
+export async function translateProductNameToRu(englishName) {
+  if (translationCache.has(englishName)) return translationCache.get(englishName);
+  const translated = await liveTranslate(englishName, 'en', 'ru');
+  translationCache.set(englishName, translated);
+  return translated;
 }
 
 /**

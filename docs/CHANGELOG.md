@@ -3,6 +3,24 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-19 — Machine translation of found product names to Russian, founder-approved despite no accuracy guarantee
+
+Founder pointed out that even after the search-accuracy fix, the actual product name shown was still in English ("translation still doesn't show up") -- the previously added `groupNameRu` only translated the product GROUP name ("Пластмассы и изделия из них"), not the specific product name itself.
+
+**Explicitly approved before implementing.** Proposed and approved: translate the found product's name using the same live translator chain (Google -> MyMemory) already used for the search query itself, with an open acknowledgment that this is machine translation without a 100% accuracy guarantee per entry (unlike `groupNameRu`, which remains a genuine official name, not a translation).
+
+**Implementation.** Made the translation functions (`translateViaGoogle`, `translateViaMyMemory`, the shared `liveTranslate`) parameterized by direction (`sourceLang`/`targetLang`) instead of duplicating separate RU->EN and EN->RU functions -- extending the existing mechanism rather than creating a new one. Added `translateProductNameToRu()` with in-memory caching (so re-clicking the same product doesn't trigger a new network call). Translation runs in the background after search results are shown -- the user sees the English text instantly with no delay, and the Russian translation appears as a separate line above it once ready, without blocking the UI.
+
+**Honesty preserved in the UI.** The translated name is shown as the primary text, with the English original kept visible below in smaller text -- the user doesn't lose access to the official name. An explicit "automatic translation, no accuracy guarantee" label distinguishes this from the genuine official `groupNameRu`. Adding an item to the commercial proposal now uses the translated name if it's ready, falling back to the English original otherwise (never blank).
+
+Verified the translation function fails gracefully when the network is unavailable (reproduced in this dev environment, where network access to both providers is restricted) -- the UI correctly keeps the English original rather than showing an error. Full regression test of search (труба пвх, насос, олово, чай, медная труба) confirms all prior-session fixes still work; the translation-function refactor introduced no regressions.
+
+Verified with `npm run build`: succeeds, main chunk 686.33KB.
+
+**Files changed**: `src/data/hsCodes.js`, `src/pages/DocumentCenter.jsx`, `docs/SESSION_STATE.md`.
+
+---
+
 ## 2026-06-19 — CRITICAL: previous fix incomplete -- found and fixed three additional root causes for the "труба пвх" bug, plus a proactive dictionary-wide collision scan
 
 Founder sent a second screenshot of the same scenario after commit 8d5ecfe -- the bug was still live (steel pipes shown instead of PVC). Founder also issued an explicit ultimatum: say upfront if something can't be done, don't burn tokens on undelivered work.

@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { getCurrentUser } from '../data/mock';
 import { useAccountType } from '../context/AccountContext';
-import { searchHsCodes } from '../data/hsCodes';
+import { searchHsCodes, translateProductNameToRu } from '../data/hsCodes';
 
 // Parse Excel-like paste (tab or comma separated)
 function parsePaste(text) {
@@ -55,6 +55,22 @@ export default function DocumentCenter() {
       setTnvedResults(results);
       setTnvedMeta({ source, translatedQuery, translationUnavailable });
       setTnvedLoading(false);
+
+      // Перевод названий товаров на русский — фоновая задача, не блокирует
+      // отображение результатов (которые видны мгновенно на английском).
+      // Основатель явно одобрил это как машинный перевод без гарантии
+      // 100% точности для каждой позиции — поэтому переведённое название
+      // показывается рядом с английским оригиналом, а не заменяет его, и
+      // UI должен честно работать и в случае, если перевод недоступен
+      // (оба провайдера отказали) — тогда остаётся английский оригинал.
+      results.forEach(item => {
+        translateProductNameToRu(item.description).then(translatedName => {
+          if (!translatedName) return;
+          setTnvedResults(prev => prev.map(r =>
+            r.code === item.code ? { ...r, descriptionRu: translatedName } : r
+          ));
+        });
+      });
     });
   };
 
@@ -348,11 +364,21 @@ ____________________     ____________________
                   borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s',
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{t.description}</div>
+                    <div style={{ flex: 1 }}>
+                      {t.descriptionRu ? (
+                        <>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>{t.descriptionRu}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{t.description}</div>
+                        </>
+                      ) : (
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{t.description}</div>
+                      )}
+                    </div>
                     <span style={{ fontFamily: 'monospace', fontSize: 13, color: 'var(--accent)', fontWeight: 700, flexShrink: 0 }}>{t.code}</span>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                    {t.groupNameRu ? `Группа: ${t.groupNameRu}` : `Раздел ${t.section}`} · официальное название товара — на английском (международный HS)
+                    {t.groupNameRu ? `Группа: ${t.groupNameRu}` : `Раздел ${t.section}`}
+                    {t.descriptionRu ? ' · перевод названия — автоматический, без гарантии точности' : ' · официальное название товара — на английском (международный HS), перевод загружается…'}
                   </div>
                 </div>
               ))}
@@ -365,15 +391,23 @@ ____________________     ____________________
           {selectedTnved && (
             <div className="card" style={{ padding: '20px', borderColor: 'rgba(0,212,170,0.3)' }}>
               <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4, color: 'var(--accent)' }}>{selectedTnved.code}</div>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>{selectedTnved.description}</div>
+              {selectedTnved.descriptionRu ? (
+                <>
+                  <div style={{ fontWeight: 600, marginBottom: 2 }}>{selectedTnved.descriptionRu}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 4 }}>{selectedTnved.description}</div>
+                </>
+              ) : (
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>{selectedTnved.description}</div>
+              )}
               <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 16 }}>
                 {selectedTnved.groupNameRu ? `Группа: ${selectedTnved.groupNameRu}` : `Раздел ${selectedTnved.section} международной номенклатуры HS`}
+                {selectedTnved.descriptionRu && ' · перевод названия — автоматический, без гарантии точности'}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 16, lineHeight: 1.6 }}>
                 Технические характеристики товара (влажность, состав, прочность и т.п.) платформа не подбирает автоматически — укажите их вручную после добавления в КП, исходя из реальной спецификации вашего товара.
               </div>
               <button className="btn btn-primary" onClick={() => {
-                setItems(prev => [...prev, { name: selectedTnved.description, tnved: selectedTnved.code, qty: '', unit: 'кг', price: '', specs: '' }]);
+                setItems(prev => [...prev, { name: selectedTnved.descriptionRu || selectedTnved.description, tnved: selectedTnved.code, qty: '', unit: 'кг', price: '', specs: '' }]);
                 setTab('kp');
                 setSelectedTnved(null);
               }} style={{ fontSize: 13 }}>
