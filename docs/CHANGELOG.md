@@ -3,6 +3,22 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-19 — CRITICAL: previous phrase-matching fix was never committed; deployed a Russian-context fix on top of it
+
+Founder sent a screenshot of "труба пвх" (PVC pipe) search on the actual live build returning completely irrelevant results (hookah smoking tobacco, ammonium/calcium/magnesium chlorides), with everything shown in English with zero Russian context.
+
+**Investigation revealed a process failure, not just a code bug.** The working tree already contained a correct fix for the phrase-matching problem (`matchByPhrases`/`matchesPhrase` -- requiring ALL words of a translation to match together, not any single word independently) from earlier work, but it had never been committed or pushed in the prior session -- it only existed as uncommitted working-directory changes, alongside two forgotten test files (`test_full.mjs`, `test_pipe.mjs`). This explains why the screenshot showed the old, actually-deployed behavior: a single shared word from a multi-word dictionary translation (e.g. "pipe" from "pipe tube" for «труба», or "chloride" from "vinyl chloride" for «пвх») matched independently against unrelated products. Confirmed fixed by direct testing: "труба пвх" now returns the correct top result (plastic pipe/tube fittings) immediately.
+
+**New finding this session -- missing Russian context in results.** Product names from the international dataset are in English (a known, documented limitation, see Decision 10), but previously the user saw bare English text with no Russian anchor at all. Added: every search result now carries `groupNameRu` -- the genuine official Russian name of its product group (from `tnvedGroupsRu.json`, collected in session 9). This doesn't translate the specific product name, but gives the user honest Russian context ("Группа: Пластмассы и изделия из них" instead of a bare "Раздел VII"). Implemented centrally in `searchHsCodes()` via `enrichWithRuGroup()`, applied across every search branch (direct code, English term, official group, dictionary, live translate) without duplicating logic.
+
+**Process lesson, recorded explicitly:** work done in the working directory doesn't exist for the project or the founder until it's committed and pushed. Before ending any session, `git status` must be checked for uncommitted changes and forgotten test files -- memory of what was done is not a substitute for verifying it.
+
+Verified: "труба пвх", "насос", "олово", "оружие" all return relevant top results and now carry a Russian group name. `npm run build` succeeds, main chunk 684.43KB (modest growth), both datasets remain separate lazy-loaded chunks.
+
+**Files changed**: `src/data/hsCodes.js`, `src/pages/DocumentCenter.jsx`, `docs/SESSION_STATE.md`.
+
+---
+
 ## 2026-06-19 — Second translation provider (MyMemory) added as fallback; DeepL/Yandex/Bing evaluated and rejected with reasons recorded
 
 Founder explicitly requested backup translators (DeepL and others) in case Google is unavailable. Investigated real technical constraints before implementing:

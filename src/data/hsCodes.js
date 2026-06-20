@@ -405,6 +405,42 @@ async function liveTranslateRuToEn(text) {
   return null;
 }
 
+/**
+ * Проверяет, входят ли ВСЕ слова фразы `terms` в описание (как отдельные
+ * слова, в любом порядке) — то есть это "И" внутри фразы, а не "ИЛИ" между
+ * отдельными словами. Это устраняет класс ложных совпадений, когда
+ * единственное общее слово из многословного перевода (например "pipe" из
+ * "pipe tube" для «труба», или "chloride" из "vinyl chloride" для «пвх»)
+ * совпадало само по себе с десятками не относящихся к делу товаров (табак
+ * для кальяна для "pipe", хлорид аммония/кальция/магния для "chloride").
+ */
+function matchesPhrase(desc, words) {
+  return words.every(w => {
+    if (w.length < 3) return true; // короткие союзы/предлоги не учитываем как обязательные
+    const pattern = w.length <= 4
+      ? `\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`
+      : `\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`;
+    return new RegExp(pattern, 'i').test(desc);
+  });
+}
+
+/**
+ * Ищет товары, чьё английское описание содержит ВСЕ слова хотя бы одной
+ * из переданных фраз (каждая фраза — это перевод одного совпавшего
+ * словарного термина или весь живой перевод запроса). Несколько фраз
+ * объединяются через "ИЛИ" между собой (любая полностью совпавшая фраза
+ * даёт результат), но слова внутри каждой фразы — через "И" (см.
+ * matchesPhrase) — это и есть исправление, описанное выше в комментарии.
+ *
+ * @param {string[][]} phrases — массив фраз, каждая фраза — массив слов
+ */
+function matchByPhrases(hsCodesRaw, phrases) {
+  return hsCodesRaw.filter(r => {
+    const desc = r.description.toLowerCase();
+    return phrases.some(words => matchesPhrase(desc, words));
+  });
+}
+
 function matchByTerms(hsCodesRaw, terms) {
   const uniqueTerms = [...new Set(terms)];
   return hsCodesRaw.filter(r => {
@@ -444,29 +480,48 @@ function matchByTerms(hsCodesRaw, terms) {
  *
  * @returns {Promise<{results: Array<{code, description, section}>, source: 'code'|'official-ru-group'|'dictionary'|'live-translate'|'direct', translationUnavailable?: boolean}>}
  */
+/**
+ * Добавляет к каждому результату русское название его 2-значной товарной
+ * группы (например '70' → 'Стекло и изделия из него') — даже когда само
+ * название товара осталось на английском (из официального международного
+ * датасета), пользователь хотя бы видит общую категорию на русском, а не
+ * голый английский текст без какого-либо понятного контекста.
+ *
+ * Не заменяет полный перевод (которого пока нет для всех 5613 позиций —
+ * см. Decision 10 в DECISIONS.md), но даёт реальную, честную помощь:
+ * русское название группы — подлинное официальное название, не перевод.
+ */
+function enrichWithRuGroup(results, ruGroups) {
+  return results.map(r => ({
+    ...r,
+    groupNameRu: ruGroups[r.code.slice(0, 2)] || null,
+  }));
+}
+
 export async function searchHsCodes(query) {
   const q = normalize(query);
   if (q.length < 2) return { results: [], source: 'direct' };
 
   const hsCodesRaw = await loadDataset();
+  const ruGroups = await loadRuGroups();
 
   // Прямой поиск по коду (цифры)
   if (/^\d+$/.test(q)) {
-    return { results: hsCodesRaw.filter(r => r.code.startsWith(q)).slice(0, 20), source: 'code' };
+    const results = hsCodesRaw.filter(r => r.code.startsWith(q)).slice(0, 20);
+    return { results: enrichWithRuGroup(results, ruGroups), source: 'code' };
   }
 
   // Кириллица в запросе? Если нет — ищем напрямую (английский термин)
   const hasCyrillic = /[а-яё]/i.test(q);
 
   if (!hasCyrillic) {
-    const direct = matchByTerms(hsCodesRaw, [q]);
-    return { results: direct.slice(0, 20), source: 'direct' };
+    const direct = matchByTerms(hsCodesRaw, [q]).slice(0, 20);
+    return { results: enrichWithRuGroup(direct, ruGroups), source: 'direct' };
   }
 
   // Русский запрос — сначала проверяем официальные названия групп ТН ВЭД
   // (96 групп, подлинные русские названия из ЕАЭС-классификатора, не
   // перевод) — это самый надёжный уровень, проверяется раньше словаря.
-  const ruGroups = await loadRuGroups();
   const matchedGroupCodes = Object.entries(ruGroups)
     .filter(([, name]) => normalize(name).includes(q))
     .map(([code]) => code);
@@ -474,20 +529,26 @@ export async function searchHsCodes(query) {
   if (matchedGroupCodes.length > 0) {
     const groupMatches = hsCodesRaw.filter(r => matchedGroupCodes.includes(r.code.slice(0, 2)));
     if (groupMatches.length > 0) {
-      return { results: groupMatches.slice(0, 20), source: 'official-ru-group' };
+      const results = groupMatches.slice(0, 20);
+      return { results: enrichWithRuGroup(results, ruGroups), source: 'official-ru-group' };
     }
   }
 
-  // Официальная группа не совпала — пробуем словарь
-  const dictTerms = [];
+  // Официальная группа не совпала — пробуем словарь. Каждый совпавший
+  // словарный ключ становится отдельной фразой (все её слова должны
+  // совпасть вместе, см. matchByPhrases) — это и есть исправление бага,
+  // когда общее слово одного перевода (напр. "pipe" из "pipe tube" для
+  // «труба») совпадало само по себе с не относящимися к делу товарами.
+  const dictPhrases = [];
   for (const [ru, en] of Object.entries(RU_EN_TERMS)) {
-    if (q.includes(ru)) dictTerms.push(...en.split(' '));
+    if (q.includes(ru)) dictPhrases.push(en.split(' '));
   }
 
-  if (dictTerms.length > 0) {
-    const matches = matchByTerms(hsCodesRaw, dictTerms);
+  if (dictPhrases.length > 0) {
+    const matches = matchByPhrases(hsCodesRaw, dictPhrases);
     if (matches.length > 0) {
-      return { results: matches.slice(0, 20), source: 'dictionary' };
+      const results = matches.slice(0, 20);
+      return { results: enrichWithRuGroup(results, ruGroups), source: 'dictionary' };
     }
   }
 
@@ -497,8 +558,8 @@ export async function searchHsCodes(query) {
     return { results: [], source: 'live-translate', translationUnavailable: true };
   }
 
-  const liveMatches = matchByTerms(hsCodesRaw, translated.split(/\s+/));
-  return { results: liveMatches.slice(0, 20), source: 'live-translate', translatedQuery: translated };
+  const liveMatches = matchByPhrases(hsCodesRaw, [translated.split(/\s+/)]).slice(0, 20);
+  return { results: enrichWithRuGroup(liveMatches, ruGroups), source: 'live-translate', translatedQuery: translated };
 }
 
 /**
