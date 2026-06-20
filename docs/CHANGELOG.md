@@ -3,6 +3,22 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-19 — Critical regression fixed: Marketplace crashed on click (canBuy scope bug introduced in this session's earlier #6 fix)
+
+Founder reported: the marketplace page failed to load — black screen on click, platform completely unresponsive.
+
+**Root cause (a mistake introduced earlier in this same session, not a pre-existing bug).** When `canBuy`/`canSell` were migrated off module-scope `localStorage` reads onto the reactive `useAccountType()` hook (closing 🟠#6), the values became scoped to the `Marketplace()` component only. Two sibling component functions in the same file — `ProductCard` (the product list card) and `ProductModal` (the detail view opened on click) — kept referencing `canBuy` directly, which no longer existed in their scope. This worked by accident before the #6 fix (the variable was file-global); after the fix, it threw an unhandled `ReferenceError` on every click, and with no ErrorBoundary in place (see open item #13), that crashed the entire React tree — hence the black screen.
+
+Confirmed via a direct server-side render of the component in Node (bypassing the browser) — reproduced `canBuy is not defined` exactly at the `ProductCard` usage site. Fixed by passing `canBuy` as an explicit prop from the parent to both `ProductCard` and `ProductModal` instead of relying on scope. Re-verified with server-side render for both buyer and seller account types.
+
+**Process lesson for future sessions:** when moving any variable from module/file scope onto a component-local hook, explicitly check whether other component functions in the same file read it directly rather than via props — these connections fail silently until the broken path is actually exercised, not at build time.
+
+Verified with `npm run build`: succeeds, bundle unaffected.
+
+**Files changed**: `src/pages/Marketplace.jsx`, `docs/SESSION_STATE.md`.
+
+---
+
 ## 2026-06-19 — Mobile layout (#9) and profile persistence (#19)
 
 **#9 closed.** Added a collapsible mobile drawer for screens ≤900px: a fixed top bar with logo and a hamburger button, the sidebar now slides in as an overlay instead of always occupying space, with a backdrop and close button. Desktop (>900px) behavior is unchanged — purely additive via a media query in `index.css`. Deleted the dead `App.css` (re-confirmed it was never imported anywhere).

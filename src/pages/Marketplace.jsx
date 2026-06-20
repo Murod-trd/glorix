@@ -7,7 +7,7 @@ function Stars({ n }) {
   return <span style={{ color: '#F5A623', fontSize: 12 }}>{'★'.repeat(Math.round(n))}{'☆'.repeat(5-Math.round(n))}</span>;
 }
 
-function ProductModal({ product, onClose }) {
+function ProductModal({ product, onClose, canBuy }) {
   const [photo, setPhoto] = useState(0);
   const [qty, setQty] = useState(product.minOrder);
   const [tab, setTab] = useState('specs');
@@ -168,7 +168,7 @@ function ProductModal({ product, onClose }) {
   );
 }
 
-function ProductCard({ product, onClick }) {
+function ProductCard({ product, onClick, canBuy }) {
   const fee = calcMarketplaceFee(product.minOrder * product.price);
   return (
     <div onClick={onClick} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', flexDirection: 'column' }}
@@ -238,7 +238,7 @@ export default function Marketplace() {
 
   return (
     <div className="fade-in" style={{ padding: '28px 32px' }}>
-      {viewing && <ProductModal product={viewing} onClose={() => setViewing(null)} />}
+      {viewing && <ProductModal product={viewing} onClose={() => setViewing(null)} canBuy={canBuy} />}
       {showAddProduct && <AddProductModal onClose={() => setShowAddProduct(false)} />}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
@@ -304,7 +304,7 @@ export default function Marketplace() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
-        {filtered.map(p => <ProductCard key={p.id} product={p} onClick={() => setViewing(p)} />)}
+        {filtered.map(p => <ProductCard key={p.id} product={p} onClick={() => setViewing(p)} canBuy={canBuy} />)}
       </div>
     </div>
   );
