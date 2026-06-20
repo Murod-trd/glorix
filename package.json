@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/space-grotesk": "^5.2.10",
     "docx": "^9.7.1",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.18.0",

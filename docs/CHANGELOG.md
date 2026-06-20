@@ -3,6 +3,20 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-19 — Google Fonts CDN dependency removed, self-hosted instead (#15)
+
+Founder asked why this matters when they're based in Uzbekistan, not Russia -- important clarification: GLORIX is documented in MASTER_PROJECT_CONTEXT.md as a product for the entire CIS region (180,000+ companies), not just Uzbekistan, and Google is officially blocked at the state level in Russia and Turkmenistan -- both part of the platform's stated target market. The `fonts.googleapis.com` dependency risked real future customers in those markets seeing a broken or slow-loading interface.
+
+**Fix.** Fonts (Inter, Space Grotesk) moved to self-hosting via `@fontsource/inter` and `@fontsource/space-grotesk` -- the standard, widely-used way to distribute the same Google Fonts without an external CDN dependency. Same weights as before (Inter 300/400/500/600, Space Grotesk 400/500/600/700). `index.html` rebuilt without the Google Fonts `<link>` tags -- in the process, found and fixed the file being duplicated in full (an artifact from a file-recovery step in an earlier session).
+
+**Honest limitation, not caused by this fix.** Space Grotesk has no Cyrillic glyphs at all -- a property of the font itself, not the loading method (the official Google Fonts CDN would have produced the exact same fallback behavior). Russian heading text (via the `--font-display` variable) silently falls back. Added an explicit, better-looking fallback chain -- 'Inter' (which does support Cyrillic) before the generic `sans-serif` -- instead of the raw browser default. The "GLORIX" logo (Latin characters) renders in genuine Space Grotesk unaffected.
+
+Verified with `npm run build`: succeeds, main JS chunk unchanged (687.35KB -- fonts load as separate `.woff`/`.woff2` files in parallel, not part of the JS bundle). Confirmed zero remaining references to `fonts.googleapis.com`/`fonts.gstatic.com` anywhere in the code.
+
+**Files changed**: `src/main.jsx`, `index.html`, `src/index.css`, `package.json`, `docs/SESSION_STATE.md`.
+
+---
+
 ## 2026-06-19 — LegalAI form validation added (#14)
 
 The "Сгенерировать" button in LegalAI previously ran document generation for any document type with no field validation -- contracts could be created with empty required fields (seller/buyer/goods/amount left as `________________________________` blanks in the finished legal document). Added a `validate()` function checking before generation: seller is filled, buyer is filled, goods are filled, and the transaction amount is filled and is a valid positive number (not NaN, not negative, not zero). On an invalid form, an explicit list of missing/incorrect fields is shown above the button, and generation does not proceed. Tested edge cases: empty form, whitespace-only field, non-numeric amount, negative amount, zero amount -- all correctly blocked.
