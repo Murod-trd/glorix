@@ -3,6 +3,24 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-19 — TNVED search: dictionary expanded to 459 terms, live translation fallback with multi-candidate selection
+
+Founder proposed: Russian query → translate → search English nomenclature → if ambiguous, show multiple matches for the user to pick from. Also explicitly approved using a free external translator and expanding the dictionary toward 500+ terms, accepting this moves to a real backend eventually.
+
+**Dictionary expansion (150 → 459 terms).** Expanded systematically across all 21 HS sections (live animals, plants, fats, foodstuffs, minerals, chemicals, plastics, leather, wood, paper, textiles, footwear, stone/ceramics, jewellery, metals, machinery/electronics, vehicles, optics/medical/music, weapons, miscellaneous, art) — terms derived from real category headers in the dataset itself, not invented arbitrarily.
+
+**Live translation fallback.** When the dictionary has no match, the search now falls back to the free, unofficial `translate.googleapis.com` endpoint (no API key, no server needed — fits the current no-backend demo phase). This is recorded as an explicit architectural tradeoff in `docs/DECISIONS.md` (Decision 10): the endpoint is undocumented and unsupported by Google, could be blocked or changed without notice, so it's used only as a fallback after the (instant, no-network) dictionary, and any network error degrades gracefully (clear "translation unavailable" message, no crash).
+
+**Multi-candidate selection — exactly what the founder asked for.** When the live translate path is used, the UI shows the translated query text explicitly ("Translated as 'pearls'... pick the right match below") and lists all matches — the platform never silently picks one result; the user chooses which code fits their actual product.
+
+**Forward-looking constraint, documented.** DECISIONS.md now states explicitly: once a real backend exists (MVP/Beta per Roadmap), this unofficial endpoint should be replaced with an official paid translation API or self-hosted LibreTranslate — both need server infrastructure this phase doesn't have. Marked as a demo-phase-only tradeoff, not permanent architecture.
+
+Verified: main chunk grew modestly to 679.20KB (dictionary expansion), the ~900KB HS dataset remains a separate lazy-loaded chunk with no preload hint. Key test queries (pump, tin, coffee, banana, fertiliser, pig/pigs, locomotive, pearl, direct code 8471) return relevant results — including a useful illustration of why multi-candidate matters: "жемчуг" (pearl) surfaces tapioca described as "pearls" in food-industry language as its first match (a genuine dataset match, not the intended product) alongside the correct glass-imitation-pearl code further down — exactly the ambiguity this UI is designed to let the user resolve themselves.
+
+**Files changed**: `src/data/hsCodes.js`, `src/pages/DocumentCenter.jsx`, `docs/DECISIONS.md`, `docs/SESSION_STATE.md`.
+
+---
+
 ## 2026-06-19 — Real HS code (ТН ВЭД) search across the full international nomenclature, replacing the 6-item hardcoded list
 
 Founder reported: the TNVED search in Document Center only found 6 hardcoded products (wheat, cement, rebar, polyethylene, sunflower oil, plus one textile item), even though the surrounding UI text claimed "AI will find the right code" for any product.

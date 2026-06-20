@@ -127,6 +127,165 @@ const RU_EN_TERMS = {
   'медикаменты': 'medicament pharmaceutical', 'лекарства': 'medicament pharmaceutical',
   'вакцина': 'vaccine', 'витамины': 'vitamins', 'инструменты': 'tools hand',
   'оружие': 'arms weapons', 'часы': 'clocks watches', 'ювелирные изделия': 'jewellery',
+
+  // === Раздел I: живые животные ===
+  'лошади': 'horses', 'осёл': 'asses', 'ослы': 'asses', 'крупный рогатый скот': 'cattle',
+  'буйволы': 'buffalo', 'свиньи': 'swine', 'свинья': 'swine', 'овцы': 'sheep', 'овца': 'sheep', 'козы': 'goats', 'коза': 'goats',
+  'птица домашняя': 'poultry', 'курица': 'poultry fowls', 'утки': 'ducks', 'гуси': 'geese',
+  'индейки': 'turkeys', 'кролики': 'rabbits', 'пчёлы': 'bees', 'пчелы': 'bees',
+  'рыба живая': 'fish live', 'моллюски': 'molluscs', 'ракообразные': 'crustaceans',
+  'креветки': 'shrimps prawns', 'крабы': 'crabs',
+
+  // === Раздел II: растительные продукты ===
+  'растения живые': 'plants live', 'саженцы': 'plants live', 'цветы': 'flowers cut',
+  'семена': 'seeds sowing', 'рассада': 'plants live', 'грибы': 'mushrooms truffles',
+  'лимоны': 'lemons', 'мандарины': 'mandarins', 'груши': 'pears', 'сливы': 'plums',
+  'клубника': 'strawberries', 'ягоды': 'berries', 'финики': 'dates fruit',
+  'кофе зелёный': 'coffee not roasted', 'перец': 'pepper', 'корица': 'cinnamon',
+  'имбирь': 'ginger', 'кориандр': 'coriander seed', 'хмель': 'hops',
+  'солома': 'straw husks', 'сено': 'forage', 'отруби': 'bran sharps',
+
+  // === Раздел III: жиры и масла ===
+  'свиной жир': 'pig fat', 'сало': 'lard pig fat', 'животный жир': 'fat tallow',
+  'оливковое масло': 'olive oil', 'пальмовое масло': 'palm oil', 'соевое масло': 'soya bean oil',
+  'рапсовое масло': 'rape colza oil', 'кокосовое масло': 'coconut oil', 'маргарин': 'margarine',
+
+  // === Раздел IV: готовые продукты, напитки, табак ===
+  'колбаса': 'sausages meat preparations', 'тушёнка': 'meat preparations preserved',
+  'рыбные консервы': 'fish prepared preserved', 'икра': 'caviar',
+  'хлеб': 'bread pastry', 'печенье': 'biscuits', 'макароны': 'pasta',
+  'шоколад': 'chocolate cocoa preparations', 'кондитерские изделия': 'sugar confectionery',
+  'минеральная вода': 'waters mineral', 'вода': 'waters mineral natural',
+  'сок': 'juices fruit', 'уксус': 'vinegar', 'дрожжи': 'yeasts',
+  'табак': 'tobacco', 'сигареты': 'cigarettes tobacco', 'комбикорм': 'preparations animal feeding',
+
+  // === Раздел V: минеральные продукты ===
+  'соль': 'salt', 'сера': 'sulphur', 'графит': 'graphite', 'песок строительный': 'sands natural',
+  'кварц': 'quartz', 'мел': 'chalk', 'гравий': 'gravel', 'доломит': 'dolomite',
+  'руда железная': 'iron ores concentrates', 'руда': 'ores concentrates',
+  'каменный уголь': 'coal', 'кокс': 'coke semi-coke', 'асфальт природный': 'bitumen asphalt natural',
+  'парафин': 'petroleum jelly paraffin wax', 'смазочные масла': 'lubricating oils',
+
+  // === Раздел VI: химическая продукция ===
+  'хлор': 'chlorine', 'йод': 'iodine', 'водород': 'hydrogen', 'кислород': 'oxygen',
+  'азот': 'nitrogen', 'аммиак': 'ammonia', 'сода': 'sodium carbonate',
+  'перекись водорода': 'hydrogen peroxide', 'спирт этиловый': 'ethyl alcohol undenatured',
+  'антибиотики': 'antibiotics', 'гормоны': 'hormones', 'инсектициды': 'insecticides',
+  'пестициды': 'pesticides', 'мыло хозяйственное': 'soap', 'духи': 'perfumes toilet waters',
+  'шампунь': 'preparations hair', 'зубная паста': 'dentifrices',
+  'фотопленка': 'photographic plates film', 'фотопленка': 'photographic plates film',
+  'взрывчатые вещества': 'explosives', 'спички': 'matches',
+
+  // === Раздел VII: пластмассы и каучук ===
+  'полистирол': 'polystyrene', 'поливинилхлорид': 'vinyl chloride polymers',
+  'поликарбонат': 'polycarbonates', 'силикон': 'silicones',
+  'плиты пластиковые': 'plates sheets plastics', 'трубы пластиковые': 'tubes pipes plastics',
+  'плёнка пластиковая': 'plates sheets film plastics', 'пакеты пластиковые': 'sacks bags plastics',
+  'посуда пластиковая': 'tableware kitchenware plastics', 'латекс': 'rubber latex natural',
+  'резиновые изделия': 'articles rubber', 'резиновые шланги': 'tubes pipes hoses rubber',
+  'конвейерные ленты': 'conveyor belts rubber',
+
+  // === Раздел VIII: кожа, мех ===
+  'шкуры': 'hides skins raw', 'мех': 'furskins', 'дублёная кожа': 'leather',
+  'чемоданы': 'trunks suitcases', 'ремни': 'belts straps leather',
+
+  // === Раздел IX: древесина, пробка ===
+  'пробка': 'cork natural', 'древесный уголь': 'wood charcoal', 'опилки': 'sawdust wood waste',
+  'паллеты': 'pallets wood', 'тара деревянная': 'packing cases boxes wood',
+  'бочки деревянные': 'casks barrels wood', 'двери деревянные': 'builders joinery carpentry wood',
+  'окна деревянные': 'builders joinery carpentry wood',
+
+  // === Раздел X: бумажная масса, бумага ===
+  'целлюлоза': 'wood pulp', 'газетная бумага': 'newsprint',
+  'туалетная бумага': 'toilet paper', 'гофрокартон': 'paperboard corrugated',
+  'обои': 'wallpaper', 'тетради': 'registers exercise books',
+  'этикетки': 'labels paper', 'фильтровальная бумага': 'paper filter',
+
+  // === Раздел XI: текстиль (расширение) ===
+  'шёлковая ткань': 'fabrics woven silk', 'джут': 'jute', 'верёвка': 'twine cordage rope',
+  'канат': 'twine cordage rope', 'сетка': 'netting nets', 'ковёр': 'carpets textile floor',
+  'нетканые материалы': 'nonwovens', 'войлок': 'felt', 'вата': 'wadding textile',
+  'тент': 'tarpaulins awnings', 'спецодежда': 'clothing protective work',
+  'постельное бельё': 'bed linen', 'полотенца': 'towels terry toweling',
+  'носки': 'socks hosiery', 'перчатки текстильные': 'gloves knitted textile',
+
+  // === Раздел XII: обувь, головные уборы ===
+  'сапоги': 'footwear', 'кроссовки': 'sports footwear', 'шляпы': 'hats headgear',
+  'зонты': 'umbrellas', 'трости': 'walking-sticks',
+
+  // === Раздел XIII: камень, керамика, стекло ===
+  'плитка керамическая': 'tiles ceramic', 'кафель': 'tiles ceramic',
+  'фарфор': 'porcelain china tableware', 'санфарфор': 'ceramic sanitary fixtures',
+  'кирпич огнеупорный': 'bricks blocks refractory', 'стеклотара': 'glass containers',
+  'стекловата': 'glass wool fibres', 'оптическое стекло': 'glass optical elements',
+  'зеркало': 'mirrors glass',
+
+  // === Раздел XIV: драгоценные камни, металлы ===
+  'жемчуг': 'pearls', 'бриллианты': 'diamonds', 'драгоценные камни': 'precious stones',
+  'платина': 'platinum', 'монеты': 'coin',
+
+  // === Раздел XV: чёрные и цветные металлы ===
+  'чугун': 'pig iron', 'феррохром': 'ferro-alloys', 'нержавеющая сталь': 'steel stainless',
+  'стальной лист': 'flat-rolled steel', 'стальная труба': 'tubes pipes iron steel',
+  'гвозди': 'nails tacks', 'болты': 'bolts screws', 'гайки': 'nuts screws',
+  'проволока стальная': 'wire iron steel', 'крепёж': 'fasteners screws bolts',
+  'свинцовый лист': 'lead plates sheet', 'цинковый лист': 'zinc plates sheet',
+  'магний': 'magnesium', 'кобальт': 'cobalt', 'вольфрам': 'tungsten wolfram',
+  'столовые приборы': 'cutlery tableware', 'замки': 'locks padlocks', 'петли': 'hinges',
+  'цепи': 'chain chains iron steel', 'трос стальной': 'wire ropes cables',
+
+  // === Раздел XVI: машины, оборудование, электроника (расширение) ===
+  'котёл': 'boilers', 'турбина': 'turbines', 'ядерный реактор': 'nuclear reactors',
+  'подъёмник': 'lifting machinery', 'кран грузовой': 'cranes lifting machinery',
+  'конвейер': 'machinery handling continuous-action elevators conveyors',
+  'сельскохозяйственная техника': 'machinery agricultural',
+  'сеялка': 'machinery sowing planting', 'комбайн': 'harvesting threshing machinery',
+  'мельница': 'machinery milling industry', 'пресс': 'presses machinery',
+  'сварочный аппарат': 'machines apparatus soldering brazing welding',
+  'сверлильный станок': 'machine tools drilling',
+  'фрезерный станок': 'machine tools milling', 'токарный станок': 'lathes machine tools',
+  'упаковочное оборудование': 'machinery packing wrapping',
+  'холодильное оборудование': 'refrigerating freezing equipment',
+  'фильтр промышленный': 'machinery filtering purifying',
+  'весы': 'weighing machinery', 'клапан': 'taps cocks valves',
+  'подшипники шариковые': 'bearings ball', 'трансформатор': 'transformers electrical',
+  'аккумуляторная батарея': 'accumulators electric', 'лампа': 'lamps lighting',
+  'светодиод': 'diodes light-emitting', 'выключатель': 'switches electrical',
+  'розетка': 'plugs sockets electrical', 'микрофон': 'microphones',
+  'наушники': 'headphones earphones', 'видеокамера': 'television cameras',
+  'роутер': 'apparatus transmission reception voice data', 'модем': 'apparatus transmission reception',
+  'сим-карта': 'smart cards', 'жёсткий диск': 'storage units',
+  'клавиатура': 'input output units automatic data processing',
+  'сканер': 'optical scanners',
+
+  // === Раздел XVII: транспорт ===
+  'локомотив': 'rail locomotives', 'железнодорожный вагон': 'railway tramway coaches vans trucks',
+  'рельсы': 'railway tramway track fixtures fittings', 'прицеп': 'trailers semi-trailers',
+  'мопед': 'mopeds cycles', 'катер': 'vessel boats', 'яхта': 'yachts pleasure vessels',
+  'контейнер': 'containers', 'якорь': 'anchors grapnels',
+
+  // === Раздел XVIII: оптика, медицина, часы, музыка ===
+  'очки': 'spectacles goggles', 'бинокль': 'binoculars optical',
+  'микроскоп': 'microscopes', 'термометр': 'thermometers',
+  'медицинское оборудование': 'instruments appliances medical',
+  'шприц': 'syringes needles catheters', 'рентген аппарат': 'apparatus x-ray',
+  'слуховой аппарат': 'hearing aids', 'будильник': 'clocks alarm',
+  'гитара': 'musical instruments string', 'пианино': 'pianos',
+
+  // === Раздел XIX: оружие ===
+  'патроны боевые': 'cartridges ammunition', 'пневматическое оружие': 'arms spring air gas',
+  'снаряды': 'bombs grenades torpedoes mines missiles',
+
+  // === Раздел XX: разное ===
+  'стулья': 'seats', 'кресла': 'seats', 'диван': 'seats',
+  'светильник': 'lamps lighting fittings', 'постельные принадлежности': 'mattresses cushions bedding',
+  'авторучка': 'pens ball point', 'карандаш': 'pencils', 'кисть для рисования': 'brushes paint',
+  'кнопки': 'buttons', 'молнии': 'slide fasteners', 'пуговицы': 'buttons',
+  'воздушные шары': 'carnival articles', 'ёлочные украшения': 'festive carnival entertainment articles',
+
+  // === Раздел XXI: искусство, антиквариат ===
+  'картины': 'paintings drawings pastels', 'скульптура': 'sculptures statuary',
+  'антиквариат': 'antiques', 'марки почтовые': 'postage revenue stamps',
 };
 
 function normalize(s) {
@@ -143,35 +302,43 @@ async function loadDataset() {
 }
 
 /**
- * Ищет коды ТН ВЭД по запросу — названию товара (на русском или
- * английском) или прямому коду. Асинхронная: датасет (~900KB) подгружается
- * по требованию при первом вызове, дальше берётся из памяти.
+ * Живой перевод через неофициальный, незадокументированный эндпоинт
+ * Google Translate (без API-ключа). Решение явно одобрено основателем
+ * как временная мера для демо-фазы (см. docs/DECISIONS.md, Decision 10) —
+ * этот эндпоинт может быть заблокирован или изменён Google в любой момент
+ * без предупреждения, поэтому он используется только как fallback после
+ * локального словаря, а ошибки сети обрабатываются мягко (возврат null,
+ * не исключение, которое могло бы сломать страницу).
  *
- * @returns {Promise<Array<{code, description, section}>>} до 20 совпадений
+ * При переходе на реальный backend (MVP/Beta по Roadmap) этот эндпоинт
+ * должен быть заменён на официальный платный API перевода или
+ * самостоятельно хостящийся LibreTranslate — см. DECISIONS.md.
+ *
+ * @returns {Promise<string|null>} переведённый текст или null при ошибке
  */
-export async function searchHsCodes(query) {
-  const q = normalize(query);
-  if (q.length < 2) return [];
-
-  const hsCodesRaw = await loadDataset();
-
-  // Прямой поиск по коду (цифры)
-  if (/^\d+$/.test(q)) {
-    return hsCodesRaw.filter(r => r.code.startsWith(q)).slice(0, 20);
+async function liveTranslateRuToEn(text) {
+  try {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=ru&tl=en&dt=t&q=${encodeURIComponent(text)}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    const data = await res.json();
+    // Формат ответа: [[[translated, original, ...], ...], ...]
+    const translated = data?.[0]?.map(chunk => chunk[0]).join('') ?? null;
+    return translated ? translated.toLowerCase() : null;
+  } catch {
+    // Сеть недоступна, таймаут, эндпоинт заблокирован/изменён — любая
+    // ошибка здесь не должна ломать поиск, только означает «живой перевод
+    // недоступен сейчас», UI покажет соответствующее сообщение.
+    return null;
   }
+}
 
-  // Собираем поисковые термины: сам запрос + перевод из словаря (если есть
-  // прямое совпадение ключа словаря внутри запроса)
-  const terms = [q];
-  for (const [ru, en] of Object.entries(RU_EN_TERMS)) {
-    if (q.includes(ru)) {
-      terms.push(...en.split(' '));
-    }
-  }
-
+function matchByTerms(hsCodesRaw, terms) {
   const uniqueTerms = [...new Set(terms)];
-
-  const matches = hsCodesRaw.filter(r => {
+  return hsCodesRaw.filter(r => {
     const desc = r.description.toLowerCase();
     return uniqueTerms.some(t => {
       if (t.length < 3) return false;
@@ -189,8 +356,62 @@ export async function searchHsCodes(query) {
       return re.test(desc);
     });
   });
+}
 
-  return matches.slice(0, 20);
+/**
+ * Ищет коды ТН ВЭД по запросу — названию товара (на русском или
+ * английском) или прямому коду. Асинхронная: датасет (~900KB) подгружается
+ * по требованию при первом вызове, дальше берётся из памяти.
+ *
+ * Порядок попыток для русского текстового запроса (не код, не латиница):
+ *   1) прямое совпадение в датасете (на случай смешанного текста);
+ *   2) локальный словарь — мгновенно, без сети;
+ *   3) если словарь не дал совпадений — живой перевод (см. liveTranslateRuToEn)
+ *      как запасной вариант; при неудаче возвращается пустой список с
+ *      понятным указанием причины через поле `translationUnavailable`.
+ *
+ * @returns {Promise<{results: Array<{code, description, section}>, source: 'code'|'dictionary'|'live-translate'|'direct', translationUnavailable?: boolean}>}
+ */
+export async function searchHsCodes(query) {
+  const q = normalize(query);
+  if (q.length < 2) return { results: [], source: 'direct' };
+
+  const hsCodesRaw = await loadDataset();
+
+  // Прямой поиск по коду (цифры)
+  if (/^\d+$/.test(q)) {
+    return { results: hsCodesRaw.filter(r => r.code.startsWith(q)).slice(0, 20), source: 'code' };
+  }
+
+  // Кириллица в запросе? Если нет — ищем напрямую (английский термин)
+  const hasCyrillic = /[а-яё]/i.test(q);
+
+  if (!hasCyrillic) {
+    const direct = matchByTerms(hsCodesRaw, [q]);
+    return { results: direct.slice(0, 20), source: 'direct' };
+  }
+
+  // Русский запрос — сначала пробуем словарь
+  const dictTerms = [];
+  for (const [ru, en] of Object.entries(RU_EN_TERMS)) {
+    if (q.includes(ru)) dictTerms.push(...en.split(' '));
+  }
+
+  if (dictTerms.length > 0) {
+    const matches = matchByTerms(hsCodesRaw, dictTerms);
+    if (matches.length > 0) {
+      return { results: matches.slice(0, 20), source: 'dictionary' };
+    }
+  }
+
+  // Словарь не помог — пробуем живой перевод
+  const translated = await liveTranslateRuToEn(q);
+  if (!translated) {
+    return { results: [], source: 'live-translate', translationUnavailable: true };
+  }
+
+  const liveMatches = matchByTerms(hsCodesRaw, translated.split(/\s+/));
+  return { results: liveMatches.slice(0, 20), source: 'live-translate', translatedQuery: translated };
 }
 
 /**

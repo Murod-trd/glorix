@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { getCurrentUser } from '../data/mock';
 import { useAccountType } from '../context/AccountContext';
-import { searchHsCodes, hasKnownTranslation } from '../data/hsCodes';
+import { searchHsCodes } from '../data/hsCodes';
 
 // Parse Excel-like paste (tab or comma separated)
 function parsePaste(text) {
@@ -45,13 +45,15 @@ export default function DocumentCenter() {
   };
 
   const [tnvedLoading, setTnvedLoading] = useState(false);
+  const [tnvedMeta, setTnvedMeta] = useState(null); // { source, translatedQuery, translationUnavailable }
 
   const searchTnved = (q) => {
     setTnvedQuery(q);
-    if (q.length < 2) { setTnvedResults([]); return; }
+    if (q.length < 2) { setTnvedResults([]); setTnvedMeta(null); return; }
     setTnvedLoading(true);
-    searchHsCodes(q).then(results => {
+    searchHsCodes(q).then(({ results, source, translatedQuery, translationUnavailable }) => {
       setTnvedResults(results);
+      setTnvedMeta({ source, translatedQuery, translationUnavailable });
       setTnvedLoading(false);
     });
   };
@@ -312,7 +314,7 @@ ____________________     ____________________
           </div>
 
           <div style={{ padding: '10px 14px', background: 'rgba(245,166,35,0.08)', border: '1px solid rgba(245,166,35,0.25)', borderRadius: 8, fontSize: 12, color: 'var(--gold)', marginBottom: 20, lineHeight: 1.6 }}>
-            ⚠ Официальные названия товаров — на английском (язык международного стандарта). Платформа не переводит каждое из более чем 5000 наименований — для частых товаров поиск понимает русские названия через словарь ключевых терминов. Найденный код — основа для классификации, но финальное решение по коду для таможенного оформления должен подтвердить декларант или таможенный брокер.
+            ⚠ Официальные названия товаров — на английском (язык международного стандарта). Платформа сначала ищет по словарю частых терминов, а если в нём нет совпадения — пробует автоматический перевод запроса. Найденный код — основа для классификации, но финальное решение по коду для таможенного оформления должен подтвердить декларант или таможенный брокер.
           </div>
 
           <div style={{ position: 'relative', marginBottom: 20 }}>
@@ -323,6 +325,12 @@ ____________________     ____________________
 
           {tnvedLoading && (
             <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-3)', fontSize: 13 }}>Поиск…</div>
+          )}
+
+          {!tnvedLoading && tnvedMeta?.source === 'live-translate' && tnvedMeta?.translatedQuery && (
+            <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
+              Переведено как «{tnvedMeta.translatedQuery}» (автоматический перевод, не локальный словарь) — выберите подходящий вариант ниже
+            </div>
           )}
 
           {!tnvedLoading && tnvedResults.length > 0 && (
@@ -364,7 +372,15 @@ ____________________     ____________________
             </div>
           )}
 
-          {!tnvedLoading && tnvedQuery.length > 1 && tnvedResults.length === 0 && (
+          {!tnvedLoading && tnvedMeta?.translationUnavailable && (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-3)' }}>
+              <div style={{ fontSize: 32, marginBottom: 10 }}>🌐</div>
+              <div>Автоматический перевод временно недоступен</div>
+              <div style={{ fontSize: 12, marginTop: 8 }}>Попробуйте ввести название товара на английском, или код напрямую</div>
+            </div>
+          )}
+
+          {!tnvedLoading && !tnvedMeta?.translationUnavailable && tnvedQuery.length > 1 && tnvedResults.length === 0 && (
             <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-3)' }}>
               <div style={{ fontSize: 32, marginBottom: 10 }}>🔍</div>
               <div>Ничего не найдено по запросу «{tnvedQuery}»</div>
