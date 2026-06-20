@@ -75,7 +75,7 @@ const RU_EN_TERMS = {
   'удобрения': 'fertiliser fertilizer', 'удобрение': 'fertiliser',
   // Металлы
   'сталь': 'steel iron', 'железо': 'iron', 'алюминий': 'aluminium aluminum',
-  'медь': 'copper', 'металл': 'metal', 'прокат': 'rolled steel', 'олово': 'tin',
+  'медь': 'copper', 'медная': 'copper', 'медный': 'copper', 'медное': 'copper', 'медные': 'copper', 'металл': 'metal', 'прокат': 'rolled steel', 'олово': 'tin',
   'цинк': 'zinc', 'свинец': 'lead', 'никель': 'nickel', 'титан': 'titanium',
   'золото': 'gold', 'серебро': 'silver', 'провод': 'wire', 'кабель': 'cable wire',
   'труба': 'pipe tube', 'лист стальной': 'steel sheet plate', 'уголь': 'coal',
@@ -292,6 +292,63 @@ function normalize(s) {
   return (s || '').toLowerCase().trim();
 }
 
+/**
+ * Проверяет, встречается ли русский словарный ключ `term` в запросе `q`
+ * либо как отдельное слово целиком, либо (для словоформ/падежей того же
+ * корня) как префикс слова — НО не как случайное совпадение внутри
+ * совершенно другого по смыслу слова.
+ *
+ * Без явной защиты короткие ключи словаря ложно совпадали внутри
+ * не относящихся к делу слов: «мед» (→ honey) совпадал внутри «медная»
+ * (медь, металл), из-за чего «медная труба» неожиданно показывала мёд
+ * среди результатов труб. При этом простое требование «совпадение только
+ * целым словом» сломало бы законные случаи словоформ («сталь» должно
+ * совпадать с «стальная», «труба» с «трубы»).
+ *
+ * Решение: ключи, которые реально оказались такими корнями-коллизиями
+ * (см. RUSSIAN_COLLISION_KEYS), требуют точную границу с обеих сторон.
+ * Остальные ключи (большинство словаря) разрешают совпадение по префиксу
+ * слова — это и есть правило для словоформ.
+ */
+const RUSSIAN_COLLISION_KEYS = new Set([
+  'мед', 'мёд',   // мёд (honey) vs медь/медная/медикаменты (copper/medicaments)
+  'вино',         // вино (wine) vs виноград (grapes) — разные товары
+  'мел',          // мел (chalk) vs мельница (mill) — разные товары
+  'газ',          // газ (gas) vs газон/газель (lawn/Gazelle van) — не товарные термины, но избегаем риска
+  'лук',          // лук (onion) vs лукошко и подобные — избегаем риска
+  'чай',          // чай (tea) vs чайник/чайка — не товарные термины, но избегаем риска
+]);
+
+/**
+ * Проверяет, входит ли однословный запрос `q` в текст `text` (например,
+ * название товарной группы) как отдельное слово — с границей с обеих
+ * сторон. В отличие от matchesRussianTerm (которая обслуживает ключи
+ * словаря и разрешает совпадение по префиксу для законных словоформ),
+ * здесь запрос пользователя произвольный и заранее неизвестный — поэтому
+ * всегда требуется полная граница слова, без исключений по списку.
+ *
+ * Без этого «мел» совпадал внутри «редкозе[мел]ьных» (название группы 28
+ * содержит слово «редкоземельных», в середине которого есть «мел» как
+ * случайная подстрока, не имеющая отношения к мелу как материалу).
+ */
+function matchesWordInText(text, q) {
+  if (q.includes(' ')) return text.includes(q); // многословные запросы — обычная подстрока
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`(^|[^а-яёa-z])${escaped}([^а-яёa-z]|$)`, 'i');
+  return re.test(text);
+}
+
+function matchesRussianTerm(q, term) {
+  if (term.includes(' ')) return q.includes(term); // многословные ключи — обычная подстрока
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (RUSSIAN_COLLISION_KEYS.has(term)) {
+    const re = new RegExp(`(^|[^а-яёa-z])${escaped}([^а-яёa-z]|$)`, 'i');
+    return re.test(q);
+  }
+  const re = new RegExp(`(^|[^а-яёa-z])${escaped}`, 'i');
+  return re.test(q);
+}
+
 let cachedData = null;
 let cachedRuGroups = null;
 
@@ -414,12 +471,25 @@ async function liveTranslateRuToEn(text) {
  * совпадало само по себе с десятками не относящихся к делу товаров (табак
  * для кальяна для "pipe", хлорид аммония/кальция/магния для "chloride").
  */
+// Короткие английские слова, которые реально совпадали внутри других слов
+// как ложные срабатывания (см. историю фиксов: "tin" внутри "tinctorius"/
+// "tinted", "car" внутри "carcasses"). Только для них требуется полная
+// граница слова (\bword\b) — это узкий список конкретных проблемных слов,
+// а не общее правило по длине, которое ломало множественное число у
+// обычных технических терминов (напр. "tube" не матчился с "tubes",
+// "pump" не матчился с "pumps" до отдельного фикса для этого случая).
+const AMBIGUOUS_SHORT_WORDS = new Set(['tin', 'car', 'gas']);
+
 function matchesPhrase(desc, words) {
   return words.every(w => {
     if (w.length < 3) return true; // короткие союзы/предлоги не учитываем как обязательные
-    const pattern = w.length <= 4
-      ? `\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`
-      : `\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`;
+    const escaped = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = AMBIGUOUS_SHORT_WORDS.has(w)
+      ? `\\b${escaped}\\b`
+      // Левая граница + опциональное окончание множественного числа
+      // (-s/-es), чтобы "tube" совпадал и с "tube", и с "tubes", без
+      // совпадения внутри произвольных более длинных слов на старте.
+      : `\\b${escaped}e?s?\\b`;
     return new RegExp(pattern, 'i').test(desc);
   });
 }
@@ -430,7 +500,11 @@ function matchesPhrase(desc, words) {
  * словарного термина или весь живой перевод запроса). Несколько фраз
  * объединяются через "ИЛИ" между собой (любая полностью совпавшая фраза
  * даёт результат), но слова внутри каждой фразы — через "И" (см.
- * matchesPhrase) — это и есть исправление, описанное выше в комментарии.
+ * matchesPhrase).
+ *
+ * Используется, когда пользователь ввёл ОДНО понятие (один совпавший
+ * термин словаря, или весь текст живого перевода как одна фраза) — здесь
+ * OR не имеет значения, потому что фраза всего одна.
  *
  * @param {string[][]} phrases — массив фраз, каждая фраза — массив слов
  */
@@ -441,24 +515,34 @@ function matchByPhrases(hsCodesRaw, phrases) {
   });
 }
 
+/**
+ * Ищет товары, чьё описание удовлетворяет ВСЕМ переданным фразам
+ * одновременно (AND между фразами, не ИЛИ). Используется, когда
+ * пользователь ввёл НЕСКОЛЬКО разных слов, каждое из которых отдельно
+ * совпало со словарём (например «труба» + «пвх» — это два разных
+ * словарных термина, описывающих ОДИН конкретный товар, а не два разных
+ * товара). Без этого «труба пвх» находил любую трубу (сталь, медь,
+ * алюминий) просто по совпадению с «труба», игнорируя «пвх» — баг,
+ * который основатель явно обнаружил и указал на конкретном примере.
+ */
+function matchAllPhrases(hsCodesRaw, phrases) {
+  return hsCodesRaw.filter(r => {
+    const desc = r.description.toLowerCase();
+    return phrases.every(words => matchesPhrase(desc, words));
+  });
+}
+
 function matchByTerms(hsCodesRaw, terms) {
   const uniqueTerms = [...new Set(terms)];
   return hsCodesRaw.filter(r => {
     const desc = r.description.toLowerCase();
     return uniqueTerms.some(t => {
       if (t.length < 3) return false;
-      // Совпадение по началу слова (граница перед термином). Для коротких
-      // терминов (3-4 символа) дополнительно требуем границу и после
-      // термина — иначе "tin" совпадает в начале "tinctorius"/"tinted",
-      // "car" совпадает в начале "carcasses". Более длинные термины
-      // (5+ символов) такой риск почти не несут, им оставляем только
-      // левую границу — это ловит множественное число и словоформы
-      // ("pump" внутри "Pumps", "fertilis" внутри "Fertilisers").
-      const pattern = t.length <= 4
-        ? `\\b${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`
-        : `\\b${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`;
-      const re = new RegExp(pattern, 'i');
-      return re.test(desc);
+      const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = AMBIGUOUS_SHORT_WORDS.has(t)
+        ? `\\b${escaped}\\b`
+        : `\\b${escaped}e?s?\\b`;
+      return new RegExp(pattern, 'i').test(desc);
     });
   });
 }
@@ -523,29 +607,61 @@ export async function searchHsCodes(query) {
   // (96 групп, подлинные русские названия из ЕАЭС-классификатора, не
   // перевод) — это самый надёжный уровень, проверяется раньше словаря.
   const matchedGroupCodes = Object.entries(ruGroups)
-    .filter(([, name]) => normalize(name).includes(q))
+    .filter(([, name]) => matchesWordInText(normalize(name), q))
     .map(([code]) => code);
 
   if (matchedGroupCodes.length > 0) {
     const groupMatches = hsCodesRaw.filter(r => matchedGroupCodes.includes(r.code.slice(0, 2)));
     if (groupMatches.length > 0) {
-      const results = groupMatches.slice(0, 20);
+      // Внутри найденной группы товары идут в числовом порядке кода, а не
+      // по релевантности конкретному слову запроса — группа может
+      // объединять несколько разных понятий (напр. группа 09 содержит и
+      // кофе, и чай вместе). Если для запроса есть словарный перевод,
+      // сортируем так, чтобы товары, реально содержащие это слово, шли
+      // первыми — иначе «чай» показывал бы кофе первым просто потому, что
+      // его код меньше.
+      const dictWord = RU_EN_TERMS[q]?.split(' ')[0];
+      const sorted = dictWord
+        ? [...groupMatches].sort((a, b) => {
+            const aMatch = matchesWordInText(a.description.toLowerCase(), dictWord) ? 0 : 1;
+            const bMatch = matchesWordInText(b.description.toLowerCase(), dictWord) ? 0 : 1;
+            return aMatch - bMatch;
+          })
+        : groupMatches;
+      const results = sorted.slice(0, 20);
       return { results: enrichWithRuGroup(results, ruGroups), source: 'official-ru-group' };
     }
   }
 
   // Официальная группа не совпала — пробуем словарь. Каждый совпавший
-  // словарный ключ становится отдельной фразой (все её слова должны
-  // совпасть вместе, см. matchByPhrases) — это и есть исправление бага,
-  // когда общее слово одного перевода (напр. "pipe" из "pipe tube" для
-  // «труба») совпадало само по себе с не относящимися к делу товарами.
+  // словарный ключ становится отдельной фразой.
+  //
+  // Если совпало НЕСКОЛЬКО разных терминов (напр. «труба» и «пвх» в
+  // запросе «труба пвх») — это два слова, описывающие ОДИН конкретный
+  // товар, а не два альтернативных запроса, поэтому товар должен
+  // удовлетворять ВСЕМ фразам одновременно (matchAllPhrases, AND).
+  // Без этого «труба пвх» находил любую трубу вообще (сталь, медь,
+  // алюминий) просто по слову «труба», полностью игнорируя «пвх» — баг,
+  // который основатель явно обнаружил на конкретном примере.
+  //
+  // Если AND даёт пустой результат (например, в датасете физически нет
+  // позиции, где встречаются оба слова одновременно — конкретный товар
+  // слишком узкий для номенклатуры такой детализации), мягко откатываемся
+  // к OR (matchByPhrases) — лучше показать смежные товары, чем пустой экран.
   const dictPhrases = [];
   for (const [ru, en] of Object.entries(RU_EN_TERMS)) {
-    if (q.includes(ru)) dictPhrases.push(en.split(' '));
+    if (matchesRussianTerm(q, ru)) dictPhrases.push(en.split(' '));
   }
 
   if (dictPhrases.length > 0) {
-    const matches = matchByPhrases(hsCodesRaw, dictPhrases);
+    let matches = dictPhrases.length > 1
+      ? matchAllPhrases(hsCodesRaw, dictPhrases)
+      : matchByPhrases(hsCodesRaw, dictPhrases);
+
+    if (matches.length === 0 && dictPhrases.length > 1) {
+      matches = matchByPhrases(hsCodesRaw, dictPhrases);
+    }
+
     if (matches.length > 0) {
       const results = matches.slice(0, 20);
       return { results: enrichWithRuGroup(results, ruGroups), source: 'dictionary' };
@@ -569,5 +685,5 @@ export async function searchHsCodes(query) {
  */
 export function hasKnownTranslation(query) {
   const q = normalize(query);
-  return Object.keys(RU_EN_TERMS).some(ru => q.includes(ru));
+  return Object.keys(RU_EN_TERMS).some(ru => matchesRussianTerm(q, ru));
 }

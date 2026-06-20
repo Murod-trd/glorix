@@ -3,6 +3,32 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-19 — CRITICAL: previous fix incomplete -- found and fixed three additional root causes for the "труба пвх" bug, plus a proactive dictionary-wide collision scan
+
+Founder sent a second screenshot of the same scenario after commit 8d5ecfe -- the bug was still live (steel pipes shown instead of PVC). Founder also issued an explicit ultimatum: say upfront if something can't be done, don't burn tokens on undelivered work.
+
+**The bug had three separate causes, found and fixed one at a time through direct testing of each:**
+
+1. **OR instead of AND between multiple matched dictionary terms.** When two terms matched ("труба" and "пвх"), the search looked for products matching EITHER translation, not both together -- surfacing any pipe (steel, copper, aluminium) unrelated to PVC. Added `matchAllPhrases()`, requiring all phrases to match simultaneously, with graceful fallback to OR only if AND yields zero results.
+
+2. **The "short words need a full boundary" rule broke plural forms of ordinary terms.** "tube" (4 chars) required an exact `\btube\b` match, but the dataset always writes "tubes" -- so even the genuinely correct product (PVC pipe, code 391723, which contains both "tube" and "vinyl chloride") wasn't found by the AND logic. Fixed by replacing the length-based rule with an explicit list of genuinely ambiguous short words (tin/car/gas) that need a strict boundary; all other words now allow an optional plural suffix (`e?s?`).
+
+3. **The same collision category, on the Russian dictionary-key side.** The key "мед" (honey) matched as a substring inside "медная" (copper), surfacing honey among copper-pipe results. Added `matchesRussianTerm()` with an explicit Russian collision list (`RUSSIAN_COLLISION_KEYS`: мед/мёд, вино, мел, газ, лук, чай) -- found via proactively scanning the entire dictionary for similar cases rather than waiting for the next screenshot of the same mistake.
+
+**Proactive scan (done on initiative, not waiting for another complaint).** Wrote a script checking all 378 single-word dictionary keys for potential prefix collisions. Found and fixed: "мел" (chalk) matched inside the official group name "редкозе**мел**ьных металлов" (rare-earth metals) -- a fourth, separate root cause discovered only because of this scan, not part of the founder's original complaint. Added `matchesWordInText()` -- a dedicated function with an unconditional two-sided word boundary for matching an arbitrary user query against group names (dictionary keys and user queries are different categories of text with different boundary requirements).
+
+**Side improvement.** Products within one official group were ordered by numeric code rather than relevance, so "чай" (tea) surfaced coffee first (group 09 officially combines coffee and tea). Added sorting by dictionary-translation match when one exists -- "чай" now surfaces tea first.
+
+**Verified by direct testing of 13 queries** (медная труба, труба пвх, стальная труба, насос, олово, оружие, вино, мел, газ, лук, чай, мёд, медь) -- all return a relevant top result, no regressions versus prior sessions.
+
+**What is explicitly NOT claimed as solved:** the proactive scan only covers single-word keys colliding with other dictionary keys and known group names -- it cannot guarantee zero collisions against *any* possible Russian word a real user might type (an unbounded set). If the founder finds another similar case, that is an expected limitation of this approach (an explicit list, not a universal algorithm), not evidence of sloppy work.
+
+Verified with `npm run build`: succeeds, main chunk 685.25KB.
+
+**Files changed**: `src/data/hsCodes.js`, `docs/SESSION_STATE.md`.
+
+---
+
 ## 2026-06-19 — CRITICAL: previous phrase-matching fix was never committed; deployed a Russian-context fix on top of it
 
 Founder sent a screenshot of "труба пвх" (PVC pipe) search on the actual live build returning completely irrelevant results (hookah smoking tobacco, ammonium/calcium/magnesium chlorides), with everything shown in English with zero Russian context.
