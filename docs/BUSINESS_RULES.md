@@ -220,7 +220,7 @@ Per CIPS practice, these are to be agreed before contract signature:
 | Address verification | Automatic | ❌ Simulated |
 | Bank account verification | Automatic | ❌ Simulated |
 | Tax status check | Automatic | ❌ Simulated |
-| Sanctions list absence | Automatic | ❌ Simulated — static `aiCheck.sanctionsOk: true` |
+| Sanctions list absence | Automatic | ❌ Simulated (CIPS checklist) — static `aiCheck.sanctionsOk: true`. Separately, as of 2026-06-19, product/tender publication now runs through a real client-side keyword screen (`src/utils/sanctionsScreening.js`) that blocks or flags obvious export-controlled categories — see note below. The two are not yet unified: the CIPS checklist flag is still a static demo value. |
 | Litigation history | Automatic | ❌ Simulated |
 | Beneficial owner check | Manual | Demo only |
 | ESG declaration signed | Manual | Demo only |
@@ -291,6 +291,6 @@ All sellers remain anonymous to the buyer (and vice versa) until the tender clos
 Self-labeled in the UI as "⚠ Демо-версия — не юридически обязывающий документ." Key substantive points:
 - Platform only for verified legal entities (no individuals or unincorporated sole traders)
 - Platform is a technological intermediary only — not liable for goods quality, spec accuracy, or contract performance
-- Sanctions compliance claimed against OFAC, EU Consolidated List, UN Sanctions List (❌ simulated — static flags)
+- Sanctions compliance claimed against OFAC, EU Consolidated List, UN Sanctions List (❌ simulated — static flags). Note: a separate, real keyword-based screen now blocks/flags product and tender publication for obvious export-controlled terms (see `src/utils/sanctionsScreening.js`) — this is a genuine safeguard against the crudest cases, but it is not equivalent to the OFAC/EU/UN list integration this clause describes, and the clause's wording should eventually be revised to distinguish the two rather than implying full list-checking exists.
 - Jurisdiction table: UZ, KZ, RU, AZ, GE (registry, law, currency, dispute notes)
 - Privacy: UZ personal data law, Russia Federal Law 152-FZ, KZ personal data law, GDPR for EU participants

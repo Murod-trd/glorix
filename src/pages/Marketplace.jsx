@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { products, categories, calcMarketplaceFee } from '../data/marketplace';
 import { useAccountType } from '../context/AccountContext';
+import { screenForSanctions } from '../utils/sanctionsScreening';
 
 function Stars({ n }) {
   return <span style={{ color: '#F5A623', fontSize: 12 }}>{'★'.repeat(Math.round(n))}{'☆'.repeat(5-Math.round(n))}</span>;
@@ -315,9 +316,16 @@ function AddProductModal({ onClose }) {
   const [form, setForm] = useState({ title: '', category: '', price: '', unit: 'кг', minOrder: '', stock: '', incoterms: 'DAP', deliveryDays: '3', description: '', specs: [{ p: '', v: '' }] });
   const [kp, setKp] = useState('');
   const [generating, setGenerating] = useState(false);
+  const [confirmedReview, setConfirmedReview] = useState(false);
   const set = (k,v) => setForm(f => ({...f, [k]: v}));
   const addSpec = () => set('specs', [...form.specs, {p:'',v:''}]);
   const updateSpec = (i,k,v) => { const s=[...form.specs]; s[i][k]=v; set('specs',s); };
+
+  const specsText = form.specs.map(s => `${s.p} ${s.v}`).join(' ');
+  const screening = screenForSanctions(form.title, form.category, form.description, specsText);
+  const isBlocked = screening.status === 'blocked';
+  const needsReview = screening.status === 'review_required' && !confirmedReview;
+  const publishDisabled = isBlocked || needsReview;
 
   const generateKP = () => {
     setGenerating(true);
@@ -447,9 +455,30 @@ ____________________    ____________________
                 </div>
               </div>
 
+              {isBlocked && (
+                <div style={{ marginTop: 16, padding: '12px 14px', background: 'rgba(255,77,77,0.1)', border: '1px solid rgba(255,77,77,0.4)', borderRadius: 8, fontSize: 12, color: 'var(--red)' }}>
+                  🚫 <strong>Публикация блокирована.</strong> Описание товара содержит признаки категории, запрещённой к торговле на платформе (вооружение, военная техника, ядерные/химические/биологические материалы). Это автоматическая проверка по ключевым словам, а не полная экспортная классификация — если считаете срабатывание ошибочным, измените описание или обратитесь в поддержку.
+                </div>
+              )}
+
+              {screening.status === 'review_required' && (
+                <div style={{ marginTop: 16, padding: '12px 14px', background: 'rgba(245,166,35,0.1)', border: '1px solid rgba(245,166,35,0.4)', borderRadius: 8, fontSize: 12, color: 'var(--gold)' }}>
+                  ⚠ <strong>Требуется проверка.</strong> Товар относится к категории двойного назначения (может требовать экспортной лицензии в зависимости от точной спецификации и страны назначения). Это автоматическая проверка по ключевым словам, не замена реальной экспортной классификации (ECCN / EU Dual-Use Annex I) — платформа не утверждает, что товар «чист», только что он требует ручной проверки перед реальной торговлей.
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={confirmedReview} onChange={e => setConfirmedReview(e.target.checked)} />
+                    Я проверил(а) товар самостоятельно и подтверждаю, что публикация соответствует применимым экспортным ограничениям
+                  </label>
+                </div>
+              )}
+
               <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
                 <button className="btn btn-ghost" onClick={onClose} style={{ flex: 1, justifyContent: 'center', fontSize: 13 }}>Отмена</button>
-                <button className="btn btn-primary" onClick={() => setStep(2)} style={{ flex: 2, justifyContent: 'center', fontSize: 13 }}>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => setStep(2)}
+                  disabled={publishDisabled}
+                  style={{ flex: 2, justifyContent: 'center', fontSize: 13, opacity: publishDisabled ? 0.5 : 1, cursor: publishDisabled ? 'not-allowed' : 'pointer' }}
+                >
                   Разместить товар →
                 </button>
               </div>

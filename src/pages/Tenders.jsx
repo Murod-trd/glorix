@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { tenders } from '../data/mock';
+import { useAccountType } from '../context/AccountContext';
 
 function StatusBadge({ status }) {
   const map = {
@@ -14,6 +15,7 @@ function StatusBadge({ status }) {
 
 export function TenderList() {
   const navigate = useNavigate();
+  const { canBuy } = useAccountType();
   const [filter, setFilter] = useState('all');
 
   const filtered = filter === 'all' ? tenders : tenders.filter(t => t.status === filter);
@@ -25,7 +27,9 @@ export function TenderList() {
           <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 6, letterSpacing: 1 }}>ТЕНДЕРЫ</div>
           <h1 style={{ fontSize: 24, fontWeight: 600 }}>Все тендеры</h1>
         </div>
-        <button className="btn btn-primary" onClick={() => navigate('/create')}>+ Создать тендер</button>
+        {canBuy && (
+          <button className="btn btn-primary" onClick={() => navigate('/create')}>+ Создать тендер</button>
+        )}
       </div>
 
       {/* Filters */}

@@ -3,6 +3,33 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-19 — Sanctions/export-control screening added (founder-reported critical gap); seller permission bug fixed (#11); dead code removed (#8, #21); roadmap dates updated (#12)
+
+**Sanctions screening — the headline fix.** The founder personally tested the platform by attempting to create a tender and list a marketplace product with clearly sanctioned/export-controlled content. Neither was blocked, and no warning appeared — confirming that `sanctions: false` and `aiCheck.sanctionsOk: true` in `marketplace.js` are static demo values with zero connection to actual user input. This had already been flagged as a known limitation in `BUSINESS_RULES.md` (Sanctions list absence row, and the Legal.jsx sanctions-claim line) but never actually fixed. Left unaddressed, this is not just a missing feature — it is a real path for the platform itself to become a target of sanctions enforcement once it handles real trade.
+
+Created `src/utils/sanctionsScreening.js`, a single module (`screenForSanctions()`) shared by both `Marketplace.jsx` and `CreateTender.jsx` rather than duplicated. It implements an honest two-tier model rather than overclaiming what keyword-matching can do:
+
+- **Hard block**: unambiguous categories (weapons, military equipment, nuclear/chemical/biological materials) that are prohibited from civilian B2B trade under every major control regime without exception. Publication is fully disabled — no override exists in the UI.
+- **Review required**: dual-use categories (mapped to the Wassenaar Arrangement / EU Regulation 2021/821 Annex I category structure — microelectronics, telecom, navigation, certain chemicals, aerospace components, military-spec metals, higher-scrutiny petroleum products). Publication is blocked until the user explicitly checks a box confirming they've reviewed the item themselves — the platform states it requires manual review, not that the item is "clear."
+
+Both forms now show explicit, plain-language warning UI and disable their publish buttons accordingly. This is explicitly **not** a real integration with OFAC/EU/UN sanctions databases or export control classification (ECCN / EU Annex I) — that requires a real backend and database and remains correctly scoped to the Beta phase in `Roadmap.jsx`. What this closes is the much more basic and more urgent gap: there was previously *no check of any kind* on user-entered text. `docs/BUSINESS_RULES.md` updated in two places to draw this distinction precisely, so the existing honest disclosure isn't accidentally overwritten with a false "fully solved" claim.
+
+**Found and fixed a Rules of Hooks bug while wiring this in.** The first pass at `CreateTender.jsx` placed a new `useState` call after the component's existing conditional `return` (added moments earlier for the seller-permission fix below) — meaning seller-type accounts would execute fewer hook calls than buyer-type accounts on the same component, a Rules of Hooks violation that can cause React state corruption or runtime errors. Fixed by moving all `useState` calls to the top of the component, before any conditional return.
+
+**#11 closed.** The "Создать тендер" button was visible to all account types, including sellers, who are not permitted to create tenders. Fixed in two places: `Tenders.jsx` now hides the button when `!canBuy` (via `useAccountType()`); `CreateTender.jsx` now also guards the route itself — a seller navigating directly to `/create` by URL sees an explicit "not available for your account type" screen instead of the form.
+
+**#8 closed.** Removed the dead `resolveContractLanguage` function from `LegalAI.jsx` (lines 14-64, including its explanatory comment) — re-confirmed zero call sites before deletion. The working version in `contractData.js` is unaffected.
+
+**#21 closed.** Deleted `src/data/accountState.js` — confirmed zero imports anywhere in the codebase.
+
+**#12 closed.** Updated stale dates in `Roadmap.jsx`: MVP moved from "Q3 2025" to "Q3 2026", Beta from "Q4 2025" to "Q1 2027", Production from "2026" to "2027". Phase contents unchanged, only timing.
+
+Verified with `npm run build`: succeeds, main chunk grew modestly (651.62KB → 659.33KB, from the new screening module) — the 🔴#4 bundle optimization remains intact.
+
+**Files changed**: `src/utils/sanctionsScreening.js` (new), `src/pages/Marketplace.jsx`, `src/pages/CreateTender.jsx`, `src/pages/Tenders.jsx`, `src/pages/LegalAI.jsx`, `src/pages/Roadmap.jsx`, `src/data/accountState.js` (deleted), `docs/BUSINESS_RULES.md`, `docs/SESSION_STATE.md`.
+
+---
+
 
 ## 2026-06-19 — Merged isolated-session work into the real repository (commit cfd0253); fixed module-scope localStorage reads (🟠 #6)
 

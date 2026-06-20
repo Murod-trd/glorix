@@ -11,58 +11,6 @@ const docTypes = [
   { id: 'acceptance', label: 'Акцепт оферты', icon: '✅' },
 ];
 
-// Правило (подтверждено пользователем):
-// — Стороны из РАЗНЫХ стран → международная сделка, не регулируется внутренним языковым
-//   законом одной отдельной страны. Используется стандартный двуязычный формат RU/EN,
-//   как в реальном шаблоне (ТФД), независимо от национальных законов сторон.
-// — Стороны из ОДНОЙ страны → применяется именно закон этой страны:
-//     если закон допускает русский для B2B-договоров между резидентами → один язык (русский);
-//     если закон запрещает русский / требует только национальный → один язык (национальный),
-//     билингвальность в этом случае НЕ нужна.
-// Возвращает: { mode: 'mono'|'bilingual', primary, secondary, warning }
-function resolveContractLanguage(sellerCountry, buyerCountry) {
-  const sameCountry = sellerCountry && buyerCountry && sellerCountry === buyerCountry;
-
-  if (!sameCountry) {
-    return { mode: 'bilingual', primary: 'ru', secondary: 'en', warning: null };
-  }
-
-  const sLaw = legalSources.find(s => s.code === sellerCountry);
-  const cl = sLaw?.contractLanguage;
-  if (!cl) {
-    return { mode: 'mono', primary: 'ru', secondary: null, warning: null };
-  }
-
-  // Закон страны разрешает русский для B2B между резидентами — один язык, русский
-  if (cl.domesticRule === 'mono' || cl.domesticRule === 'bilingual_mandatory') {
-    // bilingual_mandatory (напр. Казахстан) формально требует двух языков по закону —
-    // это единственный случай внутристрановой сделки, где билингвальность обусловлена
-    // прямым требованием закона, а не нашим выбором. Юридический текст на втором языке
-    // (казахском) требует профессионального аккредитованного перевода — платформа GLORIX
-    // не генерирует юридический текст на языках, для которых нет верифицированного перевода,
-    // так как ошибка в формулировке (падеж, пунктуация) может изменить смысл обязательства.
-    if (cl.domesticRule === 'bilingual_mandatory') {
-      const [first, second] = cl.domesticLanguage.split('+');
-      return { mode: 'bilingual', primary: first, secondary: second, warning: null, mandatory: true, requiresCertifiedTranslation: true };
-    }
-    return { mode: 'mono', primary: 'ru', secondary: null, warning: cl.verified ? null : cl.note };
-  }
-
-  // Закон страны запрещает русский / требует только национальный язык — один язык, национальный
-  if (cl.domesticRule === 'national_required' || cl.domesticRule === 'national_must_prevail') {
-    return { mode: 'mono', primary: cl.domesticLanguage, secondary: null, warning: cl.note, nationalOnly: true };
-  }
-
-  // AZ/KG/TM — нет явного подтверждения ни в одну сторону; консервативно: национальный язык,
-  // с явным предупреждением, что требуется юридическая проверка перед использованием
-  if (cl.domesticRule === 'caution') {
-    const [national] = cl.domesticLanguage.split('+');
-    return { mode: 'mono', primary: national, secondary: null, warning: cl.note, unverifiedCaution: true };
-  }
-
-  return { mode: 'mono', primary: 'ru', secondary: null, warning: null };
-}
-
 function buildContract(f) {
   const { seller, buyer, sellerCountry, buyerCountry, goods, amount, currency,
     incoterms, deliveryDays, payTerms, penaltyRate, maxPenalty,

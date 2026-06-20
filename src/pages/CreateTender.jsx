@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { calcDeposit } from '../data/mock';
+import { useAccountType } from '../context/AccountContext';
+import { screenForSanctions } from '../utils/sanctionsScreening';
 
 const steps = ['Основное', 'Спецификации', 'Логистика', 'Депозит'];
 
 export default function CreateTender() {
   const navigate = useNavigate();
+  const { canBuy } = useAccountType();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
     title: '', category: '', quantity: '', unit: 'тонн',
@@ -15,10 +18,30 @@ export default function CreateTender() {
     d1: '', d2: '', d3: '', d4: '', d5: '',
     contractPref: 'own', acceptTemplate: true,
   });
+  const [confirmedReview, setConfirmedReview] = useState(false);
+
+  if (!canBuy) {
+    return (
+      <div className="fade-in" style={{ padding: '32px 36px' }}>
+        <div className="card" style={{ padding: 24, maxWidth: 480 }}>
+          <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Недоступно для вашего типа аккаунта</div>
+          <div style={{ color: 'var(--text-2)', fontSize: 14, marginBottom: 16 }}>
+            Создание тендеров доступно только покупателям. Ваш текущий тип аккаунта — продавец.
+          </div>
+          <button className="btn btn-primary" onClick={() => navigate('/tenders')}>← К списку тендеров</button>
+        </div>
+      </div>
+    );
+  }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const budget = Number(form.budgetMax) || Number(form.budgetMin) || 0;
   const dep = budget > 0 ? calcDeposit(budget) : null;
+  const specsText = form.specs.map(s => `${s.param} ${s.value}`).join(' ');
+  const screening = screenForSanctions(form.title, form.category, specsText);
+  const isBlocked = screening.status === 'blocked';
+  const needsReview = screening.status === 'review_required' && !confirmedReview;
+  const publishDisabled = isBlocked || needsReview;
 
   const addSpec = () => set('specs', [...form.specs, { param: '', value: '' }]);
   const updateSpec = (i, k, v) => {
@@ -176,7 +199,26 @@ export default function CreateTender() {
               ⚠ Демо-режим: тендер не будет опубликован реально и не виден другим пользователям. Депозит не списывается, оплата не происходит.
             </div>
 
-            <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: 15 }}
+            {isBlocked && (
+              <div style={{ marginTop: -4, marginBottom: 20, padding: '12px 14px', background: 'rgba(255,77,77,0.1)', border: '1px solid rgba(255,77,77,0.4)', borderRadius: 8, fontSize: 12, color: 'var(--red)' }}>
+                🚫 <strong>Публикация блокирована.</strong> Описание тендера содержит признаки категории, запрещённой к торговле на платформе (вооружение, военная техника, ядерные/химические/биологические материалы). Это автоматическая проверка по ключевым словам, а не полная экспортная классификация — если считаете срабатывание ошибочным, измените описание или обратитесь в поддержку.
+              </div>
+            )}
+
+            {screening.status === 'review_required' && (
+              <div style={{ marginTop: -4, marginBottom: 20, padding: '12px 14px', background: 'rgba(245,166,35,0.1)', border: '1px solid rgba(245,166,35,0.4)', borderRadius: 8, fontSize: 12, color: 'var(--gold)' }}>
+                ⚠ <strong>Требуется проверка.</strong> Товар тендера относится к категории двойного назначения (может требовать экспортной лицензии в зависимости от точной спецификации и страны назначения). Это автоматическая проверка по ключевым словам, не замена реальной экспортной классификации (ECCN / EU Dual-Use Annex I) — платформа не утверждает, что товар «чист», только что он требует ручной проверки перед реальной торговлей.
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={confirmedReview} onChange={e => setConfirmedReview(e.target.checked)} />
+                  Я проверил(а) товар самостоятельно и подтверждаю, что публикация соответствует применимым экспортным ограничениям
+                </label>
+              </div>
+            )}
+
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: 15, opacity: publishDisabled ? 0.5 : 1, cursor: publishDisabled ? 'not-allowed' : 'pointer' }}
+              disabled={publishDisabled}
               onClick={() => { alert('Тендер опубликован! (демо)'); navigate('/tenders'); }}>
               Опубликовать тендер
             </button>
