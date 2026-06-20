@@ -1,4 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
+import { useAccountType } from '../context/AccountContext';
 
 const configs = {
   buyer: {
@@ -78,7 +79,7 @@ const commonNav = [
 
 export default function Sidebar() {
   const navigate = useNavigate();
-  const type = localStorage.getItem('glorix_account_type') || 'buyer';
+  const { accountType: type } = useAccountType();
   const cfg = configs[type] || configs.buyer;
   const score = cfg.score;
   const trustColor = score >= 70 ? '#00D4AA' : score >= 30 ? '#F5A623' : '#FF4D4D';

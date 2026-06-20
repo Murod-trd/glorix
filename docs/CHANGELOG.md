@@ -4,6 +4,28 @@ New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format.
 
 ---
 
+## 2026-06-19 — Merged isolated-session work into the real repository (commit cfd0253); fixed module-scope localStorage reads (🟠 #6)
+
+**Part 1 — repository merge.** The previous three changelog entries (index.html recovery, demo disclaimers, AI-label rename + watermarks) were produced in a separate sandboxed session that had no git access to GitHub (the handover archive contained no `.git/` history, and direct token-based git remote setup was declined for security reasons in that session). The founder exported that session's work as a unified diff (`diff -ruN`) against the original handover snapshot. The diff's file headers pointed at two different temporary directory paths, which made it inapplicable via standard `git apply`/`patch` without manual correction; it was split into 14 per-file blocks, headers rewritten to relative paths, and applied cleanly via `patch -p0` with zero conflicts. Verified with a real `npm run build` (the previous session could only verify syntax, not a full build, due to the missing `index.html`). Committed and pushed as `cfd0253`. `docs/SESSION_STATE.md` was also consolidated — the three incremental "step" sections from the isolated session were merged into one clean current-state snapshot, with the original step-by-step detail preserved verbatim in the history section rather than discarded.
+
+**Part 2 — 🟠 #6 closed.** `accountType` was previously read from `localStorage` at module scope in `mock.js`, `Marketplace.jsx`, and `Dashboard.jsx` — meaning the value was computed once when the module first loaded and never updated again without a full page reload. `AccountSelect.jsx` worked around this with `navigate('/')` followed by `window.location.reload()`, plus an unused `window.dispatchEvent(new Event('glorix_account_changed'))` with no subscribers.
+
+Created `src/context/AccountContext.jsx` — a single React Context exposing `useAccountType()` (`accountType`, `canBuy`, `canSell`, `setAccountType()`). All consumers now read account type reactively instead of from a stale module-level constant:
+- `mock.js`: `currentUser` (a static export) replaced with `getCurrentUser(accountType)`, a pure function with no import-time side effects
+- `Marketplace.jsx`, `Dashboard.jsx`: module-scope `accountType`/`canBuy`/`canSell` removed, now read via the hook inside the component
+- `DepositTrust.jsx`, `Profile.jsx`: switched from importing the static `currentUser` to calling `getCurrentUser(accountType)`
+- `Sidebar.jsx`: direct `localStorage.getItem` replaced with the hook
+- `AccountSelect.jsx`: **`window.location.reload()` removed** — switching accounts now calls `setAccountType()` and updates every subscribed component instantly, with no page reload
+- `DocumentCenter.jsx`: found and fixed an adjacent duplication while making this change — `generateKP()` hardcoded company names per account type directly in the function instead of reusing the single source of truth (`users` in `mock.js`); now calls `getCurrentUser(accountType).name`
+- `App.jsx`: wrapped in `<AccountProvider>`
+
+Verified with `npm run build`: succeeds, main chunk size unchanged (651.62KB — the 🔴 #4 bundle optimization is unaffected), no `modulepreload` hints on the heavy chunks.
+
+**Files changed**: `src/context/AccountContext.jsx` (new), `src/data/mock.js`, `src/pages/Marketplace.jsx`, `src/pages/Dashboard.jsx`, `src/pages/DepositTrust.jsx`, `src/pages/Profile.jsx`, `src/pages/AccountSelect.jsx`, `src/pages/DocumentCenter.jsx`, `src/components/Sidebar.jsx`, `src/App.jsx`, `docs/SESSION_STATE.md`.
+
+---
+
+
 ## 2026-06-19 — index.html recovered, bundle size measured: 🔴 #4 fully closed (commit — see SESSION_STATE.md)
 
 `index.html` was missing from the handover snapshot used to start this session (flagged as a blocker in the previous two changelog entries). The founder supplied the actual original file content directly, confirmed as the real source rather than a reconstruction. It contains a Google Fonts CDN `<link>` (Inter + Space Grotesk via `fonts.googleapis.com`), which confirms open audit item 🟡 #15 (Google Fonts blocked in Russia) as a real, present issue rather than a hypothetical one — not addressed in this entry, left as its own open item.

@@ -1,9 +1,6 @@
 import { useState } from 'react';
 import { products, categories, calcMarketplaceFee } from '../data/marketplace';
-
-const accountType = localStorage.getItem('glorix_account_type') || 'buyer';
-const canBuy = accountType === 'buyer' || accountType === 'both';
-const canSell = accountType === 'seller' || accountType === 'both';
+import { useAccountType } from '../context/AccountContext';
 
 function Stars({ n }) {
   return <span style={{ color: '#F5A623', fontSize: 12 }}>{'★'.repeat(Math.round(n))}{'☆'.repeat(5-Math.round(n))}</span>;
@@ -215,6 +212,7 @@ function ProductCard({ product, onClick }) {
 }
 
 export default function Marketplace() {
+  const { canBuy, canSell } = useAccountType();
   const [category, setCategory] = useState('all');
   const [delivery, setDelivery] = useState('all');
   const [search, setSearch] = useState('');

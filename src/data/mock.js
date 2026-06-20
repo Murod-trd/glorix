@@ -1,4 +1,9 @@
-const accountType = localStorage.getItem('glorix_account_type') || 'buyer';
+// Прежде здесь было: const accountType = localStorage.getItem(...) на module
+// scope, из-за чего currentUser вычислялся один раз при первой загрузке и не
+// обновлялся при смене аккаунта без window.location.reload(). Теперь компоненты
+// получают текущий тип аккаунта реактивно через useAccountType() (см.
+// src/context/AccountContext.jsx) и сами выбирают нужного пользователя через
+// getCurrentUser(accountType) — закрывает аудит-пункт 🟠#6.
 
 const users = {
   buyer: {
@@ -21,7 +26,9 @@ const users = {
   },
 };
 
-export const currentUser = users[accountType] || users.buyer;
+export function getCurrentUser(accountType) {
+  return users[accountType] || users.buyer;
+}
 
 export const tenders = [
   {

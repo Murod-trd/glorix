@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { calcDeposit, depositRates, currentUser } from '../data/mock';
+import { calcDeposit, depositRates, getCurrentUser } from '../data/mock';
+import { useAccountType } from '../context/AccountContext';
 
 export function DepositCalculator() {
   const [amount, setAmount] = useState(50000);
@@ -98,6 +99,8 @@ export function DepositCalculator() {
 }
 
 export function TrustRating() {
+  const { accountType } = useAccountType();
+  const currentUser = getCurrentUser(accountType);
   const score = currentUser.trustScore;
   const color = score >= 70 ? 'var(--accent)' : score >= 30 ? 'var(--gold)' : 'var(--red)';
   const zone = score >= 70 ? 'Зелёная зона' : score >= 30 ? 'Жёлтая зона' : 'Красная зона';

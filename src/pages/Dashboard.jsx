@@ -1,9 +1,6 @@
 import { useNavigate } from 'react-router-dom';
-import { tenders, stats, currentUser } from '../data/mock';
-
-const accountType = localStorage.getItem('glorix_account_type') || 'buyer';
-const canBuy = accountType === 'buyer' || accountType === 'both';
-const canSell = accountType === 'seller' || accountType === 'both';
+import { tenders, stats, getCurrentUser } from '../data/mock';
+import { useAccountType } from '../context/AccountContext';
 
 function StatCard({ value, label, accent }) {
   return (
@@ -52,6 +49,8 @@ function TenderRow({ tender, onClick }) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { canBuy, canSell, accountType } = useAccountType();
+  const currentUser = getCurrentUser(accountType);
   return (
     <div className="fade-in" style={{ padding: '32px 36px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>

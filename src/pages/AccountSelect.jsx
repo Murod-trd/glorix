@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useAccountType } from '../context/AccountContext';
 
 const accounts = [
   {
@@ -51,12 +52,11 @@ const accounts = [
 
 export default function AccountSelect() {
   const navigate = useNavigate();
+  const { setAccountType } = useAccountType();
 
   const login = (id) => {
-    localStorage.setItem('glorix_account_type', id);
-    window.dispatchEvent(new Event('glorix_account_changed'));
+    setAccountType(id);
     navigate('/');
-    window.location.reload();
   };
 
   return (

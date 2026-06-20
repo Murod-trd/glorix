@@ -1,7 +1,10 @@
 import { useState } from 'react';
-import { currentUser } from '../data/mock';
+import { getCurrentUser } from '../data/mock';
+import { useAccountType } from '../context/AccountContext';
 
 export default function Profile() {
+  const { accountType } = useAccountType();
+  const currentUser = getCurrentUser(accountType);
   const [contractPref, setContractPref] = useState('own');
   const [acceptTemplate, setAcceptTemplate] = useState(true);
   const [law, setLaw] = useState('UZ');

@@ -20,10 +20,12 @@ import AccountVerification from './pages/AccountVerification';
 import DocumentCenter from './pages/DocumentCenter';
 import AccountSelect from './pages/AccountSelect';
 import LegalAI from './pages/LegalAI';
+import { AccountProvider } from './context/AccountContext';
 import './index.css';
 
 export default function App() {
   return (
+    <AccountProvider>
     <BrowserRouter>
       <Routes>
         <Route path="/onboarding" element={<Onboarding />} />
@@ -59,5 +61,6 @@ export default function App() {
         } />
       </Routes>
     </BrowserRouter>
+    </AccountProvider>
   );
 }

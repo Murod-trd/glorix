@@ -1,5 +1,7 @@
 import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { getCurrentUser } from '../data/mock';
+import { useAccountType } from '../context/AccountContext';
 
 // Mock ТН ВЭД database
 const tnved = [
@@ -28,6 +30,7 @@ function parsePaste(text) {
 }
 
 export default function DocumentCenter() {
+  const { accountType } = useAccountType();
   const [tab, setTab] = useState('kp'); // kp | tnved
   const [items, setItems] = useState([{ name: '', tnved: '', qty: '', unit: 'кг', price: '', specs: '' }]);
   const [pasteText, setPasteText] = useState('');
@@ -65,8 +68,7 @@ export default function DocumentCenter() {
   const generateKP = () => {
     setGenerating(true);
     setTimeout(() => {
-      const sellerName = localStorage.getItem('glorix_account_type') === 'seller' ? 'FerganaTex Export' :
-                         localStorage.getItem('glorix_account_type') === 'both' ? 'BekabadMetal Group' : 'Tashkent Agro LLC';
+      const sellerName = getCurrentUser(accountType).name;
       const rows = items.filter(i => i.name).map((item, idx) => {
         const subtotal = (parseFloat(item.qty)||0) * (parseFloat(item.price)||0);
         return `| ${idx+1} | ${item.name} | ${item.tnved || '—'} | ${item.qty} ${item.unit} | $${parseFloat(item.price)||0} | $${subtotal.toLocaleString()} |`;
