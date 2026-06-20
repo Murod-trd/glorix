@@ -3,6 +3,16 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-19 — LegalAI form validation added (#14)
+
+The "Сгенерировать" button in LegalAI previously ran document generation for any document type with no field validation -- contracts could be created with empty required fields (seller/buyer/goods/amount left as `________________________________` blanks in the finished legal document). Added a `validate()` function checking before generation: seller is filled, buyer is filled, goods are filled, and the transaction amount is filled and is a valid positive number (not NaN, not negative, not zero). On an invalid form, an explicit list of missing/incorrect fields is shown above the button, and generation does not proceed. Tested edge cases: empty form, whitespace-only field, non-numeric amount, negative amount, zero amount -- all correctly blocked.
+
+Verified with `npm run build`: succeeds, main chunk 687.35KB.
+
+**Files changed**: `src/pages/LegalAI.jsx`, `docs/SESSION_STATE.md`.
+
+---
+
 ## 2026-06-19 — Fixed a systemic class of bugs: Russian word-form stemming and material-word false positives
 
 Founder showed a screenshot: query "оборудования" returned random results (horses, donkeys, swine) with translation "of" instead of the actual word.

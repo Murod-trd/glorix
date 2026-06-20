@@ -1212,6 +1212,7 @@ export default function LegalAI() {
   const [contractStructured, setContractStructured] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [sourcesCountry, setSourcesCountry] = useState('UZ');
+  const [validationErrors, setValidationErrors] = useState([]);
 
   const sellerLaw = legalSources.find(s => s.code === sellerCountry);
   const buyerLaw = legalSources.find(s => s.code === buyerCountry);
@@ -1219,7 +1220,32 @@ export default function LegalAI() {
   const arbitrationUnverified = sellerLaw?.nationalArbitrationUnverified || buyerLaw?.nationalArbitrationUnverified;
   const viewSource = legalSources.find(s => s.code === sourcesCountry);
 
+  /**
+   * Закрывает аудит-пункт #14 — раньше кнопка «Сгенерировать» запускала
+   * генерацию документа без какой-либо проверки полей, и контракты могли
+   * создаваться с пустыми обязательными реквизитами (продавец/покупатель/
+   * товар/сумма заполнялись как "________________________________" —
+   * пустыми подчёркиваниями в готовом юридическом документе).
+   */
+  const validate = () => {
+    const errors = [];
+    if (!seller.trim()) errors.push('Не указан продавец');
+    if (!buyer.trim()) errors.push('Не указан покупатель');
+    if (!goods.trim()) errors.push('Не указан товар');
+    const amountNum = Number(amount);
+    if (!amount.trim() || !Number.isFinite(amountNum) || amountNum <= 0) {
+      errors.push('Не указана сумма сделки (или указано некорректное значение)');
+    }
+    return errors;
+  };
+
   const generate = () => {
+    const errors = validate();
+    if (errors.length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+    setValidationErrors([]);
     setGenerating(true);
     const f = { seller, buyer, sellerCountry, buyerCountry, goods, amount, currency,
       incoterms, deliveryDays, payTerms, penaltyRate, maxPenalty, scope, intLaw, city, contractNum, contractDate,
@@ -1453,6 +1479,12 @@ export default function LegalAI() {
                   </div>
                 )}
               </div>
+              {validationErrors.length > 0 && (
+                <div style={{ padding: '12px 14px', background: 'rgba(255,77,77,0.1)', border: '1px solid rgba(255,77,77,0.4)', borderRadius: 8, marginTop: 14, fontSize: 13, color: 'var(--red)' }}>
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>Заполните обязательные поля:</div>
+                  {validationErrors.map((e, i) => <div key={i}>• {e}</div>)}
+                </div>
+              )}
               <button className="btn btn-primary" onClick={generate} disabled={generating} style={{ width: '100%', justifyContent: 'center', marginTop: 14, padding: '13px', fontSize: 14 }}>
                 {generating ? '⚖ Составляю документ...' : `⚖ Сгенерировать — ${docTypes.find(d=>d.id===docType)?.label}`}
               </button>
