@@ -1,23 +1,52 @@
 import { useState } from 'react';
-import { products, categories, calcMarketplaceFee } from '../data/marketplace';
+import { categories, calcMarketplaceFee } from '../data/marketplace';
 import { getCurrentUser } from '../data/mock';
 import { useAccountType } from '../context/AccountContext';
-import { screenForSanctions } from '../utils/sanctionsScreening';
-import ProductIllustration from '../components/ProductIllustration';
+import { useCart } from '../context/CartContext';
+import { screenForSanctions, checkExportRestriction } from '../utils/sanctionsScreening';
+import { getAllProducts, addUserProduct, getEffectiveStock, decrementStock, addOrder } from '../data/marketplaceStore';
+import ProductIllustration, { PRODUCT_ILLUSTRATION_IDS } from '../components/ProductIllustration';
 
 function Stars({ n }) {
   return <span style={{ color: '#F5A623', fontSize: 12 }}>{'★'.repeat(Math.round(n))}{'☆'.repeat(5-Math.round(n))}</span>;
 }
 
 function ProductModal({ product, onClose, canBuy }) {
+  const { accountType } = useAccountType();
+  const buyer = getCurrentUser(accountType);
+  const { addToCart } = useCart();
   const [qty, setQty] = useState(product.minOrder);
   const [tab, setTab] = useState('specs');
   const [step, setStep] = useState(0);
+  const [addedToCart, setAddedToCart] = useState(false);
 
+  const effectiveStock = getEffectiveStock(product);
   const total = qty * product.price;
   const fee = calcMarketplaceFee(total);
   const buyerFee = +(total * fee / 100).toFixed(2);
   const escrow = +(total + buyerFee).toFixed(2);
+
+  // Реализует требование: «покупатель из России не может купить...
+  // если тот товар... находится под санкцией для продажи в Россию».
+  // Проверка по стране покупателя (текущий аккаунт) против категории
+  // товара, реальное основание — пакеты санкций ЕС против РФ.
+  const exportCheck = checkExportRestriction(product.category, buyer.country);
+  const exceedsStock = qty > effectiveStock;
+
+  const handleConfirmPurchase = () => {
+    decrementStock(product.id, qty);
+    addOrder({
+      productId: product.id, productTitle: product.title, qty, unit: product.unit,
+      total, buyerFee, escrow, buyerId: buyer.id, sellerId: product.seller.id,
+    });
+    setStep(2);
+  };
+
+  const handleAddToCart = () => {
+    addToCart(product.id, qty);
+    setAddedToCart(true);
+    setTimeout(() => setAddedToCart(false), 1800);
+  };
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 20 }}
@@ -27,9 +56,9 @@ function ProductModal({ product, onClose, canBuy }) {
           <div style={{ padding: 40, textAlign: 'center' }}>
             <div style={{ fontSize: 56, marginBottom: 16 }}>✓</div>
             <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--accent)', fontFamily: 'var(--font-display)', marginBottom: 8 }}>Заказ размещён</div>
-            <div style={{ color: 'var(--text-2)', marginBottom: 16 }}>${escrow.toLocaleString()} зачислено на Escrow · Продавец уведомлён</div>
+            <div style={{ color: 'var(--text-2)', marginBottom: 16 }}>${escrow.toLocaleString()} — заказ оформлен, остаток товара обновлён</div>
             <div style={{ display: 'inline-block', padding: '8px 14px', background: 'rgba(180,130,20,0.12)', border: '1px solid rgba(180,130,20,0.35)', borderRadius: 8, fontSize: 12, color: '#B48214', marginBottom: 24 }}>
-              ⚠ Демо-режим: реальная оплата не производилась, продавец не уведомлён
+              ⚠ Демо-режим: реальная оплата не производилась, продавец не уведомлён реально. Заказ сохранён в этой demo-сессии браузера.
             </div>
             <div style={{ background: 'var(--accent-dim)', border: '1px solid rgba(0,212,170,0.2)', borderRadius: 10, padding: 20, textAlign: 'left', maxWidth: 400, margin: '0 auto 24px' }}>
               {['Продавец отгружает товар','Загружает накладную + счёт-фактуру','Деньги мгновенно переходят продавцу','Вы получаете трекинг-номер'].map((s,i) => (
@@ -106,12 +135,22 @@ function ProductModal({ product, onClose, canBuy }) {
 
               {/* Buyer sees buy form, seller sees info only */}
               {canBuy ? (
+                exportCheck.blocked ? (
+                  <div style={{ padding: '16px', background: 'rgba(255,77,77,0.1)', border: '1px solid rgba(255,77,77,0.4)', borderRadius: 10, textAlign: 'center' }}>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>🚫</div>
+                    <div style={{ fontWeight: 600, marginBottom: 6, color: 'var(--red)' }}>Покупка недоступна</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}>{exportCheck.reason}</div>
+                  </div>
+                ) : (
                 <>
                   <div style={{ marginBottom: 14 }}>
                     <label style={{ fontSize: 12, color: 'var(--text-2)', display: 'block', marginBottom: 6 }}>Количество ({product.unit})</label>
                     <input type="number" min={product.minOrder} value={qty} onChange={e => setQty(Math.max(product.minOrder, Number(e.target.value)))}
                       style={{ width: '100%', padding: '10px 14px', background: 'var(--navy-3)', border: '1px solid var(--border-2)', borderRadius: 8, color: 'var(--text)', fontSize: 16, fontWeight: 600 }} />
-                    <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>В наличии: {product.stock.toLocaleString()} {product.unit}</div>
+                    <div style={{ fontSize: 11, color: exceedsStock ? 'var(--red)' : 'var(--text-3)', marginTop: 4 }}>
+                      В наличии: {effectiveStock.toLocaleString()} {product.unit}
+                      {exceedsStock && ' — выбранное количество превышает остаток'}
+                    </div>
                   </div>
                   <div style={{ background: 'var(--navy-3)', borderRadius: 10, padding: '14px 16px', marginBottom: 14 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
@@ -129,19 +168,35 @@ function ProductModal({ product, onClose, canBuy }) {
                     </div>
                   </div>
                   {step === 0
-                    ? <button className="btn btn-primary" onClick={() => setStep(1)} style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: 15 }}>Купить</button>
+                    ? <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          className="btn btn-ghost"
+                          onClick={handleAddToCart}
+                          disabled={exceedsStock}
+                          style={{ flex: 1, justifyContent: 'center', padding: '14px', fontSize: 14, opacity: exceedsStock ? 0.5 : 1, cursor: exceedsStock ? 'not-allowed' : 'pointer' }}>
+                          {addedToCart ? '✓ Добавлено' : '+ В корзину'}
+                        </button>
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => setStep(1)}
+                          disabled={exceedsStock}
+                          style={{ flex: 1, justifyContent: 'center', padding: '14px', fontSize: 15, opacity: exceedsStock ? 0.5 : 1, cursor: exceedsStock ? 'not-allowed' : 'pointer' }}>
+                          Купить сейчас
+                        </button>
+                      </div>
                     : <div>
                         <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12, lineHeight: 1.6 }}>Оплачивая, вы соглашаетесь с условиями GLORIX. Деньги на Escrow — продавцу после накладной.</div>
                         <div style={{ padding: '8px 12px', background: 'rgba(180,130,20,0.12)', border: '1px solid rgba(180,130,20,0.35)', borderRadius: 8, fontSize: 12, color: '#B48214', marginBottom: 12 }}>
-                          ⚠ Демо-режим: оплата не происходит реально, средства не списываются
+                          ⚠ Демо-режим: реальная оплата (через банк/Escrow-провайдера) не производится — но остаток товара и заказ сохраняются в этой demo-сессии браузера.
                         </div>
                         <div style={{ display: 'flex', gap: 8 }}>
                           <button className="btn btn-ghost" onClick={() => setStep(0)} style={{ flex: 1, justifyContent: 'center' }}>Назад</button>
-                          <button className="btn btn-primary" onClick={() => setStep(2)} style={{ flex: 2, justifyContent: 'center' }}>Оплатить ${escrow.toLocaleString()} →</button>
+                          <button className="btn btn-primary" onClick={handleConfirmPurchase} style={{ flex: 2, justifyContent: 'center' }}>Оплатить ${escrow.toLocaleString()} →</button>
                         </div>
                       </div>
                   }
                 </>
+                )
               ) : (
                 <div style={{ padding: '16px', background: 'var(--navy-3)', borderRadius: 10, textAlign: 'center' }}>
                   <div style={{ fontSize: 28, marginBottom: 8 }}>🏭</div>
@@ -162,6 +217,8 @@ function ProductModal({ product, onClose, canBuy }) {
 
 function ProductCard({ product, onClick, canBuy }) {
   const fee = calcMarketplaceFee(product.minOrder * product.price);
+  const effectiveStock = getEffectiveStock(product);
+  const outOfStock = effectiveStock <= 0;
   return (
     <div onClick={onClick} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', flexDirection: 'column' }}
       onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(0,212,170,0.35)'; e.currentTarget.style.transform='translateY(-3px)'; e.currentTarget.style.boxShadow='0 8px 32px rgba(0,0,0,0.3)'; }}
@@ -175,6 +232,11 @@ function ProductCard({ product, onClick, canBuy }) {
           {product.deliveryDays.min <= 2 && <span className="badge badge-gold" style={{ fontSize: 10 }}>⚡ Срочно</span>}
         </div>
         {product.stockAuto && <div style={{ position: 'absolute', bottom: 8, right: 8, fontSize: 10, padding: '2px 7px', background: 'rgba(0,0,0,0.6)', borderRadius: 4, color: 'var(--accent)' }}>◎ ИИ-склад</div>}
+        {outOfStock && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--red)', background: 'rgba(0,0,0,0.6)', padding: '6px 14px', borderRadius: 6 }}>Распродано</span>
+          </div>
+        )}
       </div>
       <div style={{ padding: '14px 16px', flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1.3 }}>{product.title}</div>
@@ -212,8 +274,17 @@ export default function Marketplace() {
   const [sort, setSort] = useState('rating');
   const [viewing, setViewing] = useState(null);
   const [showAddProduct, setShowAddProduct] = useState(false);
+  const [showCart, setShowCart] = useState(false);
+  const { cartCount } = useCart();
+  // Реактивный список товаров — объединяет статичный демо-каталог и
+  // товары, добавленные пользователем (см. marketplaceStore.js).
+  // Перечитывается через refreshProducts() после успешного размещения
+  // нового товара или после покупки (изменение остатка), чтобы список
+  // сразу отражал актуальное состояние без перезагрузки страницы.
+  const [allProducts, setAllProducts] = useState(getAllProducts);
+  const refreshProducts = () => setAllProducts(getAllProducts());
 
-  const filtered = products
+  const filtered = allProducts
     .filter(p => {
       const matchCat = category === 'all' || p.category === category;
       const matchSearch = p.title.toLowerCase().includes(search.toLowerCase());
@@ -230,8 +301,9 @@ export default function Marketplace() {
 
   return (
     <div className="fade-in" style={{ padding: '28px 32px' }}>
-      {viewing && <ProductModal product={viewing} onClose={() => setViewing(null)} canBuy={canBuy} />}
-      {showAddProduct && <AddProductModal onClose={() => setShowAddProduct(false)} />}
+      {viewing && <ProductModal product={viewing} onClose={() => { setViewing(null); refreshProducts(); }} canBuy={canBuy} />}
+      {showAddProduct && <AddProductModal onClose={() => { setShowAddProduct(false); refreshProducts(); }} />}
+      {showCart && <CartModal onClose={() => setShowCart(false)} onOrderComplete={refreshProducts} />}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
@@ -241,9 +313,19 @@ export default function Marketplace() {
           </h1>
           <div style={{ fontSize: 13, color: 'var(--text-2)' }}>Оптом · Только юрлица · Escrow · Реальные тех. характеристики</div>
         </div>
-        {canSell && (
-          <button className="btn btn-primary" onClick={() => setShowAddProduct(true)}>+ Разместить товар</button>
-        )}
+        <div style={{ display: 'flex', gap: 10 }}>
+          {canBuy && (
+            <button className="btn btn-ghost" onClick={() => setShowCart(true)} style={{ position: 'relative' }}>
+              🛒 Корзина
+              {cartCount > 0 && (
+                <span style={{ position: 'absolute', top: -6, right: -6, background: 'var(--accent)', color: 'var(--navy)', borderRadius: '50%', width: 20, height: 20, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{cartCount}</span>
+              )}
+            </button>
+          )}
+          {canSell && (
+            <button className="btn btn-primary" onClick={() => setShowAddProduct(true)}>+ Разместить товар</button>
+          )}
+        </div>
       </div>
 
       {/* Seller warning */}
@@ -303,11 +385,142 @@ export default function Marketplace() {
 }
 
 // Add Product Modal with AI КП helper
+/**
+ * Корзина с оформлением заказа нескольких товаров разом — реализует
+ * требования «покупатель должен иметь возможность купить продукт или
+ * сразу несколько» и «добавь и корзину для покупателя который есть в
+ * настоящих маркетплейсах». Проверяет экспортные ограничения (требование
+ * #8) для каждой позиции отдельно — товар, заблокированный для текущей
+ * страны покупателя, нельзя оформить, даже если он уже лежит в корзине.
+ */
+function CartModal({ onClose, onOrderComplete }) {
+  const { accountType } = useAccountType();
+  const buyer = getCurrentUser(accountType);
+  const { cartItems, removeFromCart, clearCart } = useCart();
+  const [confirmed, setConfirmed] = useState(false);
+
+  const itemChecks = cartItems.map(item => ({
+    ...item,
+    exportCheck: checkExportRestriction(item.product.category, buyer.country),
+    exceedsStock: item.qty > item.effectiveStock,
+  }));
+
+  const blockedItems = itemChecks.filter(i => i.exportCheck.blocked || i.exceedsStock);
+  const purchasableItems = itemChecks.filter(i => !i.exportCheck.blocked && !i.exceedsStock);
+
+  const subtotal = purchasableItems.reduce((sum, i) => sum + i.qty * i.product.price, 0);
+  const fee = calcMarketplaceFee(subtotal);
+  const buyerFee = +(subtotal * fee / 100).toFixed(2);
+  const escrow = +(subtotal + buyerFee).toFixed(2);
+
+  const handleCheckout = () => {
+    purchasableItems.forEach(item => {
+      decrementStock(item.product.id, item.qty);
+      addOrder({
+        productId: item.product.id, productTitle: item.product.title, qty: item.qty, unit: item.product.unit,
+        total: item.qty * item.product.price, buyerFee: 0, escrow: item.qty * item.product.price,
+        buyerId: buyer.id, sellerId: item.product.seller.id,
+      });
+      removeFromCart(item.product.id);
+    });
+    setConfirmed(true);
+    onOrderComplete?.();
+  };
+
+  if (cartItems.length === 0 && !confirmed) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 20 }}
+        onClick={e => e.target === e.currentTarget && onClose()}>
+        <div style={{ background: 'var(--navy-2)', border: '1px solid var(--border-2)', borderRadius: 16, padding: 40, textAlign: 'center', maxWidth: 360 }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>🛒</div>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Корзина пуста</div>
+          <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 20 }}>Добавьте товары из каталога, чтобы оформить заказ сразу на несколько позиций.</div>
+          <button className="btn btn-primary" onClick={onClose} style={{ width: '100%', justifyContent: 'center' }}>К каталогу</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 20 }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: 'var(--navy-2)', border: '1px solid var(--border-2)', borderRadius: 16, width: '90%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto', padding: 28 }}>
+        {confirmed ? (
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>✓</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--accent)', fontFamily: 'var(--font-display)', marginBottom: 8 }}>Заказ оформлен</div>
+            <div style={{ color: 'var(--text-2)', marginBottom: 16 }}>Остатки товаров обновлены, заказы сохранены в этой demo-сессии.</div>
+            <button className="btn btn-primary" onClick={onClose} style={{ padding: '12px 32px' }}>Закрыть</button>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 18 }}>
+              <div style={{ fontWeight: 700, fontSize: 18, fontFamily: 'var(--font-display)' }}>Корзина ({cartItems.length})</div>
+              <button onClick={onClose} style={{ background: 'none', color: 'var(--text-2)', fontSize: 20, cursor: 'pointer' }}>×</button>
+            </div>
+
+            {itemChecks.map(item => (
+              <div key={item.product.id} style={{ display: 'flex', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ width: 50, height: 50, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
+                  <ProductIllustration id={item.product.photoId} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{item.product.title}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-2)' }}>{item.qty.toLocaleString()} {item.product.unit} × ${item.product.price}</div>
+                  {item.exportCheck.blocked && (
+                    <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 4 }}>🚫 {item.exportCheck.reason}</div>
+                  )}
+                  {!item.exportCheck.blocked && item.exceedsStock && (
+                    <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 4 }}>Превышен остаток ({item.effectiveStock} {item.product.unit})</div>
+                  )}
+                </div>
+                <button onClick={() => removeFromCart(item.product.id)} style={{ background: 'none', color: 'var(--text-3)', fontSize: 16, cursor: 'pointer', alignSelf: 'flex-start' }}>×</button>
+              </div>
+            ))}
+
+            {blockedItems.length > 0 && (
+              <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(180,130,20,0.12)', border: '1px solid rgba(180,130,20,0.35)', borderRadius: 8, fontSize: 12, color: '#B48214' }}>
+                ⚠ {blockedItems.length} позиций не войдут в заказ (см. причины выше) — оформляются только доступные товары.
+              </div>
+            )}
+
+            {purchasableItems.length > 0 && (
+              <>
+                <div style={{ background: 'var(--navy-3)', borderRadius: 10, padding: '14px 16px', marginTop: 16, marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+                    <span style={{ color: 'var(--text-2)' }}>Товары ({purchasableItems.length})</span>
+                    <span>${subtotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 8 }}>
+                    <span style={{ color: 'var(--text-2)' }}>Комиссия GLORIX (~{fee}%)</span>
+                    <span>${buyerFee}</span>
+                  </div>
+                  <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
+                    <span>Итого на Escrow</span>
+                    <span style={{ color: 'var(--accent)', fontSize: 18, fontFamily: 'var(--font-display)' }}>${escrow.toLocaleString()}</span>
+                  </div>
+                </div>
+                <div style={{ padding: '8px 12px', background: 'rgba(180,130,20,0.12)', border: '1px solid rgba(180,130,20,0.35)', borderRadius: 8, fontSize: 12, color: '#B48214', marginBottom: 14 }}>
+                  ⚠ Демо-режим: реальная оплата не производится, но остатки и заказы сохраняются в этой demo-сессии.
+                </div>
+                <button className="btn btn-primary" onClick={handleCheckout} style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: 15 }}>
+                  Оформить заказ — ${escrow.toLocaleString()}
+                </button>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AddProductModal({ onClose }) {
   const { accountType } = useAccountType();
   const currentSeller = getCurrentUser(accountType);
   const [step, setStep] = useState(0); // 0=form, 1=ai-kp, 2=done
-  const [form, setForm] = useState({ title: '', category: '', price: '', unit: 'кг', minOrder: '', stock: '', incoterms: 'DAP', deliveryDays: '3', description: '', specs: [{ p: '', v: '' }] });
+  const [form, setForm] = useState({ title: '', category: '', price: '', unit: 'кг', minOrder: '', stock: '', incoterms: 'DAP', deliveryDays: '3', description: '', photoId: 'cement', specs: [{ p: '', v: '' }] });
   const [kp, setKp] = useState('');
   const [generating, setGenerating] = useState(false);
   const [confirmedReview, setConfirmedReview] = useState(false);
@@ -319,7 +532,46 @@ function AddProductModal({ onClose }) {
   const screening = screenForSanctions(form.title, form.category, form.description, specsText);
   const isBlocked = screening.status === 'blocked';
   const needsReview = screening.status === 'review_required' && !confirmedReview;
-  const publishDisabled = isBlocked || needsReview;
+
+  // Минимальная валидация обязательных полей — без этого
+  // addUserProduct() сохранил бы товар с пустым названием/ценой, что
+  // выглядело бы как мусор в общем каталоге сразу после публикации.
+  const missingRequired = !form.title.trim() || !form.category || !form.price || !form.unit.trim()
+    || !form.minOrder || !form.stock || !Number.isFinite(Number(form.price)) || Number(form.price) <= 0
+    || !Number.isFinite(Number(form.stock)) || Number(form.stock) < 0;
+
+  const publishDisabled = isBlocked || needsReview || missingRequired;
+
+  /**
+   * Реально сохраняет товар в общий каталог через marketplaceStore —
+   * закрывает требование «аккаунт продавец должен разместить свой товар
+   * ... в маркетплейсе» (раньше форма проходила все шаги, но товар
+   * никуда не сохранялся, см. CHANGELOG). Продавец — текущий аккаунт
+   * (не статичная демо-компания), категория, остаток и характеристики —
+   * введённые пользователем значения, не заглушки.
+   */
+  const handlePublish = () => {
+    if (publishDisabled) return;
+    addUserProduct({
+      title: form.title.trim(),
+      category: form.category,
+      seller: { id: currentSeller.id, name: currentSeller.name, country: currentSeller.country, flag: currentSeller.flag, city: currentSeller.city || '', trustScore: currentSeller.trustScore, verified: currentSeller.verified, totalDeals: currentSeller.totalDeals },
+      price: Number(form.price), currency: 'USD', unit: form.unit.trim(),
+      minOrder: Number(form.minOrder), maxOrder: Number(form.stock),
+      stock: Number(form.stock), stockAuto: false,
+      photoId: form.photoId,
+      specs: form.specs.filter(s => s.p && s.v).length > 0
+        ? [{ group: 'Характеристики', items: form.specs.filter(s => s.p && s.v).map(s => ({ p: s.p, v: s.v })) }]
+        : [],
+      sellerNotes: form.description.trim() || null,
+      certifications: [], deliveryDays: { min: Number(form.deliveryDays) || 1, max: (Number(form.deliveryDays) || 1) + 7 },
+      incoterms: [form.incoterms], sanctions: false,
+      rating: 0, reviews: 0, reviewsList: [],
+      aiCheck: { sanctionsOk: !isBlocked, specsVerified: false, qualityRisk: 'unverified' },
+      tags: ['Новый товар'],
+    });
+    setStep(2);
+  };
 
   const generateKP = () => {
     setGenerating(true);
@@ -366,10 +618,9 @@ ____________________    ____________________
           <div style={{ padding: 40, textAlign: 'center' }}>
             <div style={{ fontSize: 56, marginBottom: 16 }}>✓</div>
             <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent)', fontFamily: 'var(--font-display)', marginBottom: 8 }}>Товар размещён!</div>
-            <div style={{ color: 'var(--text-2)', marginBottom: 8 }}>ИИ проверяет санкционные списки и спецификации...</div>
-            <div style={{ color: 'var(--accent)', fontSize: 13, marginBottom: 16 }}>◎ Верификация обычно занимает 2–5 минут</div>
+            <div style={{ color: 'var(--text-2)', marginBottom: 16 }}>Товар добавлен в общий каталог маркетплейса и виден другим пользователям этой demo-сессии.</div>
             <div style={{ display: 'inline-block', padding: '8px 14px', background: 'rgba(180,130,20,0.12)', border: '1px solid rgba(180,130,20,0.35)', borderRadius: 8, fontSize: 12, color: '#B48214', marginBottom: 24 }}>
-              ⚠ Демо-режим: товар не публикуется реально, проверка не выполняется
+              ⚠ Демо-режим: товар сохранён в браузере (localStorage), не на сервере — он исчезнет при очистке кэша браузера и не виден с других устройств.
             </div>
             <button className="btn btn-primary" onClick={onClose} style={{ padding: '12px 32px' }}>Вернуться в маркетплейс</button>
           </div>
@@ -395,8 +646,7 @@ ____________________    ____________________
                     <label style={{ fontSize: 12, color: 'var(--text-2)', display: 'block', marginBottom: 5 }}>Категория</label>
                     <select style={inputStyle} value={form.category} onChange={e => set('category', e.target.value)}>
                       <option value="">Выберите</option>
-                      <option>Агро / Продукты</option><option>Текстиль</option><option>Металлы</option>
-                      <option>Стройматериалы</option><option>Оборудование</option><option>Химикаты</option><option>Упаковка</option>
+                      {categories.filter(c => c.id !== 'all').map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                     </select>
                   </div>
                   <div>
@@ -447,6 +697,41 @@ ____________________    ____________________
                   ))}
                   <button onClick={addSpec} className="btn btn-ghost" style={{ fontSize: 11, padding: '5px 12px' }}>+ Параметр</button>
                 </div>
+
+                {/* Примечания продавца — реализует требование: некоторые
+                    нюансы товара (профессиональный сленг отрасли, детали,
+                    которые понятны только тем, кто торгует именно этим
+                    товаром) не укладываются в стандартные поля
+                    «характеристика/значение». Свободное текстовое поле
+                    даёт продавцу возможность объяснить то, что иначе
+                    осталось бы непонятным покупателю и платформе. */}
+                <div>
+                  <label style={{ fontSize: 12, color: 'var(--text-2)', display: 'block', marginBottom: 5 }}>Примечания продавца (необязательно)</label>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 6 }}>
+                    Если что-то важное не укладывается в характеристики выше — опишите своими словами. Например, отраслевые особенности, условия хранения, нюансы партии.
+                  </div>
+                  <textarea style={{ ...inputStyle, minHeight: 70, resize: 'vertical', fontFamily: 'inherit' }}
+                    placeholder="Напр.: Партия с прошлого урожая, влажность может отличаться на ±1% от стандарта..."
+                    value={form.description} onChange={e => set('description', e.target.value)} />
+                </div>
+
+                {/* Иллюстрация товара — без backend нет загрузки настоящих
+                    фото, поэтому продавец выбирает подходящую категорийную
+                    иллюстрацию из набора, который уже используется во всём
+                    каталоге (см. ProductIllustration.jsx) — честное
+                    решение, не выдающее себя за реальное фото. */}
+                <div>
+                  <label style={{ fontSize: 12, color: 'var(--text-2)', display: 'block', marginBottom: 5 }}>Иллюстрация товара</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6 }}>
+                    {PRODUCT_ILLUSTRATION_IDS.map(id => (
+                      <div key={id} onClick={() => set('photoId', id)}
+                        style={{ aspectRatio: '1', borderRadius: 6, overflow: 'hidden', cursor: 'pointer',
+                          border: `2px solid ${form.photoId === id ? 'var(--accent)' : 'var(--border)'}` }}>
+                        <ProductIllustration id={id} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               {isBlocked && (
@@ -469,7 +754,7 @@ ____________________    ____________________
                 <button className="btn btn-ghost" onClick={onClose} style={{ flex: 1, justifyContent: 'center', fontSize: 13 }}>Отмена</button>
                 <button
                   className="btn btn-primary"
-                  onClick={() => setStep(2)}
+                  onClick={handlePublish}
                   disabled={publishDisabled}
                   style={{ flex: 2, justifyContent: 'center', fontSize: 13, opacity: publishDisabled ? 0.5 : 1, cursor: publishDisabled ? 'not-allowed' : 'pointer' }}
                 >

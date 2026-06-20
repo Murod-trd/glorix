@@ -23,12 +23,14 @@ import LegalAI from './pages/LegalAI';
 import NotFound from './pages/NotFound';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AccountProvider } from './context/AccountContext';
+import { CartProvider } from './context/CartContext';
 import './index.css';
 
 export default function App() {
   return (
     <ErrorBoundary>
     <AccountProvider>
+    <CartProvider>
     <BrowserRouter>
       <Routes>
         <Route path="/onboarding" element={<Onboarding />} />
@@ -65,6 +67,7 @@ export default function App() {
         } />
       </Routes>
     </BrowserRouter>
+    </CartProvider>
     </AccountProvider>
     </ErrorBoundary>
   );

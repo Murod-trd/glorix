@@ -3,6 +3,32 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-19 — Marketplace becomes a real, working marketplace within the demo session (founder's 8-point overhaul)
+
+Founder gave an explicit 8-point list to turn the marketplace from a static showcase into something that actually functions: a seller account should be able to list a product with a picture, add notes, a buyer should be able to purchase one or several products, there should be a real cart, sanctioned goods must be blocked, and sales of restricted categories to Russia must be blocked per export law.
+
+**Architecture decision, made upfront**: no backend exists (see session 20's critical-gaps analysis below) -- so "real" means data persists in the browser's `localStorage` for the current session, honestly disclosed in the UI rather than implying server-side persistence.
+
+**New modules**: `src/data/marketplaceStore.js` (centralized store merging the 32-product static catalog with user-added products, stock tracking with overrides for static products, cart, order history) and `src/context/CartContext.jsx` (reactive cart, same pattern as `AccountContext.jsx`).
+
+**Point-by-point implementation:**
+- **1, 6 (real marketplace section)**: `Marketplace()` now reads via `getAllProducts()` with a `refreshProducts()` callback fired after purchase/listing -- the catalog updates live, no page reload.
+- **2 (seller lists a product with a picture)**: the "Add Product" form now actually calls `addUserProduct()` instead of just advancing a step with no save -- this was the root cause of the marketplace not being "real." Added an illustration picker reusing the existing `ProductIllustration.jsx` set (no backend means no real photo upload -- an honest choice, not pretending to be a real photo). Exported `PRODUCT_ILLUSTRATION_IDS` to avoid duplicating the list.
+- **3 (seller notes)**: found a real, separate gap while implementing this -- the `description` field was already checked by sanctions screening but had no actual input field in the UI at all. Added a textarea explaining its purpose (industry jargon, batch-specific details, anything that doesn't fit structured spec fields).
+- **4, 5 (buy one or several products + cart)**: `ProductModal`'s buy button split into "Add to cart" and "Buy now". Built `CartModal` -- a full cart view that checks out multiple different products in one action, with per-item stock and export-restriction checks, and a combined escrow total. Cart icon with item count added to the marketplace header (buyers only).
+- **7 (sanctioned goods blocked)**: pre-existing mechanism (`screenForSanctions`), re-verified working in this session.
+- **8 (export restrictions by buyer country) -- new mechanism**: added `checkExportRestriction()` in `sanctionsScreening.js`, grounded in real, currently active EU sanctions packages against Russia (verified via search before implementation: 20th package, April 2026 -- expanded export bans on metals, chemicals, industrial tools/machine tools; dual-use Annex I separately covers electronics). A category-level approximation, explicitly not real ECCN/HS-code classification -- honestly labeled as such in the code.
+
+**Found and fixed a critical bug mid-implementation**: the add-product form was saving the category as a Russian display label ("Текстиль") instead of the English id ("textile") used everywhere else for filtering and the new export check -- this would have silently broken category filtering and the export-restriction check for every new product. Fixed before commit, not after.
+
+Verified: full 8-scenario business-logic test suite (product add, stock decrement for both user and static products, cart, orders, export restrictions across 4 category/country combinations, weapon sanctions screening) -- all passed. React render test for all three account types (buyer/seller/both) -- correct button visibility per role, no render errors.
+
+Verified with `npm run build`: succeeds, main chunk 733.39KB (up from ~720KB -- new cart/store business logic, expected).
+
+**Files changed**: `src/data/marketplaceStore.js` (new), `src/context/CartContext.jsx` (new), `src/App.jsx`, `src/pages/Marketplace.jsx`, `src/components/ProductIllustration.jsx`, `src/utils/sanctionsScreening.js`, `docs/DECISIONS.md`, `docs/SESSION_STATE.md`.
+
+---
+
 ## 2026-06-19 — Marketplace catalog expanded from 6 to 32 products, all 8 categories filled
 
 Founder asked why SVG illustrations (from the #16 fix) were only created for 6 products. Investigation revealed a separate, real problem: the marketplace declares 8 product categories (agro, construction, electronics, chemicals, textile, metals, packaging, equipment), but only 6 products existed, covering just 6 of 8 categories -- "Electronics" and "Chemicals" were completely empty when filtered.

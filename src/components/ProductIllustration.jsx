@@ -438,6 +438,16 @@ const ILLUSTRATIONS = {
  * <img src={product.photo}>. Если идентификатор неизвестен — показывает
  * нейтральную заглушку вместо падения с ошибкой.
  */
+
+/**
+ * Список всех доступных идентификаторов иллюстраций — используется,
+ * например, формой «Разместить товар», где продавец выбирает подходящую
+ * категорийную иллюстрацию (без backend нет загрузки настоящих фото).
+ * Экспортирован отдельно, чтобы не дублировать список ключей где-либо
+ * ещё в коде.
+ */
+export const PRODUCT_ILLUSTRATION_IDS = Object.keys(ILLUSTRATIONS);
+
 export default function ProductIllustration({ id, ...props }) {
   const Illustration = ILLUSTRATIONS[id];
   if (!Illustration) {
