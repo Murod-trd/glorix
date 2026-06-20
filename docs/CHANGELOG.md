@@ -3,6 +3,28 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-19 — Fixed a systemic class of bugs: Russian word-form stemming and material-word false positives
+
+Founder showed a screenshot: query "оборудования" returned random results (horses, donkeys, swine) with translation "of" instead of the actual word.
+
+**Root cause.** The dictionary has "оборудование" (no -я ending), but the query was "оборудовани**я**" -- the last letter changes under case declension rather than being added (unlike "сталь" -> "стальная" where "сталь" is an exact prefix). The previous false-positive protection required an exact prefix match, so the dictionary found nothing, the search fell through to live translation, which returned a garbage result ("of") for this specific query -- an inherent unreliability of the unofficial endpoint (see Decision 10) -- hence the random results.
+
+**Fix.** Added stemming: for Russian dictionary keys of 4+ characters, the last letter is dropped before comparison -- covering the vast majority of Russian case/number endings with one simple rule ("оборудование" now matches "оборудования", "оборудованию", etc).
+
+**Proactive re-scan after changing the rule.** Stemming is a broader rule than exact-prefix matching, so it could introduce NEW false positives that didn't exist before. Wrote a script checking the entire 378-key dictionary for potential collisions under the new stemming rule. Found 9 additional real collisions not caught before (exact-prefix matching didn't trigger them): стекло vs стекловолокно/стеклотара/стекловата, картон vs картофель, плата vs платина, вода vs водород, сера vs серебро, хлор vs хлопок, обои vs оборудование, соль vs солома, медь vs медикаменты. All added to `RUSSIAN_COLLISION_KEYS` with per-pair explanation.
+
+**Side finding during testing -- an English-side false positive.** "серебро" (-> silver) matched inside the fish entry "...silver pomfrets" -- not a stemming bug, but an inherent dataset limitation: some fish/animal species in the international nomenclature are named using metal words as part of the species name. Solved NOT via a general position-in-string sorting heuristic (first attempt -- prioritizing matches at the start of the description -- fixed серебро but broke "газ", which started surfacing "Gas-tight cabinets" instead of "Petroleum gases"; reverted), but via a narrow explicit exclusion list of specific product codes (`MATERIAL_WORD_FALSE_POSITIVE_CODES`), found by targeted scanning for metal/material words intersecting with fish/animal terms in the dataset.
+
+**Lesson recorded explicitly:** broad position-in-string sorting heuristics are risky -- what fixes one case (серебро/fish) can break another (газ/gas-tight). Narrow explicit lists of specific found cases are a less elegant but more predictable and safer solution for this category of problem.
+
+Verified: full regression test of 28 queries (оборудования, оборудование, медная труба, труба пвх, стальная труба, насос, насосы, олово, оружие, вино, мел, газ, лук, чай, мёд, медь, стекло, стекловолокно, картон, картофель, плата, платина, вода, водород, сера, серебро, хлор, хлопок, обои) -- all return relevant results, no regressions.
+
+Verified with `npm run build`: succeeds, main chunk 686.53KB.
+
+**Files changed**: `src/data/hsCodes.js`, `docs/SESSION_STATE.md`.
+
+---
+
 ## 2026-06-19 — Machine translation of found product names to Russian, founder-approved despite no accuracy guarantee
 
 Founder pointed out that even after the search-accuracy fix, the actual product name shown was still in English ("translation still doesn't show up") -- the previously added `groupNameRu` only translated the product GROUP name ("Пластмассы и изделия из них"), not the specific product name itself.
