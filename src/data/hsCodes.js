@@ -326,21 +326,27 @@ async function loadRuGroups() {
 }
 
 /**
- * Живой перевод через неофициальный, незадокументированный эндпоинт
- * Google Translate (без API-ключа). Решение явно одобрено основателем
- * как временная мера для демо-фазы (см. docs/DECISIONS.md, Decision 10) —
- * этот эндпоинт может быть заблокирован или изменён Google в любой момент
- * без предупреждения, поэтому он используется только как fallback после
- * локального словаря, а ошибки сети обрабатываются мягко (возврат null,
- * не исключение, которое могло бы сломать страницу).
+ * Живой перевод запроса с русского на английский — два резервных провайдера
+ * подряд (Google → MyMemory), чтобы отказ одного не означал отказ всей
+ * функции живого перевода целиком. Решение явно одобрено основателем как
+ * временная мера для демо-фазы (см. docs/DECISIONS.md, Decision 10) —
+ * оба провайдера могут менять формат ответа или ограничивать доступ без
+ * предупреждения, поэтому используются только как fallback после
+ * локального словаря и официальных названий групп, а ошибки сети
+ * обрабатываются мягко (возврат null, не исключение, которое могло бы
+ * сломать страницу).
  *
- * При переходе на реальный backend (MVP/Beta по Roadmap) этот эндпоинт
- * должен быть заменён на официальный платный API перевода или
- * самостоятельно хостящийся LibreTranslate — см. DECISIONS.md.
+ * При переходе на реальный backend (MVP/Beta по Roadmap) оба должны быть
+ * заменены на официальный платный API перевода или самостоятельно
+ * хостящийся LibreTranslate — см. DECISIONS.md.
+ *
+ * Провайдер 1 — Google Translate (неофициальный, незадокументированный
+ * эндпоинт, без API-ключа). Основной, потому что не имеет известного
+ * дневного лимита запросов.
  *
  * @returns {Promise<string|null>} переведённый текст или null при ошибке
  */
-async function liveTranslateRuToEn(text) {
+async function translateViaGoogle(text) {
   try {
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=ru&tl=en&dt=t&q=${encodeURIComponent(text)}`;
     const controller = new AbortController();
@@ -353,11 +359,50 @@ async function liveTranslateRuToEn(text) {
     const translated = data?.[0]?.map(chunk => chunk[0]).join('') ?? null;
     return translated ? translated.toLowerCase() : null;
   } catch {
-    // Сеть недоступна, таймаут, эндпоинт заблокирован/изменён — любая
-    // ошибка здесь не должна ломать поиск, только означает «живой перевод
-    // недоступен сейчас», UI покажет соответствующее сообщение.
     return null;
   }
+}
+
+/**
+ * Провайдер 2 — MyMemory Translation API. В отличие от Google, это
+ * официально документированный публичный API, явно разрешающий CORS-запросы
+ * напрямую из браузера без ключа — поэтому надёжнее по духу, но имеет
+ * дневной лимит (порядка 1000-5000 слов на анонимный IP-адрес, без email
+ * в запросе). Используется как резерв, если Google недоступен.
+ *
+ * @returns {Promise<string|null>} переведённый текст или null при ошибке
+ */
+async function translateViaMyMemory(text) {
+  try {
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=ru%7Cen`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    const data = await res.json();
+    // MyMemory возвращает responseStatus как число ИЛИ строку в разных
+    // случаях ("200" при лимите) — сравниваем как строку для надёжности.
+    if (String(data?.responseStatus) !== '200') return null;
+    const translated = data?.responseData?.translatedText;
+    return translated ? translated.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Пробует перевести текст по очереди через доступных живых провайдеров.
+ * Возвращает null только если ВСЕ провайдеры недоступны или вернули ошибку.
+ */
+async function liveTranslateRuToEn(text) {
+  const google = await translateViaGoogle(text);
+  if (google) return google;
+
+  const myMemory = await translateViaMyMemory(text);
+  if (myMemory) return myMemory;
+
+  return null;
 }
 
 function matchByTerms(hsCodesRaw, terms) {

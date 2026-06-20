@@ -3,6 +3,27 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-19 — Second translation provider (MyMemory) added as fallback; DeepL/Yandex/Bing evaluated and rejected with reasons recorded
+
+Founder explicitly requested backup translators (DeepL and others) in case Google is unavailable. Investigated real technical constraints before implementing:
+
+- **DeepL** -- rejected. The official API explicitly blocks direct browser requests (HTTP 403 "blocked by CORS policy"), requiring a backend proxy the project doesn't have.
+- **Yandex Translate** -- rejected. Free API keys stopped being issued in 2020; only paid Yandex Cloud is available now.
+- **Bing/Microsoft Translator** (unofficial path) -- evaluated and deliberately not added. Requires scraping short-lived auth tokens out of the Bing translator HTML page via regex -- more fragile than Google's or MyMemory's straightforward query-parameter endpoints, with marginal reliability gain given two providers already exist.
+- **MyMemory** -- added. An officially documented public API that explicitly allows direct browser CORS requests with no key (unlike Google's unofficial path). Has a daily quota (~1,000-5,000 words per anonymous IP), acceptable as a fallback.
+
+**Implementation.** `liveTranslateRuToEn()` now tries providers in sequence: Google first (as before), MyMemory only if Google fails. Returns `null` (triggering the existing "translation unavailable" UI message, no crash) only if BOTH providers fail. Tested with three logic-level scenarios: Google succeeds (MyMemory never called), Google fails and MyMemory picks up, both fail (graceful null) -- all confirmed correct.
+
+Direct network testing of MyMemory from the dev container wasn't possible (domain not in this environment's allowlist, same constraint as Google earlier) -- the real response format was separately confirmed via `web_fetch` before implementation, and the parsing code was tested against mocked data matching that confirmed format.
+
+`docs/DECISIONS.md` (Decision 10) updated to describe all four search tiers (including the official-group tier from the prior session) and the two-provider translation chain, with explicit reasoning for why DeepL/Yandex/Bing didn't work out -- so a future session doesn't re-investigate the same ground from scratch.
+
+Verified with `npm run build`: succeeds, main chunk 683.87KB (modest growth).
+
+**Files changed**: `src/data/hsCodes.js`, `docs/DECISIONS.md`, `docs/SESSION_STATE.md`.
+
+---
+
 ## 2026-06-19 — ErrorBoundary + 404 page (#13); Legal.jsx overclaims and false present-tense data-storage claims fixed (#10)
 
 **#13 closed.** Added `ErrorBoundary` (`src/components/ErrorBoundary.jsx`, a class component -- React's documented requirement, function components cannot catch render errors via hooks) and a 404 page (`src/pages/NotFound.jsx`). `ErrorBoundary` wraps the whole app in `App.jsx`; `NotFound` is wired as the wildcard route inside the main layout. This is direct protection against a repeat of the session-6 incident (an unhandled error in Marketplace.jsx crashed the entire platform with a black screen, no message) -- a similar error now shows a clear screen with a way back to the homepage instead.
