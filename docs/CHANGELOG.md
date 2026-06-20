@@ -3,6 +3,18 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-19 — Unsplash CDN dependency replaced with self-contained SVG illustrations (#16)
+
+All 6 marketplace products used photos from images.unsplash.com, which depends on Cloudflare/AWS infrastructure -- a real availability risk for users in Russia (which actively blocks resources using Cloudflare). Founder explicitly chose the solution: self-generated SVG illustrations instead of photos (safe, but visually less realistic than real photographs -- a deliberate tradeoff for the demo phase).
+
+Created `src/components/ProductIllustration.jsx` -- simple geometric illustrations for all 6 product categories (cement, cotton yarn, sunflower oil, rebar, LDPE film, industrial pump) in the platform's brand colors. `marketplace.js` moved from `photo`/`photos` URL fields to a single `photoId` field. Both display locations in `Marketplace.jsx` (product card, detail view) switched to the new component; removed the now-unnecessary thumbnail-switching logic (it existed for multiple photos per product -- meaningless for a single static illustration).
+
+Verified: `npm run build` succeeds, main chunk 688.21KB (modest growth from inline SVG code). Direct render test confirmed: all 6 products have a photoId, the marketplace page renders without errors, 6 SVGs actually display, zero remaining Unsplash references.
+
+**Files changed**: `src/components/ProductIllustration.jsx` (new), `src/data/marketplace.js`, `src/pages/Marketplace.jsx`, `docs/SESSION_STATE.md`.
+
+---
+
 ## 2026-06-19 — Demo accounts diversified across CIS countries (#17); found and fixed company-data duplication across 5 files
 
 All three demo accounts were Uzbek companies despite the platform being positioned as a CIS-wide product. Now: buyer = Tashkent Agro LLC (UZ, stays Uzbek -- the platform originates there), seller = KazSteel Trading (KZ), both = Sibmetall Group (RU).

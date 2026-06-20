@@ -3,13 +3,13 @@ import { products, categories, calcMarketplaceFee } from '../data/marketplace';
 import { getCurrentUser } from '../data/mock';
 import { useAccountType } from '../context/AccountContext';
 import { screenForSanctions } from '../utils/sanctionsScreening';
+import ProductIllustration from '../components/ProductIllustration';
 
 function Stars({ n }) {
   return <span style={{ color: '#F5A623', fontSize: 12 }}>{'★'.repeat(Math.round(n))}{'☆'.repeat(5-Math.round(n))}</span>;
 }
 
 function ProductModal({ product, onClose, canBuy }) {
-  const [photo, setPhoto] = useState(0);
   const [qty, setQty] = useState(product.minOrder);
   const [tab, setTab] = useState('specs');
   const [step, setStep] = useState(0);
@@ -45,18 +45,9 @@ function ProductModal({ product, onClose, canBuy }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px' }}>
             {/* Left */}
             <div style={{ padding: '28px 24px', borderRight: '1px solid var(--border)' }}>
-              <div style={{ height: 260, background: 'var(--navy-3)', borderRadius: 10, overflow: 'hidden', marginBottom: 10 }}>
-                <img src={product.photos[photo]} alt={product.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => e.target.style.display='none'} />
+              <div style={{ height: 260, background: 'var(--navy-3)', borderRadius: 10, overflow: 'hidden', marginBottom: 14 }}>
+                <ProductIllustration id={product.photoId} />
               </div>
-              {product.photos.length > 1 && (
-                <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                  {product.photos.map((p,i) => (
-                    <div key={i} onClick={() => setPhoto(i)} style={{ width: 56, height: 56, borderRadius: 6, overflow: 'hidden', border: `2px solid ${photo===i?'var(--accent)':'var(--border)'}`, cursor: 'pointer' }}>
-                      <img src={p} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => e.target.style.display='none'} />
-                    </div>
-                  ))}
-                </div>
-              )}
               <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 8 }}>{product.title}</div>
               <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
                 {product.tags.map(t => <span key={t} className="tag" style={{ fontSize: 11 }}>{t}</span>)}
@@ -176,7 +167,7 @@ function ProductCard({ product, onClick, canBuy }) {
       onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(0,212,170,0.35)'; e.currentTarget.style.transform='translateY(-3px)'; e.currentTarget.style.boxShadow='0 8px 32px rgba(0,0,0,0.3)'; }}
       onMouseLeave={e => { e.currentTarget.style.borderColor='var(--border)'; e.currentTarget.style.transform='none'; e.currentTarget.style.boxShadow='none'; }}>
       <div style={{ height: 180, background: 'var(--navy-3)', position: 'relative', overflow: 'hidden' }}>
-        <img src={product.photo} alt={product.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => e.target.style.display='none'} />
+        <ProductIllustration id={product.photoId} />
         <div style={{ position: 'absolute', top: 8, left: 8 }}>
           {product.seller.verified && <span className="badge badge-green" style={{ fontSize: 10 }}>✓ Верифицирован</span>}
         </div>

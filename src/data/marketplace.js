@@ -18,11 +18,7 @@ export const products = [
     seller: { id: 's1', name: 'UzBuild LLC', country: 'UZ', flag: '🇺🇿', city: 'Ташкент', trustScore: 94, verified: true, totalDeals: 89 },
     price: 6.5, currency: 'USD', unit: 'мешок', minOrder: 100, maxOrder: 50000,
     stock: 12000, stockAuto: false,
-    photo: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400&q=80',
-    photos: [
-      'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400&q=80',
-      'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400&q=80',
-    ],
+    photoId: 'cement',
     specs: [
       { group: 'Основные', items: [
         { p: 'Марка', v: 'М400 (CEM I 32.5)' },
@@ -64,11 +60,7 @@ export const products = [
     seller: { id: 's2', name: 'FerganaTex', country: 'UZ', flag: '🇺🇿', city: 'Фергана', trustScore: 88, verified: true, totalDeals: 45 },
     price: 2.8, currency: 'USD', unit: 'кг', minOrder: 500, maxOrder: 100000,
     stock: 45000, stockAuto: false,
-    photo: 'https://images.unsplash.com/photo-1558769132-cb1aea458c5e?w=400&q=80',
-    photos: [
-      'https://images.unsplash.com/photo-1558769132-cb1aea458c5e?w=400&q=80',
-      'https://images.unsplash.com/photo-1586495777744-4e6232bf2d25?w=400&q=80',
-    ],
+    photoId: 'cottonYarn',
     specs: [
       { group: 'Основные', items: [
         { p: 'Номер пряжи', v: 'Ne 30/1' },
@@ -107,11 +99,7 @@ export const products = [
     seller: { id: 's3', name: 'KazOil Export', country: 'KZ', flag: '🇰🇿', city: 'Алматы', trustScore: 91, verified: true, totalDeals: 112 },
     price: 1.05, currency: 'USD', unit: 'литр', minOrder: 1000, maxOrder: 500000,
     stock: 800000, stockAuto: true,
-    photo: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=400&q=80',
-    photos: [
-      'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=400&q=80',
-      'https://images.unsplash.com/photo-1558818498-28c1e002b655?w=400&q=80',
-    ],
+    photoId: 'sunflowerOil',
     specs: [
       { group: 'Основные', items: [
         { p: 'Тип', v: 'Рафинированное дезодорированное' },
@@ -151,11 +139,7 @@ export const products = [
     seller: { id: 's4', name: 'Sibmetall Trading', country: 'RU', flag: '🇷🇺', city: 'Новосибирск', trustScore: 91, verified: true, totalDeals: 203 },
     price: 680, currency: 'USD', unit: 'тонна', minOrder: 5, maxOrder: 5000,
     stock: 850, stockAuto: false,
-    photo: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&q=80',
-    photos: [
-      'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&q=80',
-      'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400&q=80',
-    ],
+    photoId: 'rebar',
     specs: [
       { group: 'Основные', items: [
         { p: 'Марка стали', v: 'А500С (B500B EN)' },
@@ -195,10 +179,7 @@ export const products = [
     seller: { id: 's5', name: 'KazPack', country: 'KZ', flag: '🇰🇿', city: 'Шымкент', trustScore: 83, verified: true, totalDeals: 38 },
     price: 1.9, currency: 'USD', unit: 'кг', minOrder: 200, maxOrder: 50000,
     stock: 15000, stockAuto: true,
-    photo: 'https://images.unsplash.com/photo-1611284446314-60a58ac0deb9?w=400&q=80',
-    photos: [
-      'https://images.unsplash.com/photo-1611284446314-60a58ac0deb9?w=400&q=80',
-    ],
+    photoId: 'ldpeFilm',
     specs: [
       { group: 'Основные', items: [
         { p: 'Материал', v: 'LDPE (полиэтилен низкого давления)' },
@@ -235,10 +216,7 @@ export const products = [
     seller: { id: 's6', name: 'TechEquip AZ', country: 'AZ', flag: '🇦🇿', city: 'Баку', trustScore: 87, verified: true, totalDeals: 29 },
     price: 1850, currency: 'USD', unit: 'штука', minOrder: 1, maxOrder: 100,
     stock: 24, stockAuto: false,
-    photo: 'https://images.unsplash.com/photo-1567789884554-0b844b597180?w=400&q=80',
-    photos: [
-      'https://images.unsplash.com/photo-1567789884554-0b844b597180?w=400&q=80',
-    ],
+    photoId: 'pump',
     specs: [
       { group: 'Основные', items: [
         { p: 'Тип', v: 'Центробежный одноступенчатый' },
