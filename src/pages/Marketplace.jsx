@@ -267,7 +267,8 @@ function ProductCard({ product, onClick, canBuy }) {
 }
 
 export default function Marketplace() {
-  const { canBuy, canSell } = useAccountType();
+  const { accountType, canBuy, canSell } = useAccountType();
+  const currentUser = getCurrentUser(accountType);
   const [category, setCategory] = useState('all');
   const [delivery, setDelivery] = useState('all');
   const [search, setSearch] = useState('');
@@ -284,7 +285,18 @@ export default function Marketplace() {
   const [allProducts, setAllProducts] = useState(getAllProducts);
   const refreshProducts = () => setAllProducts(getAllProducts());
 
-  const filtered = allProducts
+  // Для чисто-продавца («Мои товары») показываем только товары,
+  // реально принадлежащие текущему аккаунту-продавцу — раньше заголовок
+  // «Мои товары» обманчиво показывал ВЕСЬ каталог (все 32 товара любых
+  // продавцов), что основатель явно заметил как баг на скриншоте. Для
+  // покупателя и аккаунта «оба» — весь общий каталог, как и должно быть
+  // на маркетплейсе.
+  const isSellerOnlyView = canSell && !canBuy;
+  const baseProducts = isSellerOnlyView
+    ? allProducts.filter(p => p.seller.id === currentUser.id)
+    : allProducts;
+
+  const filtered = baseProducts
     .filter(p => {
       const matchCat = category === 'all' || p.category === category;
       const matchSearch = p.title.toLowerCase().includes(search.toLowerCase());

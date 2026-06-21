@@ -3,6 +3,24 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-19 — CRITICAL: "Мои товары" showed the entire catalog of other sellers' products, not just the current seller's own listings
+
+Founder sent a screenshot: seller account KazSteel Trading, section titled "Мои товары" (32 found), showing sunflower oil, silk fabric, cement -- products belonging to completely different sellers.
+
+**Root cause -- pre-existing, not introduced this session.** The "Мои товары" title for seller-only mode existed in the code for a while, but the page always showed the entire catalog with no seller filtering at all. Unnoticeable when the catalog was 6 products with no real product-adding; became immediately obvious once the catalog expanded to 32 products and adding products actually worked (session 21).
+
+**Fix.** Added real filtering: in seller-only mode, the page now shows only products where `seller.id` matches the current account's id. Buyer and "both" account behavior is unchanged -- they still see the full catalog, as a marketplace should work.
+
+**Found and fixed a related problem along the way.** The demo seller accounts (`mock.js`: KazSteel Trading id `u2`, Sibmetall Group id `u3`) were never linked to any real catalog products -- products use their own separate seller ids (`s1`-`s32`) that never overlapped with demo account ids. After the filtering fix, this would have meant "Мои товары" was empty for any demo seller account -- better than showing other sellers' products, but not ideal for a demo. Explicitly linked: "Алюминиевый профиль строительный" reassigned to seller `u2` (KazSteel Trading), "Арматура А500С" and "Лист стальной горячекатаный" reassigned to `u3` (Sibmetall Group). Also synced the stale "Sibmetall Trading" name in `Analytics.jsx` that hadn't been updated when the account was renamed in an earlier session.
+
+Verified: 1 product for KazSteel Trading, 2 for Sibmetall Group, total catalog count unchanged (32). Direct render test for seller role: exactly 1 product card (their own), confirmed absence of other sellers' products (sunflower oil, silk fabric, cement). Buyer and "both" roles unaffected, still see all 32 products.
+
+Verified with `npm run build`: succeeds, main chunk 733.45KB.
+
+**Files changed**: `src/data/marketplace.js`, `src/pages/Analytics.jsx`, `src/pages/Marketplace.jsx`, `docs/SESSION_STATE.md`.
+
+---
+
 ## 2026-06-19 — Marketplace becomes a real, working marketplace within the demo session (founder's 8-point overhaul)
 
 Founder gave an explicit 8-point list to turn the marketplace from a static showcase into something that actually functions: a seller account should be able to list a product with a picture, add notes, a buyer should be able to purchase one or several products, there should be a real cart, sanctioned goods must be blocked, and sales of restricted categories to Russia must be blocked per export law.

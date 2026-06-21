@@ -22,7 +22,7 @@ const categorySpend = [
 
 const topSuppliers = [
   { name: 'AgroTrade KZ', country: '🇰🇿', deals: 8, volume: 185000, avgScore: 94, onTime: 96 },
-  { name: 'Sibmetall Trading', country: '🇷🇺', deals: 5, volume: 98000, avgScore: 91, onTime: 98 },
+  { name: 'Sibmetall Group', country: '🇷🇺', deals: 5, volume: 98000, avgScore: 91, onTime: 98 },
   { name: 'UzBuild LLC', country: '🇺🇿', deals: 4, volume: 124000, avgScore: 91, onTime: 94 },
 ];
 
