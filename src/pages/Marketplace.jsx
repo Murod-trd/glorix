@@ -11,7 +11,7 @@ function Stars({ n }) {
   return <span style={{ color: '#F5A623', fontSize: 12 }}>{'★'.repeat(Math.round(n))}{'☆'.repeat(5-Math.round(n))}</span>;
 }
 
-function ProductModal({ product, onClose, canBuy }) {
+function ProductModal({ product, onClose }) {
   const { accountType } = useAccountType();
   const buyer = getCurrentUser(accountType);
   const { addToCart } = useCart();
@@ -133,15 +133,16 @@ function ProductModal({ product, onClose, canBuy }) {
                 </div>
               </div>
 
-              {/* Buyer sees buy form, seller sees info only */}
-              {canBuy ? (
-                exportCheck.blocked ? (
-                  <div style={{ padding: '16px', background: 'rgba(255,77,77,0.1)', border: '1px solid rgba(255,77,77,0.4)', borderRadius: 10, textAlign: 'center' }}>
-                    <div style={{ fontSize: 28, marginBottom: 8 }}>🚫</div>
-                    <div style={{ fontWeight: 600, marginBottom: 6, color: 'var(--red)' }}>Покупка недоступна</div>
-                    <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}>{exportCheck.reason}</div>
-                  </div>
-                ) : (
+              {/* Покупка доступна всем ролям (включая продавца — закупка
+                  сырья/комплектующих для своего производства), кроме случаев
+                  экспортных ограничений по стране покупателя. */}
+              {exportCheck.blocked ? (
+                <div style={{ padding: '16px', background: 'rgba(255,77,77,0.1)', border: '1px solid rgba(255,77,77,0.4)', borderRadius: 10, textAlign: 'center' }}>
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>🚫</div>
+                  <div style={{ fontWeight: 600, marginBottom: 6, color: 'var(--red)' }}>Покупка недоступна</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}>{exportCheck.reason}</div>
+                </div>
+              ) : (
                 <>
                   <div style={{ marginBottom: 14 }}>
                     <label style={{ fontSize: 12, color: 'var(--text-2)', display: 'block', marginBottom: 6 }}>Количество ({product.unit})</label>
@@ -196,16 +197,6 @@ function ProductModal({ product, onClose, canBuy }) {
                       </div>
                   }
                 </>
-                )
-              ) : (
-                <div style={{ padding: '16px', background: 'var(--navy-3)', borderRadius: 10, textAlign: 'center' }}>
-                  <div style={{ fontSize: 28, marginBottom: 8 }}>🏭</div>
-                  <div style={{ fontWeight: 600, marginBottom: 6 }}>Аккаунт продавца</div>
-                  <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 14 }}>Продавцы не могут покупать товары. Переключитесь на аккаунт «Покупатель + Продавец» для обеих функций.</div>
-                  <button className="btn btn-ghost" onClick={() => { onClose(); window.location.href='/account-select'; }} style={{ width: '100%', justifyContent: 'center', fontSize: 12 }}>
-                    ⇄ Сменить аккаунт
-                  </button>
-                </div>
               )}
             </div>
           </div>
@@ -215,7 +206,7 @@ function ProductModal({ product, onClose, canBuy }) {
   );
 }
 
-function ProductCard({ product, onClick, canBuy }) {
+function ProductCard({ product, onClick }) {
   const fee = calcMarketplaceFee(product.minOrder * product.price);
   const effectiveStock = getEffectiveStock(product);
   const outOfStock = effectiveStock <= 0;
@@ -259,7 +250,7 @@ function ProductCard({ product, onClick, canBuy }) {
         </div>
         <button className="btn btn-primary" style={{ justifyContent: 'center', padding: '9px', fontSize: 13 }}
           onClick={e => { e.stopPropagation(); onClick(); }}>
-          {canBuy ? 'Подробнее / Купить' : 'Посмотреть товар'}
+          Подробнее / Купить
         </button>
       </div>
     </div>
@@ -267,8 +258,13 @@ function ProductCard({ product, onClick, canBuy }) {
 }
 
 export default function Marketplace() {
-  const { accountType, canBuy, canSell } = useAccountType();
+  const { accountType, canBuyMarketplace, canSell } = useAccountType();
   const currentUser = getCurrentUser(accountType);
+  // «Чистый» продавец (не «оба») — единственная роль, для которой имеет
+  // смысл переключатель «Мои товары»/«Весь каталог»: остальные роли
+  // всегда видели общий каталог и не владеют товарами.
+  const isPureSeller = accountType === 'seller';
+  const [sellerView, setSellerView] = useState(isPureSeller ? 'mine' : 'all');
   const [category, setCategory] = useState('all');
   const [delivery, setDelivery] = useState('all');
   const [search, setSearch] = useState('');
@@ -285,14 +281,16 @@ export default function Marketplace() {
   const [allProducts, setAllProducts] = useState(getAllProducts);
   const refreshProducts = () => setAllProducts(getAllProducts());
 
-  // Для чисто-продавца («Мои товары») показываем только товары,
-  // реально принадлежащие текущему аккаунту-продавцу — раньше заголовок
-  // «Мои товары» обманчиво показывал ВЕСЬ каталог (все 32 товара любых
-  // продавцов), что основатель явно заметил как баг на скриншоте. Для
-  // покупателя и аккаунта «оба» — весь общий каталог, как и должно быть
-  // на маркетплейсе.
-  const isSellerOnlyView = canSell && !canBuy;
-  const baseProducts = isSellerOnlyView
+  // Для чисто-продавца, выбравшего вкладку «Мои товары», показываем
+  // только товары, реально принадлежащие текущему аккаунту-продавцу —
+  // раньше заголовок «Мои товары» обманчиво показывал ВЕСЬ каталог (все
+  // 32 товара любых продавцов), что основатель явно заметил как баг на
+  // скриншоте. Продавец теперь может переключиться на «Весь каталог»,
+  // чтобы покупать сырьё/комплектующие у других продавцов — покупка в
+  // маркетплейсе разрешена всем ролям (canBuyMarketplace), в отличие от
+  // создания тендера. Покупатель и аккаунт «оба» — всегда весь каталог.
+  const showOnlyMine = isPureSeller && sellerView === 'mine';
+  const baseProducts = showOnlyMine
     ? allProducts.filter(p => p.seller.id === currentUser.id)
     : allProducts;
 
@@ -313,7 +311,7 @@ export default function Marketplace() {
 
   return (
     <div className="fade-in" style={{ padding: '28px 32px' }}>
-      {viewing && <ProductModal product={viewing} onClose={() => { setViewing(null); refreshProducts(); }} canBuy={canBuy} />}
+      {viewing && <ProductModal product={viewing} onClose={() => { setViewing(null); refreshProducts(); }} />}
       {showAddProduct && <AddProductModal onClose={() => { setShowAddProduct(false); refreshProducts(); }} />}
       {showCart && <CartModal onClose={() => setShowCart(false)} onOrderComplete={refreshProducts} />}
 
@@ -321,12 +319,12 @@ export default function Marketplace() {
         <div>
           <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 4, letterSpacing: 1 }}>МАРКЕТПЛЕЙС</div>
           <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4 }}>
-            {canSell && !canBuy ? 'Мои товары' : 'Быстрая покупка и продажа'}
+            {showOnlyMine ? 'Мои товары' : 'Быстрая покупка и продажа'}
           </h1>
           <div style={{ fontSize: 13, color: 'var(--text-2)' }}>Оптом · Только юрлица · Escrow · Реальные тех. характеристики</div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          {canBuy && (
+          {canBuyMarketplace && (
             <button className="btn btn-ghost" onClick={() => setShowCart(true)} style={{ position: 'relative' }}>
               🛒 Корзина
               {cartCount > 0 && (
@@ -340,10 +338,21 @@ export default function Marketplace() {
         </div>
       </div>
 
-      {/* Seller warning */}
-      {!canBuy && (
-        <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(245,166,35,0.08)', border: '1px solid rgba(245,166,35,0.25)', borderRadius: 10, fontSize: 13, color: 'var(--gold)' }}>
-          🏭 Режим продавца · Вы видите витрину маркетплейса, но не можете покупать. Для закупок переключитесь на аккаунт «Покупатель + Продавец».
+      {/* Переключатель «Мои товары» / «Весь каталог» — только для
+          чисто-продавца. Раньше продавец вообще не мог покупать в
+          маркетплейсе; теперь может (закупка сырья/комплектующих для
+          своего производства), и ему нужен способ переключиться с
+          витрины своих товаров на общий каталог для покупки. */}
+      {isPureSeller && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+          {[['mine', 'Мои товары'], ['all', 'Весь каталог']].map(([v, l]) => (
+            <button key={v} onClick={() => setSellerView(v)} style={{
+              padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer',
+              background: sellerView === v ? 'var(--accent)' : 'var(--card)',
+              color: sellerView === v ? 'var(--navy)' : 'var(--text-2)',
+              border: `1px solid ${sellerView === v ? 'var(--accent)' : 'var(--border)'}`,
+            }}>{l}</button>
+          ))}
         </div>
       )}
 
@@ -377,7 +386,7 @@ export default function Marketplace() {
       <div style={{ display: 'flex', gap: 6, marginBottom: 18, flexWrap: 'wrap' }}>
         {categories.map(c => (
           <button key={c.id} onClick={() => setCategory(c.id)} style={{
-            padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: 'pointer', border: 'none',
+            padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: 'pointer',
             background: category===c.id?'var(--accent)':'var(--navy-3)',
             color: category===c.id?'var(--navy)':'var(--text-2)',
             border: `1px solid ${category===c.id?'var(--accent)':'var(--border)'}`,
@@ -390,7 +399,7 @@ export default function Marketplace() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
-        {filtered.map(p => <ProductCard key={p.id} product={p} onClick={() => setViewing(p)} canBuy={canBuy} />)}
+        {filtered.map(p => <ProductCard key={p.id} product={p} onClick={() => setViewing(p)} />)}
       </div>
     </div>
   );
@@ -408,7 +417,7 @@ export default function Marketplace() {
 function CartModal({ onClose, onOrderComplete }) {
   const { accountType } = useAccountType();
   const buyer = getCurrentUser(accountType);
-  const { cartItems, removeFromCart, clearCart } = useCart();
+  const { cartItems, removeFromCart } = useCart();
   const [confirmed, setConfirmed] = useState(false);
 
   const itemChecks = cartItems.map(item => ({

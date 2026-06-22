@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
-import { tenders, stats, getCurrentUser } from '../data/mock';
+import { stats, getCurrentUser } from '../data/mock';
 import { useAccountType } from '../context/AccountContext';
+import { getAllTenders } from '../data/tenderStore';
 
 function StatCard({ value, label, accent }) {
   return (
@@ -51,6 +52,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { canBuy, canSell, accountType } = useAccountType();
   const currentUser = getCurrentUser(accountType);
+  const tenders = getAllTenders();
   return (
     <div className="fade-in" style={{ padding: '32px 36px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>

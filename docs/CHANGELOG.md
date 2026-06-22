@@ -3,6 +3,29 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-22 — Role-rights model split (buy-in-marketplace vs. create-a-tender); tenders now actually publish, are visible to all roles, buyer identity anonymized until completion
+
+Founder clarified the rights model (full separation of role permissions; "both" = union of buyer+seller), after explicitly being asked for advice "as a business consultant": buying in the marketplace and creating a tender are different permissions, not the same thing. A seller account can buy in the marketplace (sourcing raw materials/components for its own production) but still cannot create a tender. Tenders are visible to ALL roles with no ownership filtering (a seller needs to see the whole tender flow to bid on it -- same model as Alibaba RFQ / SAP Ariba), but the buyer's identity is anonymized to sellers ("Buyer from [country]") until the tender reaches `completed` status.
+
+**Process note.** The first half of this work (`canCreateTender`/`canBuyMarketplace` in `AccountContext.jsx`) was committed separately, in a previous session/commit (`52f8076`), without updating this file, `SESSION_STATE.md`, or `DECISIONS.md` -- a violation of the project's own "update docs in the same commit" rule. This session started by verifying the actual repo state against a chat-only handoff document specifically because of that gap, and closes the documentation debt retroactively here.
+
+**Implemented:**
+- `AccountContext.jsx` (already in `52f8076`): exposes `canCreateTender` (buyer/both), `canBuyMarketplace` (all three account types), `canSell` as separate flags. `canBuy` kept as a backward-compatible alias for `canCreateTender`.
+- New `src/data/tenderStore.js` -- same pattern as `marketplaceStore.js`: static demo tenders (`mock.js`) merged with tenders actually published by users, persisted in `localStorage`. `addUserTender()`, `getAllTenders()`, `submitOffer()` / `getOffersForTender()` / `getMyOfferForTender()` (seller offers with a free-text КП field, upserted by `sellerId` rather than duplicated), `getTotalOfferCount()`, and `getDisplayBuyerName(tender, viewerId)` -- reveals the real buyer name only to the buyer themselves or once `status === 'completed'`, otherwise "Buyer from [country]".
+- `CreateTender.jsx` -- the "Publish tender" button was a pure stub (`alert()` + navigate, never saved anything -- the same class of bug `marketplaceStore.js` fixed for "List a product"). Now actually calls `addUserTender()` and navigates to the created tender's detail page. Page gate switched from `canBuy` to `canCreateTender`.
+- `Tenders.jsx` -- list and detail pages read through `getAllTenders()`; added buyer-identity display (`getDisplayBuyerName`) and a real seller-offer submission form (price, delivery days, free-text КП) -- offer submission didn't exist at all before, only a static `tender.offers` counter.
+- `Dashboard.jsx` -- switched to `getAllTenders()` instead of the static `tenders` import (data source only -- ownership-based filtering of the "Мои тендеры" label was explicitly out of scope for this request, not silently redesigned).
+- `Marketplace.jsx` -- removed the "sellers cannot buy products" block and all related code (`ProductModal`/`ProductCard` no longer take a `canBuy` prop). Cart is now shown based on `canBuyMarketplace` (effectively everyone). Added a "Мои товары"/"Весь каталог" toggle (`sellerView`, defaulting to "Мои товары" for a pure-seller account so the established behavior from the previous session's filtering fix doesn't change without explicit user action) -- switching to "Весь каталог" lets a seller browse and buy from the full catalog like any other role.
+- `accounts.js` + `AccountSelect.jsx` -- role description text had it backwards ("seller cannot buy in the marketplace"), contradicting the new model. Fixed on both pages.
+- Drive-by (found while linting, unrelated to the task): fixed two pre-existing `eslint` errors in `Marketplace.jsx` (duplicate `border` key in the category-button style, unused `clearCart` variable in `CartModal`) -- both trivial, no behavior change.
+
+**Open question, not decided unilaterally.** The three static demo tenders (`mock.js`) were never linked to a specific demo buyer account (no `buyerId`). For t1 (UZ) and t3 (RU), linking to the buyer/"both" demo accounts is a clean match (`u1`, `u3` -- countries match) and was done. For t2 (KZ), the only demo account from that country is the seller persona (KazSteel Trading, `u2`), who cannot own a tender per the business rules -- linking it would introduce an internal contradiction. t2's `buyerId` is deliberately left unset; that tender stays fully anonymous to everyone. Whether a dedicated Kazakhstani buyer demo account is needed is the founder's call, not decided here.
+
+Verified: `npm install && npm run build` succeeds, main chunk 738.42KB (up from 733.48KB). `npx eslint` on every changed file -- 0 errors (including the two pre-existing ones found and fixed along the way).
+
+**Files changed**: `src/data/tenderStore.js` (new), `src/pages/CreateTender.jsx`, `src/pages/Tenders.jsx`, `src/pages/Dashboard.jsx`, `src/pages/Marketplace.jsx`, `src/data/accounts.js`, `src/pages/AccountSelect.jsx`, `docs/SESSION_STATE.md`, `docs/DECISIONS.md`.
+
+---
 ## 2026-06-19 — CRITICAL: "Мои товары" showed the entire catalog of other sellers' products, not just the current seller's own listings
 
 Founder sent a screenshot: seller account KazSteel Trading, section titled "Мои товары" (32 found), showing sunflower oil, silk fabric, cement -- products belonging to completely different sellers.

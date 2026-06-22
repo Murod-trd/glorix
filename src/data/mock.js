@@ -60,7 +60,7 @@ export const tenders = [
       d4: { label: 'Финальные цены + доставка', date: '2025-08-10', done: false },
       d5: { label: 'Результат тендера', date: '2025-08-15', done: false },
     },
-    deposit: { rate: 10, amount: 10000 }, buyerCountry: 'UZ', createdAt: '2025-07-18',
+    deposit: { rate: 10, amount: 10000 }, buyerCountry: 'UZ', buyerId: 'u1', createdAt: '2025-07-18',
   },
   {
     id: 't2', title: 'Закупка промышленных холодильных установок',
@@ -83,6 +83,10 @@ export const tenders = [
       d4: { label: 'Финальные цены + доставка', date: '2025-08-22', done: false },
       d5: { label: 'Результат тендера', date: '2025-08-30', done: false },
     },
+    // buyerId сознательно не указан — единственный KZ демо-аккаунт это
+    // продавец (KazSteel Trading, u2), который не может владеть тендером
+    // по бизнес-правилам (см. DECISIONS.md, Decision 13). Тендер остаётся
+    // полностью анонимным для всех ролей.
     deposit: { rate: 7.5, amount: 21000 }, buyerCountry: 'KZ', createdAt: '2025-07-22',
   },
   {
@@ -108,7 +112,7 @@ export const tenders = [
     },
     deposit: { rate: 8.5, amount: 17850 },
     winner: { country: 'CN', flag: '🇨🇳', totalCost: 196400, deliveryCost: 4200 },
-    buyerCountry: 'RU', createdAt: '2025-06-01',
+    buyerCountry: 'RU', buyerId: 'u3', createdAt: '2025-06-01',
   },
 ];
 

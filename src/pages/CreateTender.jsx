@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { calcDeposit } from '../data/mock';
+import { calcDeposit, getCurrentUser } from '../data/mock';
 import { useAccountType } from '../context/AccountContext';
+import { addUserTender } from '../data/tenderStore';
 import { screenForSanctions } from '../utils/sanctionsScreening';
 
 const steps = ['Основное', 'Спецификации', 'Логистика', 'Депозит'];
 
 export default function CreateTender() {
   const navigate = useNavigate();
-  const { canBuy } = useAccountType();
+  const { canCreateTender, accountType } = useAccountType();
+  const currentUser = getCurrentUser(accountType);
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
     title: '', category: '', quantity: '', unit: 'тонн',
@@ -20,7 +22,7 @@ export default function CreateTender() {
   });
   const [confirmedReview, setConfirmedReview] = useState(false);
 
-  if (!canBuy) {
+  if (!canCreateTender) {
     return (
       <div className="fade-in" style={{ padding: '32px 36px' }}>
         <div className="card" style={{ padding: 24, maxWidth: 480 }}>
@@ -48,6 +50,37 @@ export default function CreateTender() {
     const specs = [...form.specs];
     specs[i][k] = v;
     set('specs', specs);
+  };
+
+  /**
+   * Реально публикует тендер через tenderStore — закрывает требование
+   * «создание тендера должно сохранять тендер, видимый другим ролям»,
+   * раньше кнопка только показывала alert() и никуда не сохраняла данные
+   * (тот же класс проблемы, что был у формы «Разместить товар» до фикса
+   * marketplaceStore.js).
+   */
+  const handlePublish = () => {
+    if (publishDisabled) return;
+    const newTender = addUserTender({
+      title: form.title.trim() || 'Без названия',
+      category: form.category || 'Другое',
+      quantity: `${form.quantity || '—'} ${form.unit}`,
+      budget: { min: Number(form.budgetMin) || 0, max: Number(form.budgetMax) || Number(form.budgetMin) || 0, currency: form.currency },
+      incoterms: form.incoterms,
+      destination: form.destination || '—',
+      specs: form.specs.filter(s => s.param && s.value),
+      deadlines: {
+        d1: { label: 'Тех. требования покупателя', date: form.d1 || '', done: true },
+        d2: { label: 'Оферты продавцов', date: form.d2 || '', done: false },
+        d3: { label: 'Согласование спецификаций', date: form.d3 || '', done: false },
+        d4: { label: 'Финальные цены + доставка', date: form.d4 || '', done: false },
+        d5: { label: 'Результат тендера', date: form.d5 || '', done: false },
+      },
+      deposit: dep ? { rate: dep.rate, amount: dep.deposit } : { rate: 0, amount: 0 },
+      buyerId: currentUser.id,
+      buyerCountry: currentUser.country,
+    });
+    navigate(`/tenders/${newTender.id}`);
   };
 
   const inputStyle = {
@@ -196,7 +229,7 @@ export default function CreateTender() {
             </div>
 
             <div style={{ padding: '10px 16px', background: 'rgba(180,130,20,0.12)', border: '1px solid rgba(180,130,20,0.35)', borderRadius: 8, fontSize: 12.5, color: '#B48214', marginBottom: 20 }}>
-              ⚠ Демо-режим: тендер не будет опубликован реально и не виден другим пользователям. Депозит не списывается, оплата не происходит.
+              ⚠ Демо-режим: тендер сохраняется в этой demo-сессии браузера (localStorage) и виден другим ролям в этой же сессии — реальное списание депозита и оплата не производятся.
             </div>
 
             {isBlocked && (
@@ -219,7 +252,7 @@ export default function CreateTender() {
               className="btn btn-primary"
               style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: 15, opacity: publishDisabled ? 0.5 : 1, cursor: publishDisabled ? 'not-allowed' : 'pointer' }}
               disabled={publishDisabled}
-              onClick={() => { alert('Тендер опубликован! (демо)'); navigate('/tenders'); }}>
+              onClick={handlePublish}>
               Опубликовать тендер
             </button>
           </div>
