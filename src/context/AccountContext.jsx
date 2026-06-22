@@ -3,15 +3,11 @@ import { createContext, useContext, useState, useCallback } from 'react';
 /**
  * Централизованный источник правды для текущего типа аккаунта (buyer/seller/both).
  *
- * Закрывает аудит-пункт 🟠#6: ранее `accountType` читался из localStorage на
- * module scope в нескольких файлах (mock.js, Marketplace.jsx, Dashboard.jsx) —
- * значение вычислялось один раз при первой загрузке модуля и не обновлялось
- * при смене аккаунта без полной перезагрузки страницы (см. AccountSelect.jsx,
- * который использовал window.location.reload() как обходное решение).
- *
- * Теперь любой компонент, которому нужен текущий тип аккаунта, использует
- * useAccountType() — значение реактивно обновляется во всех подписанных
- * компонентах сразу после setAccountType(), без reload.
+ * Модель прав уточнена основателем (полное разделение ролей по правам,
+ * «оба» = объединение): покупка в маркетплейсе и создание тендера — это
+ * РАЗНЫЕ права, не одно и то же. Продавец может покупать в маркетплейсе
+ * (закупает сырьё/комплектующие для своего производства), но не может
+ * создавать тендер.
  */
 
 const VALID_TYPES = ['buyer', 'seller', 'both'];
@@ -33,11 +29,16 @@ export function AccountProvider({ children }) {
     setAccountTypeState(next);
   }, []);
 
-  const canBuy = accountType === 'buyer' || accountType === 'both';
+  const canCreateTender = accountType === 'buyer' || accountType === 'both';
+  const canBuyMarketplace = true;
   const canSell = accountType === 'seller' || accountType === 'both';
 
   return (
-    <AccountContext.Provider value={{ accountType, setAccountType, canBuy, canSell }}>
+    <AccountContext.Provider value={{
+      accountType, setAccountType,
+      canCreateTender, canBuyMarketplace, canSell,
+      canBuy: canCreateTender,
+    }}>
       {children}
     </AccountContext.Provider>
   );
