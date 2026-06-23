@@ -27,11 +27,26 @@ function normalizeNum(s = '') {
   return c;
 }
 
-// Parse Excel-like paste. Автоматически определяет формат: с ТН ВЭД или без.
-// С ТН ВЭД (6 кол.): Название | ТН ВЭД(8-10 цифр) | Кол-во | Ед. | Цена | Харак.
-// Без ТН ВЭД (4 кол.): Название | Кол-во | Ед. | Цена [| Харак.]
-// Числа: "2 000"→2000, "10 190,07 UZS"→10190.07, "1,500"→1500
+// Parse Excel-like paste.
+// Умный разбор: находит колонку с единицей измерения по значению (м, кг, шт…),
+// определяет — единица идёт ДО или ПОСЛЕ количества — и раскладывает колонки корректно.
+// Поддерживаемые форматы (с ТН ВЭД или без, единица до или после кол-ва):
+//   Название | Кол-во | Ед. | Цена
+//   Название | Ед. | Кол-во | Цена          ← PDF/российский формат
+//   Название | ТН ВЭД | Ед. | Кол-во | Цена
+//   Название | ТН ВЭД | Кол-во | Ед. | Цена
 function parsePaste(text) {
+  // Полный список единиц (в нижнем регистре для сравнения)
+  const UNIT_SET = new Set([
+    'м', 'м²', 'м³', 'кг', 'г', 'т', 'тонна', 'шт', 'шт.', 'штука',
+    'литр', 'л', 'рулон', 'пог.м', 'погм', 'компл', 'компл.', 'комплект',
+    'упак', 'упак.', 'упаковка', 'мешок', 'паллет', 'паллета',
+    'пар', 'набор', 'ящик', 'коробка', 'пачка', 'партия', 'лот',
+    'm', 'kg', 'pcs', 'pc', 'set', 'roll', 'box', 'bag',
+  ]);
+  const isUnit = (s) => UNIT_SET.has((s || '').trim().toLowerCase()) || UNIT_SET.has((s || '').trim());
+  const isTnved = (s) => /^\d{8,10}$/.test((s || '').replace(/\s/g, ''));
+
   const lines = text.trim().split('\n').filter(l => l.trim());
   return lines.map(line => {
     const hasTabs = line.includes('\t');
@@ -39,31 +54,56 @@ function parsePaste(text) {
       ? line.split('\t').map(c => c.trim().replace(/"/g, ''))
       : line.split(',').map(c => c.trim().replace(/"/g, ''));
 
-    // ТН ВЭД — строго 8-10 цифр (или пустая ячейка)
-    const col1 = (cols[1] || '').replace(/\s/g, '');
-    const hasTnvedCol = !col1 || /^\d{8,10}$/.test(col1);
+    const name = cols[0] || '';
+    if (!name) return null;
 
-    if (hasTnvedCol) {
-      return {
-        name:  cols[0] || '',
-        tnved: cols[1] || '',
-        qty:   normalizeNum(cols[2] || ''),
-        unit:  cols[3] || 'кг',
-        price: normalizeNum(cols[4] || ''),
-        specs: cols[5] || '',
-      };
-    } else {
-      // Без ТН ВЭД: Название | Кол-во | Ед. | Цена
-      return {
-        name:  cols[0] || '',
-        tnved: '',
-        qty:   normalizeNum(cols[1] || ''),
-        unit:  cols[2] || 'кг',
-        price: normalizeNum(cols[3] || ''),
-        specs: cols[4] || '',
-      };
+    // Хвост колонок без имени
+    let rest = cols.slice(1);
+    let tnved = '';
+
+    // Определяем: есть ли колонка ТН ВЭД (8-10 цифр или пустая первая колонка)
+    const col1clean = (rest[0] || '').replace(/\s/g, '');
+    if (!rest[0] || isTnved(col1clean)) {
+      tnved = rest[0] || '';
+      rest = rest.slice(1);
     }
-  }).filter(r => r.name);
+
+    // Ищем колонку с единицей измерения по значению
+    const unitIdx = rest.findIndex(c => isUnit(c));
+
+    let qty = '', unit = 'кг', price = '', specs = '';
+
+    if (unitIdx >= 0) {
+      unit = rest[unitIdx].trim();
+      const before = rest.slice(0, unitIdx);   // колонки ДО единицы
+      const after  = rest.slice(unitIdx + 1);  // колонки ПОСЛЕ единицы
+
+      const lastBefore = before[before.length - 1] || '';
+      const firstAfter = after[0] || '';
+      const secondAfter = after[1] || '';
+
+      if (normalizeNum(lastBefore)) {
+        // Есть число перед единицей → кол-во ДО единицы: … qty | unit | price …
+        qty   = normalizeNum(lastBefore);
+        price = normalizeNum(firstAfter);
+        specs = after.slice(1).join(' ').trim();
+      } else {
+        // Нет числа перед единицей → единица ПЕРЕД кол-вом: … unit | qty | price …
+        qty   = normalizeNum(firstAfter);
+        price = normalizeNum(secondAfter);
+        specs = after.slice(2).join(' ').trim();
+      }
+    } else if (rest.length >= 2) {
+      // Единица не найдена — позиционный фолбэк: qty | price
+      qty   = normalizeNum(rest[0] || '');
+      price = normalizeNum(rest[1] || '');
+      specs = rest.slice(2).join(' ').trim();
+    } else {
+      qty = normalizeNum(rest[0] || '');
+    }
+
+    return { name, tnved, qty, unit, price, specs };
+  }).filter(r => r && r.name);
 }
 
 export default function DocumentCenter() {
@@ -101,7 +141,11 @@ export default function DocumentCenter() {
           if (item.tnved) return item;
           try {
             const { results } = await searchHsCodes(item.name);
-            return results.length ? { ...item, tnved: results[0].code } : item;
+            if (!results.length) return item;
+            // HS-коды в базе 6-значные; дополняем до 10-значного ТН ВЭД
+            const rawCode = results[0].code.replace(/\D/g, '');
+            const tnvedCode = rawCode.padEnd(10, '0');
+            return { ...item, tnved: tnvedCode };
           } catch { return item; }
         }));
         setItems(enriched);
