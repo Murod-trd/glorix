@@ -336,7 +336,10 @@ export default function DocumentCenter() {
 
       const validItems = items.filter(i => i.name);
 
-      const currSym = { USD:'$', EUR:'€', RUB:'₽', UZS:'сум' }[currency] || '$';
+      const CURR_SYMBOLS = { USD:'$', EUR:'€', RUB:'₽', UZS:'сум', KZT:'₸', UAH:'₴',
+        BYN:'Br', AZN:'₼', AMD:'֏', GEL:'₾', TJS:'SM', TMT:'T', KGS:'с', MDL:'L',
+        CNY:'¥', TRY:'₺', GBP:'£', JPY:'¥' };
+      const currSym = CURR_SYMBOLS[currency] || currency;
       const rowsHtml = validItems.map((item, idx) => {
         const subtotal = (parseFloat(item.qty)||0) * (parseFloat(item.price)||0);
         const bg = idx % 2 === 0 ? '#f5f7fa' : '#ffffff';
@@ -491,8 +494,22 @@ export default function DocumentCenter() {
                     <select style={inputStyle} value={currency} onChange={e => setCurrency(e.target.value)}>
                       <option value="USD">$ USD — Доллар США</option>
                       <option value="EUR">€ EUR — Евро</option>
-                      <option value="RUB">₽ RUB — Рубль</option>
+                      <option value="RUB">₽ RUB — Российский рубль</option>
                       <option value="UZS">сум UZS — Узбекский сум</option>
+                      <option value="KZT">₸ KZT — Казахстанский тенге</option>
+                      <option value="UAH">₴ UAH — Украинская гривна</option>
+                      <option value="BYN">Br BYN — Белорусский рубль</option>
+                      <option value="AZN">₼ AZN — Азербайджанский манат</option>
+                      <option value="AMD">֏ AMD — Армянский драм</option>
+                      <option value="GEL">₾ GEL — Грузинский лари</option>
+                      <option value="TJS">SM TJS — Таджикский сомони</option>
+                      <option value="TMT">T TMT — Туркменский манат</option>
+                      <option value="KGS">с KGS — Киргизский сом</option>
+                      <option value="MDL">L MDL — Молдавский лей</option>
+                      <option value="CNY">¥ CNY — Китайский юань</option>
+                      <option value="TRY">₺ TRY — Турецкая лира</option>
+                      <option value="GBP">£ GBP — Британский фунт</option>
+                      <option value="JPY">¥ JPY — Японская иена</option>
                     </select>
                   </div>
                   <div>

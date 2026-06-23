@@ -11,7 +11,10 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
   const { kpNum, dateStr, validStr, sellerName, buyer, incoterms, payTerms, currency, items, totalAmount } = kpData;
-  const currSym = { USD:'$', EUR:'€', RUB:'₽', UZS:'сум' }[currency] || '$';
+  const CURR_SYMBOLS = { USD:'$', EUR:'€', RUB:'₽', UZS:'сум', KZT:'₸', UAH:'₴',
+    BYN:'Br', AZN:'₼', AMD:'֏', GEL:'₾', TJS:'SM', TMT:'T', KGS:'с', MDL:'L',
+    CNY:'¥', TRY:'₺', GBP:'£', JPY:'¥' };
+  const currSym = CURR_SYMBOLS[currency] || currency;
   const validItems = (items || []).filter(i => i.name);
 
   const fmt = (n) =>
