@@ -15,12 +15,13 @@ function ProductImage({ product, style = {} }) {
       <img
         src={product.photo}
         alt={product.title}
+        loading="lazy"
         onError={() => setImgFailed(true)}
         style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', ...style }}
       />
     );
   }
-  return <ProductImage product={product} />;
+  return <ProductIllustration id={product.photoId} />;
 }
 
 
