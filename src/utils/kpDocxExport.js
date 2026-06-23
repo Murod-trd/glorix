@@ -54,8 +54,9 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
   const W = { n: 400, name: 3500, tnved: 1400, unit: 550, qty: 900, price: 1250, sum: 1300 };
 
   // ── Заголовок таблицы ──────────────────────────────────────────────────────
+  const HEADER_BG = 'e8edf5';  // светло-синий (не чёрный) — виден в Word
   const mkTh = (txt, width, align = AlignmentType.CENTER) =>
-    cell({ text: txt, width, fill: NAVY, color: WHITE, bold: true, align, borderColor: NAVY, size: 18 });
+    cell({ text: txt, width, fill: HEADER_BG, color: NAVY, bold: true, align, borderColor: 'b0bdd6', size: 18 });
 
   const headerRow = new TableRow({
     tableHeader: true,
