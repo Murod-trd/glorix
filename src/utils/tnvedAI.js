@@ -1,39 +1,91 @@
 /**
- * Двухуровневый поиск ТН ВЭД ЕАЭС:
- *   1. Fuse.js fuzzy-поиск по базе (~150 записей, русские описания)
- *   2. OpenAI API fallback (если user предоставил ключ и уверенность низкая)
+ * Трёхуровневый поиск ТН ВЭД ЕАЭС:
+ *   1. (в DocumentCenter.jsx) regex-словарь — мгновенно
+ *   2. Word-overlap по базе ЕАЭС (~150 записей, русские описания)
+ *   3. OpenAI API fallback (если user предоставил ключ)
+ *
+ * Почему word-overlap, а не Fuse.js:
+ *   Fuse использует алгоритм Bitap — штрафует за каждое лишнее слово
+ *   в описании DB, поэтому длинные описания дают низкий score даже при
+ *   точном совпадении ключевых слов. Word-overlap считает только попадания,
+ *   игнорирует лишние слова и поддерживает prefix-match (болты→болт).
  */
 
-import Fuse from 'fuse.js';
 import TNVED_DB from '../data/tnvedDb.js';
 
-// ── Fuse.js индекс ──────────────────────────────────────────────────────────
-const fuse = new Fuse(TNVED_DB, {
-  keys: ['desc'],
-  threshold: 0.45,       // 0 = точное совпадение, 1 = всё подходит
-  minMatchCharLength: 3,
-  includeScore: true,
-  ignoreLocation: true,  // искать по всему тексту, не только с начала
-});
+// ── Предобработка запроса ────────────────────────────────────────────────────
+// \b не работает с кириллицей в JS — все паттерны без \b
+export function cleanQuery(name) {
+  let s = name.toLowerCase();
+  // Размеры вида 3х2.5, 6х210, 12x20
+  s = s.replace(/\d+[.,]?\d*\s*[хx×]\s*\d+[.,]?\d*/gi, ' ');
+  // Числа + единица (без пробела — кириллица не имеет \b)
+  s = s.replace(/\d+[.,]?\d*\s*(мм|см|м|кг|г|л|т|шт|кв|куб|пог)/gi, ' ');
+  // Одиночные единицы оставшиеся после удаления размеров
+  s = s.replace(/\s(мм|см|кг|шт|пог|кв|куб)\s/gi, ' ');
+  // Все оставшиеся числа
+  s = s.replace(/\d+[.,]?\d*/g, ' ');
+  // Буквенно-цифровые коды: а3, ду50, м500
+  s = s.replace(/[а-яёa-z]{1,3}\d+/gi, ' ');
+  // Латинские слова (кроме аббревиатур материалов)
+  s = s.replace(/[a-z]+/gi, m =>
+    /^(ввг|пвх|пэ|пп|sds|wd|нд|ду|led)$/i.test(m) ? m : ' ');
+  // Знаки препинания
+  s = s.replace(/[^а-яёa-z\s]/gi, ' ');
+  // Однобуквенные мусорные токены
+  s = s.replace(/\s[а-яёa-z]\s/gi, ' ');
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+// ── Word-overlap scorer ──────────────────────────────────────────────────────
+// Возвращает долю слов запроса, которые нашлись в описании (prefix-match)
+// Prefix-match: "болты" → "болт" ✅, "арматура" → "арматурные" ✅
+function overlapScore(queryWords, descWords) {
+  if (!queryWords.length) return 0;
+  // Фильтруем короткие слова из desc (предлоги и т.п.) чтобы
+  // "пожарный".startsWith("по") не давало ложных совпадений
+  const descLong = descWords.filter(w => w.length >= 3);
+  let hits = 0;
+  for (const qw of queryWords) {
+    const found = descLong.some(dw =>
+      dw === qw ||                    // точное совпадение
+      dw.startsWith(qw) ||            // desc содержит форму слова (арматурные→арматур)
+      qw.startsWith(dw)              // запрос содержит форму (болты→болт в desc)
+    );
+    if (found) hits++;
+  }
+  return hits / queryWords.length;
+}
 
 /**
- * Ищет код в базе Fuse.js.
+ * Ищет код в базе по word-overlap.
  * @returns {{ code: string, score: number } | null}
  */
 export function searchTnvedDB(name) {
   if (!name || name.length < 3) return null;
-  const results = fuse.search(name.toLowerCase().trim());
-  if (!results.length) return null;
-  const best = results[0];
-  // score: 0 = идеально, 1 = плохо → инвертируем в confidence
-  const confidence = 1 - (best.score || 0);
-  return { code: best.item.code, confidence };
+
+  const cleaned = cleanQuery(name);
+  const queryWords = cleaned.split(' ').filter(w => w.length >= 3);
+  if (!queryWords.length) return null;
+
+  let best = null;
+  let bestScore = 0;
+
+  for (const entry of TNVED_DB) {
+    const descWords = entry.desc.toLowerCase().split(/\s+/);
+    const score = overlapScore(queryWords, descWords);
+    if (score > bestScore) {
+      bestScore = score;
+      best = entry;
+    }
+  }
+
+  if (!best || bestScore < 0.5) return null;
+  return { code: best.code, score: bestScore };
 }
 
 /**
  * Вызывает OpenAI API для получения ТН ВЭД кода.
- * Требует OPENAI_API_KEY в localStorage.
- * @returns {Promise<string|null>}
  */
 export async function fetchTnvedFromAI(productName) {
   const apiKey = localStorage.getItem('glorix_openai_key') || '';
@@ -71,24 +123,12 @@ export async function fetchTnvedFromAI(productName) {
 }
 
 /**
- * Главная функция: regex dict → Fuse DB → OpenAI API.
- * Если уверенность Fuse >= 0.65 — не вызываем API.
- * @returns {Promise<{ code: string, source: 'regex'|'db'|'ai'|'' }>}
+ * Главная функция: DB word-overlap → OpenAI API.
  */
-export async function resolveTnved(name, regexCode) {
-  // Уровень 1: уже нашли через regex-словарь
-  if (regexCode) return { code: regexCode, source: 'regex' };
-
-  // Уровень 2: Fuse.js по базе
+export async function resolveTnved(name) {
   const dbResult = searchTnvedDB(name);
-  if (dbResult && dbResult.confidence >= 0.62) {
-    return { code: dbResult.code, source: 'db' };
-  }
-
-  // Уровень 3: OpenAI API
+  if (dbResult) return { code: dbResult.code, source: 'db' };
   const aiCode = await fetchTnvedFromAI(name);
   if (aiCode) return { code: aiCode, source: 'ai' };
-
-  // Ничего не нашли
   return { code: '', source: '' };
 }
