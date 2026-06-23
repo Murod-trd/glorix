@@ -106,6 +106,24 @@ function parsePaste(text) {
   }).filter(r => r && r.name);
 }
 
+// Словарь кодов ТН ВЭД для типовой электротехнической продукции.
+// searchHsCodes может ошибиться (7312=стальной трос, 7115=платина),
+// поэтому сначала проверяем по названию товара.
+const CABLE_TNVED_MAP = [
+  { re: /^(КСРПнг|КСРПнг\(А\)|КСРП)/i,        code: '8544429007' }, // кабели сигнальные, FRHF
+  { re: /^(ВВГ|АВВГнг|АВВГ|ВВГнг|ВВГп)/i,     code: '8544499108' }, // силовые кабели ВВГ (Cu, ПВХ, ≤1000В)
+  { re: /^(ПВС|ПВВС)/i,                        code: '8544492900' }, // провод ПВС (гибкий, многожильный)
+  { re: /^(КГ|КГнг|КГП)/i,                   code: '8544492900' }, // кабель КГ (резиновая изоляция)
+  { re: /^(NYM|NYY|SWA|H07|H05)/i,             code: '8544492900' }, // евро-марки ≤1000В
+  { re: /кабель|провод|wire|cable/i,            code: '8544420000' }, // общий фолбэк для кабельной продукции
+];
+function guessElectricalCode(name) {
+  for (const { re, code } of CABLE_TNVED_MAP) {
+    if (re.test(name.trim())) return code;
+  }
+  return null;
+}
+
 export default function DocumentCenter() {
   const { accountType } = useAccountType();
   const [tab, setTab] = useState('kp'); // kp | tnved
@@ -140,9 +158,12 @@ export default function DocumentCenter() {
         const enriched = await Promise.all(parsed.map(async (item) => {
           if (item.tnved) return item;
           try {
+            // 1. Быстрая проверка по словарю для электрокабелей
+            const guessed = guessElectricalCode(item.name);
+            if (guessed) return { ...item, tnved: guessed };
+            // 2. Поиск в базе HS (6-знач.), дополняем до 10 знаков ТН ВЭД
             const { results } = await searchHsCodes(item.name);
             if (!results.length) return item;
-            // HS-коды в базе 6-значные; дополняем до 10-значного ТН ВЭД
             const rawCode = results[0].code.replace(/\D/g, '');
             const tnvedCode = rawCode.padEnd(10, '0');
             return { ...item, tnved: tnvedCode };
@@ -195,41 +216,48 @@ export default function DocumentCenter() {
     setGenerating(true);
     setTimeout(() => {
       const sellerName = getCurrentUser(accountType).name;
+      const kpNum = `КП-${Date.now().toString().slice(-6)}`;
+      const dateStr   = new Date().toLocaleDateString('ru-RU');
+      const validStr  = new Date(Date.now()+30*24*60*60*1000).toLocaleDateString('ru-RU');
+
+      // Форматирование числа в российской локали: 5 000,00
+      const fmt = (n) => (parseFloat(n)||0).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
       const rows = items.filter(i => i.name).map((item, idx) => {
         const subtotal = (parseFloat(item.qty)||0) * (parseFloat(item.price)||0);
-        return `| ${idx+1} | ${item.name} | ${item.tnved || '—'} | ${item.qty} ${item.unit} | $${parseFloat(item.price)||0} | $${subtotal.toLocaleString()} |`;
+        return `| ${idx+1} | ${item.name} | ${item.tnved || '—'} | ${item.unit} | ${fmt(item.qty)} | ${fmt(item.price)} | ${fmt(subtotal)} |`;
       }).join('\n');
 
-      setGenerated(`КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ №КП-${Date.now().toString().slice(-6)}
+      const techSpecs = items.filter(i => i.name && i.specs);
 
-ПРОДАВЕЦ: ${sellerName}
-ВЕРИФИЦИРОВАНО: GLORIX Platform ✓
-ДАТА: ${new Date().toLocaleDateString('ru-RU')}
-ДЕЙСТВИТЕЛЬНО ДО: ${new Date(Date.now()+30*24*60*60*1000).toLocaleDateString('ru-RU')}
+      setGenerated(
+`КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ / COMMERCIAL OFFER  №${kpNum}
 
-ПОКУПАТЕЛЬ: ${buyer || '[Укажите покупателя]'}
-ИНКОТЕРМС 2020: ${incoterms}
-УСЛОВИЯ ОПЛАТЫ: ${payTerms}
+ПРОДАВЕЦ / SELLER:    ${sellerName}
+                      Верифицировано платформой GLORIX ✓
+ПОКУПАТЕЛЬ / BUYER:   ${buyer || '[Укажите покупателя / Specify buyer]'}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-СПЕЦИФИКАЦИЯ ТОВАРОВ:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-| № | Наименование | ТН ВЭД | Кол-во | Цена/ед | Сумма |
-|---|-------------|--------|--------|---------|-------|
+ДАТА / DATE:          ${dateStr}
+ДЕЙСТВИТЕЛЬНО / VALID UNTIL: ${validStr}
+УСЛОВИЯ / INCOTERMS:  ${incoterms} 2020
+ОПЛАТА / PAYMENT:     ${payTerms}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+СПЕЦИФИКАЦИЯ ТОВАРОВ / GOODS SPECIFICATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+| № | Наименование / Description | Код ТН ВЭД / HS Code | Ед.изм / Unit | К-во / Q\'ty | Цена за ед. / Unit price | Сумма / Amount |
+|---|---------------------------|---------------------|--------------|-------------|--------------------------|----------------|
 ${rows}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ИТОГО: $${totalAmount.toLocaleString()} ${incoterms}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-ТЕХНИЧЕСКИЕ ХАРАКТЕРИСТИКИ:
-${items.filter(i=>i.name&&i.specs).map((item,idx)=>`${idx+1}. ${item.name}:\n   ${item.specs}`).join('\n') || '   [Укажите характеристики в таблице выше]'}
-
-⚡ УЧАСТИЕ В ТЕНДЕРЕ:
-При подаче оферты на тендер — измените только цену.
-Технические характеристики и ТН ВЭД коды сохранены.
-
-____________________     ____________________
-Подпись руководителя     Печать компании`);
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ИТОГО / TOTAL:  ${fmt(totalAmount)} USD      ${incoterms} 2020
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${techSpecs.length > 0 ? `
+ТЕХНИЧЕСКИЕ ХАРАКТЕРИСТИКИ / TECHNICAL SPECIFICATIONS:
+${techSpecs.map((item,idx) => `${idx+1}. ${item.name}:\n   ${item.specs}`).join('\n')}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━` : ''}
+Подпись / Signature: ____________________
+Печать / Stamp:      ____________________`
+      );
       setGenerating(false);
     }, 1500);
   };
