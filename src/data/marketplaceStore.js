@@ -1,4 +1,5 @@
 import { products as staticProducts } from './marketplace';
+import { PRODUCT_ILLUSTRATION_IDS } from '../components/ProductIllustration';
 
 /**
  * Хранилище маркетплейса — превращает демо-витрину в реально работающий
@@ -47,7 +48,14 @@ function writeJson(key, value) {
  * пользователем за текущую сессию браузера.
  */
 export function getAllProducts() {
-  const userProducts = readJson(USER_PRODUCTS_KEY, []);
+  const validPhotoIds = new Set(PRODUCT_ILLUSTRATION_IDS);
+  const userProducts = readJson(USER_PRODUCTS_KEY, []).map(p => ({
+    ...p,
+    // Если товар был сохранён со старым photoId, которого больше нет в каталоге
+    // иллюстраций (например после рефакторинга набора SVG), подставляем
+    // нейтральный fallback вместо того чтобы показывать заглушку-«Товар» без предупреждения.
+    photoId: validPhotoIds.has(p.photoId) ? p.photoId : 'cement',
+  }));
   return [...staticProducts, ...userProducts];
 }
 

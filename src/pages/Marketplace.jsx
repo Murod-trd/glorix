@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { categories, calcMarketplaceFee } from '../data/marketplace';
+import { categories, calcMarketplaceFee, PRODUCT_UNITS } from '../data/marketplace';
+import { searchHsCodes } from '../data/hsCodes';
 import { getCurrentUser } from '../data/mock';
 import { useAccountType } from '../context/AccountContext';
 import { useCart } from '../context/CartContext';
@@ -541,7 +542,20 @@ function AddProductModal({ onClose }) {
   const { accountType } = useAccountType();
   const currentSeller = getCurrentUser(accountType);
   const [step, setStep] = useState(0); // 0=form, 1=ai-kp, 2=done
-  const [form, setForm] = useState({ title: '', category: '', price: '', unit: 'кг', minOrder: '', stock: '', incoterms: 'DAP', deliveryDays: '3', description: '', photoId: 'cement', specs: [{ p: '', v: '' }] });
+  const [form, setForm] = useState({ title: '', category: '', price: '', unit: 'кг', minOrder: '', stock: '', incoterms: 'DAP', deliveryDays: '3', description: '', photoId: 'cement', tnved: '', specs: [{ p: '', v: '' }] });
+  const [tnvedQuery, setTnvedQuery] = useState('');
+  const [tnvedResults, setTnvedResults] = useState([]);
+  const [showTnvedDrop, setShowTnvedDrop] = useState(false);
+  const handleTnvedSearch = (q) => {
+    setTnvedQuery(q);
+    if (!q) { set('tnved', ''); setTnvedResults([]); setShowTnvedDrop(false); return; }
+    if (q.length < 2) { setTnvedResults([]); setShowTnvedDrop(false); return; }
+    searchHsCodes(q).then(({ results }) => {
+      setTnvedResults(results.slice(0, 6));
+      setShowTnvedDrop(results.length > 0);
+    });
+  };
+  const selectTnved = (r) => { set('tnved', r.code); setTnvedQuery(r.code + ' — ' + (r.descriptionRu || r.description)); setShowTnvedDrop(false); };
   const [kp, setKp] = useState('');
   const [generating, setGenerating] = useState(false);
   const [confirmedReview, setConfirmedReview] = useState(false);
@@ -575,6 +589,7 @@ function AddProductModal({ onClose }) {
     if (publishDisabled) return;
     addUserProduct({
       title: form.title.trim(),
+      tnved: form.tnved || null,
       category: form.category,
       seller: { id: currentSeller.id, name: currentSeller.name, country: currentSeller.country, flag: currentSeller.flag, city: currentSeller.city || '', trustScore: currentSeller.trustScore, verified: currentSeller.verified, totalDeals: currentSeller.totalDeals },
       price: Number(form.price), currency: 'USD', unit: form.unit.trim(),
@@ -597,33 +612,39 @@ function AddProductModal({ onClose }) {
   const generateKP = () => {
     setGenerating(true);
     setTimeout(() => {
-      setKp(`КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ
+      const specsText = form.specs.filter(s=>s.p&&s.v).map(s=>`• ${s.p}: ${s.v}`).join('\n') || '• [Укажите характеристики]';
+      const subtotal = (parseFloat(form.price)||0) * (parseFloat(form.minOrder)||0);
+      setKp(`КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ №КП-${Date.now().toString().slice(-6)}
 
-От: ${currentSeller.name} (Продавец GLORIX)
-Дата: ${new Date().toLocaleDateString('ru-RU')}
-Действительно: 30 дней
+ПРОДАВЕЦ: ${currentSeller.name} (Продавец GLORIX Platform)
+ДАТА: ${new Date().toLocaleDateString('ru-RU')}
+ДЕЙСТВИТЕЛЬНО ДО: ${new Date(Date.now()+30*24*60*60*1000).toLocaleDateString('ru-RU')}
+ИНКОТЕРМС 2020: ${form.incoterms}
+УСЛОВИЯ ОПЛАТЫ: 30% предоплата, 70% по факту отгрузки
 
-ТОВАР: ${form.title || '[Название товара]'}
-Категория: ${form.category || '[Категория]'}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+СПЕЦИФИКАЦИЯ ТОВАРОВ:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+| № | Наименование | ТН ВЭД | Кол-во | Цена/ед | Сумма |
+|---|-------------|--------|--------|---------|-------|
+| 1 | ${form.title || '[Название товара]'} | ${form.tnved || '—'} | ${form.minOrder || '—'} ${form.unit} | $${form.price || '—'} | $${subtotal.toLocaleString()} |
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ИТОГО: $${subtotal.toLocaleString()} ${form.incoterms}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ТЕХНИЧЕСКИЕ ХАРАКТЕРИСТИКИ:
-${form.specs.filter(s=>s.p&&s.v).map(s=>`• ${s.p}: ${s.v}`).join('\n') || '• [Укажите характеристики]'}
-
-КОММЕРЧЕСКИЕ УСЛОВИЯ:
-• Цена: ${form.price ? `$${form.price} / ${form.unit}` : '[Цена]'}
-• Минимальный заказ: ${form.minOrder ? `${form.minOrder} ${form.unit}` : '[Мин. заказ]'}
-• Срок поставки: ${form.deliveryDays || '[Срок]'} рабочих дней
-• Инкотермс 2020: ${form.incoterms}
-• Условия оплаты: 30% предоплата, 70% по факту отгрузки
+${specsText}
 
 НАЛИЧИЕ: ${form.stock ? `${form.stock} ${form.unit} на складе` : '[Наличие]'}
+СРОК ПОСТАВКИ: ${form.deliveryDays || '[Срок]'} рабочих дней
 
-ПРИМЕЧАНИЕ: Технические характеристики сохранены.
-При участии в тендере — измените только цену.
+⚡ УЧАСТИЕ В ТЕНДЕРЕ:
+При подаче оферты на тендер — измените только цену.
+Технические характеристики и ТН ВЭД код сохранены.
 
 Верифицировано GLORIX ✓
-____________________    ____________________
-Подпись                 Печать`);
+____________________     ____________________
+Подпись руководителя     Печать компании`);
       setGenerating(false);
       setStep(1);
     }, 2000);
@@ -662,6 +683,33 @@ ____________________    ____________________
                   <label style={{ fontSize: 12, color: 'var(--text-2)', display: 'block', marginBottom: 5 }}>Название товара</label>
                   <input style={inputStyle} placeholder="Напр.: Хлопковая пряжа Ne 30/1" value={form.title} onChange={e => set('title', e.target.value)} />
                 </div>
+                {/* Код ТН ВЭД — используется в КП. Переиспользует searchHsCodes из hsCodes.js. */}
+                <div style={{ position: 'relative' }}>
+                  <label style={{ fontSize: 12, color: 'var(--text-2)', display: 'block', marginBottom: 5 }}>Код ТН ВЭД <span style={{ color: 'var(--text-3)' }}>(необязательно — нужен для КП)</span></label>
+                  <input
+                    style={inputStyle}
+                    placeholder="Напр.: 5205 или введите название для поиска"
+                    value={tnvedQuery}
+                    onChange={e => handleTnvedSearch(e.target.value)}
+                    onBlur={() => setTimeout(() => setShowTnvedDrop(false), 150)}
+                  />
+                  {showTnvedDrop && (
+                    <div style={{ position: 'absolute', zIndex: 200, background: 'var(--navy-2)', border: '1px solid var(--border-2)', borderRadius: 8, width: '100%', maxHeight: 200, overflowY: 'auto', top: '100%', marginTop: 4, boxShadow: '0 4px 16px rgba(0,0,0,0.4)' }}>
+                      {tnvedResults.map(r => (
+                        <div key={r.code} onMouseDown={() => selectTnved(r)}
+                          style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 12, borderBottom: '1px solid var(--border)', color: 'var(--text)' }}
+                          onMouseEnter={e => e.currentTarget.style.background='var(--navy-3)'}
+                          onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                          <span style={{ color: 'var(--accent)', fontFamily: 'monospace', marginRight: 8 }}>{r.code}</span>
+                          {r.descriptionRu || r.description}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {form.tnved && (
+                    <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4 }}>✓ Выбран код: {form.tnved}</div>
+                  )}
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <div>
                     <label style={{ fontSize: 12, color: 'var(--text-2)', display: 'block', marginBottom: 5 }}>Категория</label>
@@ -685,7 +733,7 @@ ____________________    ____________________
                   <div>
                     <label style={{ fontSize: 12, color: 'var(--text-2)', display: 'block', marginBottom: 5 }}>Единица</label>
                     <select style={inputStyle} value={form.unit} onChange={e => set('unit', e.target.value)}>
-                      {['кг','тонна','штука','литр','м²','мешок'].map(u => <option key={u}>{u}</option>)}
+                      {PRODUCT_UNITS.map(u => <option key={u}>{u}</option>)}
                     </select>
                   </div>
                   <div>

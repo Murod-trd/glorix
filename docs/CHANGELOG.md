@@ -3,6 +3,38 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-23 — Сессия 24: UX-фиксы маркетплейса и DocumentCenter
+
+### Исправлено
+- **Marketplace: битые иллюстрации из localStorage** — `getAllProducts()` валидирует
+  `photoId` каждого пользовательского товара против `PRODUCT_ILLUSTRATION_IDS`;
+  неизвестный id заменяется на `'cement'`. `ProductIllustration` добавляет
+  `console.warn` при неизвестном id для диагностики.
+- **AddProductModal: КП без таблицы и без ТН ВЭД** — добавлено поле «Код ТН ВЭД»
+  с live-поиском через `searchHsCodes()` (без дублирования логики из DocumentCenter).
+  `generateKP()` переделан в табличный формат: шапка + строка спецификации
+  с колонками № / Наименование / ТН ВЭД / Кол-во / Цена/ед / Сумма + итого.
+  `tnved` сохраняется в данные товара.
+- **DocumentCenter: запятая в числах разрывала Excel-вставку** — `parsePaste()`
+  теперь сначала проверяет наличие Tab в строке и делит только по Tab (Excel-формат);
+  десятичные запятые в qty/price нормализуются → точка.
+- **Единицы измерения: два расходящихся списка** — добавлен `PRODUCT_UNITS` в
+  `marketplace.js` (единственный источник истины). DocumentCenter и AddProductModal
+  импортируют его вместо хардкодных массивов. Добавлены: `упак, рулон, паллет,
+  м, пог.м, компл, л` (был только `литр`). Устранено расхождение `шт` vs `штука`.
+
+### Drive-by
+- `useRef` неиспользуемый импорт в DocumentCenter.jsx — удалён.
+- `react-refresh/only-export-components` на `PRODUCT_ILLUSTRATION_IDS` —
+  добавлен `eslint-disable-next-line` (константа экспортировалась ещё до
+  этой сессии, pre-existing).
+
+### Файлы изменены
+`src/data/marketplace.js`, `src/data/marketplaceStore.js`,
+`src/components/ProductIllustration.jsx`, `src/pages/DocumentCenter.jsx`,
+`src/pages/Marketplace.jsx`, `docs/SESSION_STATE.md`, `docs/CHANGELOG.md`
+
+---
 ## 2026-06-22 — Role-rights model split (buy-in-marketplace vs. create-a-tender); tenders now actually publish, are visible to all roles, buyer identity anonymized until completion
 
 Founder clarified the rights model (full separation of role permissions; "both" = union of buyer+seller), after explicitly being asked for advice "as a business consultant": buying in the marketplace and creating a tender are different permissions, not the same thing. A seller account can buy in the marketplace (sourcing raw materials/components for its own production) but still cannot create a tender. Tenders are visible to ALL roles with no ownership filtering (a seller needs to see the whole tender flow to bid on it -- same model as Alibaba RFQ / SAP Ariba), but the buyer's identity is anonymized to sellers ("Buyer from [country]") until the tender reaches `completed` status.

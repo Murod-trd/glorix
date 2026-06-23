@@ -1,20 +1,30 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getCurrentUser } from '../data/mock';
 import { useAccountType } from '../context/AccountContext';
 import { searchHsCodes, translateProductNameToRu } from '../data/hsCodes';
+import { PRODUCT_UNITS } from '../data/marketplace';
 
-// Parse Excel-like paste (tab or comma separated)
+// Parse Excel-like paste (tab или запятая как разделитель колонок).
+// ВАЖНО: приоритет — вкладка (Tab). Если в строке есть хотя бы один Tab —
+// делим только по Tab. Иначе — по запятой. Это предотвращает ситуацию,
+// когда десятичная запятая в наименовании ("Пруток 2,25мм") или числе
+// ("цена: 1,250") разбивает строку на лишнюю колонку.
+// Числовые поля (qty, price) дополнительно нормализуют запятую → точку,
+// чтобы parseFloat() работал корректно при любом формате.
 function parsePaste(text) {
   const lines = text.trim().split('\n').filter(l => l.trim());
   return lines.map(line => {
-    const cols = line.split(/\t|,/).map(c => c.trim().replace(/"/g, ''));
+    const hasTabs = line.includes('\t');
+    const cols = hasTabs
+      ? line.split('\t').map(c => c.trim().replace(/"/g, ''))
+      : line.split(',').map(c => c.trim().replace(/"/g, ''));
     return {
       name: cols[0] || '',
       tnved: cols[1] || '',
-      qty: cols[2] || '',
+      qty: (cols[2] || '').replace(',', '.'),
       unit: cols[3] || 'кг',
-      price: cols[4] || '',
+      price: (cols[4] || '').replace(',', '.'),
       specs: cols[5] || '',
     };
   }).filter(r => r.name);
@@ -243,7 +253,7 @@ ____________________     ____________________
                         </td>
                         <td style={{ padding: '4px 6px', width: 60 }}>
                           <select style={{ ...inputStyle, fontSize: 11 }} value={item.unit} onChange={e => updateItem(i,'unit',e.target.value)}>
-                            {['кг','тонна','шт','литр','м²','мешок','м³'].map(u => <option key={u}>{u}</option>)}
+                            {PRODUCT_UNITS.map(u => <option key={u}>{u}</option>)}
                           </select>
                         </td>
                         <td style={{ padding: '4px 6px', width: 70 }}>

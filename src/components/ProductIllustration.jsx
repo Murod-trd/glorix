@@ -446,11 +446,21 @@ const ILLUSTRATIONS = {
  * Экспортирован отдельно, чтобы не дублировать список ключей где-либо
  * ещё в коде.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export const PRODUCT_ILLUSTRATION_IDS = Object.keys(ILLUSTRATIONS);
 
 export default function ProductIllustration({ id, ...props }) {
   const Illustration = ILLUSTRATIONS[id];
   if (!Illustration) {
+    // Логируем предупреждение в dev-режиме — помогает диагностировать товары
+    // из localStorage, сохранённые со старым или несуществующим photoId.
+    // В production console.warn остаётся, но не виден конечному пользователю.
+    if (id) {
+      console.warn(
+        `[ProductIllustration] Неизвестный photoId: "${id}". ` +
+        `Доступные: ${PRODUCT_ILLUSTRATION_IDS.join(', ')}`
+      );
+    }
     return (
       <Wrapper>
         <text x="200" y="155" textAnchor="middle" fontSize="14" fill={COLORS.blue}>Товар</text>
