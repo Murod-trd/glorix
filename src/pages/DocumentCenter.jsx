@@ -5,13 +5,32 @@ import { useAccountType } from '../context/AccountContext';
 import { searchHsCodes, translateProductNameToRu } from '../data/hsCodes';
 import { PRODUCT_UNITS } from '../data/marketplace';
 
-// Parse Excel-like paste (tab или запятая как разделитель колонок).
-// ВАЖНО: приоритет — вкладка (Tab). Если в строке есть хотя бы один Tab —
-// делим только по Tab. Иначе — по запятой. Это предотвращает ситуацию,
-// когда десятичная запятая в наименовании ("Пруток 2,25мм") или числе
-// ("цена: 1,250") разбивает строку на лишнюю колонку.
-// Числовые поля (qty, price) дополнительно нормализуют запятую → точку,
-// чтобы parseFloat() работал корректно при любом формате.
+// Нормализация числового поля из Excel:
+// Убирает валютный суффикс (UZS, USD, руб, $...), пробелы как разделитель тысяч,
+// определяет правильный десятичный разделитель (запятая или точка).
+// Примеры: "2 000" → "2000", "10 190,07 UZS" → "10190.07", "1,500" → "1500"
+function normalizeNum(s = '') {
+  let c = s.trim().replace(/[^\d\s,.-]/g, '').trim();
+  c = c.replace(/\s+/g, '');
+  const lastComma = c.lastIndexOf(',');
+  const lastDot   = c.lastIndexOf('.');
+  if (lastComma > -1 && lastDot > -1) {
+    c = lastDot > lastComma
+      ? c.replace(/,/g, '')
+      : c.replace(/\./g, '').replace(',', '.');
+  } else if (lastComma > -1) {
+    const afterComma = c.slice(lastComma + 1);
+    c = /^\d{3}$/.test(afterComma)
+      ? c.replace(/,/g, '')
+      : c.replace(',', '.');
+  }
+  return c;
+}
+
+// Parse Excel-like paste. Автоматически определяет формат: с ТН ВЭД или без.
+// С ТН ВЭД (6 кол.): Название | ТН ВЭД(8-10 цифр) | Кол-во | Ед. | Цена | Харак.
+// Без ТН ВЭД (4 кол.): Название | Кол-во | Ед. | Цена [| Харак.]
+// Числа: "2 000"→2000, "10 190,07 UZS"→10190.07, "1,500"→1500
 function parsePaste(text) {
   const lines = text.trim().split('\n').filter(l => l.trim());
   return lines.map(line => {
@@ -19,14 +38,31 @@ function parsePaste(text) {
     const cols = hasTabs
       ? line.split('\t').map(c => c.trim().replace(/"/g, ''))
       : line.split(',').map(c => c.trim().replace(/"/g, ''));
-    return {
-      name: cols[0] || '',
-      tnved: cols[1] || '',
-      qty: (cols[2] || '').replace(',', '.'),
-      unit: cols[3] || 'кг',
-      price: (cols[4] || '').replace(',', '.'),
-      specs: cols[5] || '',
-    };
+
+    // ТН ВЭД — строго 8-10 цифр (или пустая ячейка)
+    const col1 = (cols[1] || '').replace(/\s/g, '');
+    const hasTnvedCol = !col1 || /^\d{8,10}$/.test(col1);
+
+    if (hasTnvedCol) {
+      return {
+        name:  cols[0] || '',
+        tnved: cols[1] || '',
+        qty:   normalizeNum(cols[2] || ''),
+        unit:  cols[3] || 'кг',
+        price: normalizeNum(cols[4] || ''),
+        specs: cols[5] || '',
+      };
+    } else {
+      // Без ТН ВЭД: Название | Кол-во | Ед. | Цена
+      return {
+        name:  cols[0] || '',
+        tnved: '',
+        qty:   normalizeNum(cols[1] || ''),
+        unit:  cols[2] || 'кг',
+        price: normalizeNum(cols[3] || ''),
+        specs: cols[4] || '',
+      };
+    }
   }).filter(r => r.name);
 }
 
@@ -212,7 +248,9 @@ ____________________     ____________________
                 <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 13 }}>📋 Вставить данные из Excel</div>
                 <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 8, lineHeight: 1.6 }}>
                   Скопируйте ячейки из Excel и вставьте сюда.<br/>
-                  Формат колонок: <span style={{ color: 'var(--accent)' }}>Название | ТН ВЭД | Кол-во | Ед. | Цена | Характеристики</span>
+                  Форматы (определяется автоматически):<br/>
+                  <span style={{ color: 'var(--accent)' }}>С ТН ВЭД: Название | ТН ВЭД | Кол-во | Ед. | Цена | Харак.</span><br/>
+                  <span style={{ color: 'var(--text-2)' }}>Без ТН ВЭД: Название | Кол-во | Ед. | Цена</span>
                 </div>
                 <textarea value={pasteText} onChange={e => setPasteText(e.target.value)}
                   placeholder={'Пшеница 3кл\t1001990000\t500\tтонна\t188\tВлажность ≤14%, протеин ≥12%\nЦемент М400\t2523290000\t100\tмешок\t6.5\tМарка М400, ГОСТ 31108'}
