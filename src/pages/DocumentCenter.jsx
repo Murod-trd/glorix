@@ -127,7 +127,17 @@ function parsePaste(text) {
     }
 
     return { name, tnved, qty, unit, price, specs };
-  }).filter(r => r && r.name);
+  }).filter(r => {
+    if (!r || !r.name) return false;
+    // Пропускаем строки-заголовки таблиц (Наименование, №, Description и т.д.)
+    const LOW = r.name.trim().toLowerCase();
+    const HEADERS = ['наименование', 'описание', 'description', 'name', 'товар', 'product',
+                     '№', 'no', 'n/n', 'п/п', 'номер', 'поз', 'позиция'];
+    if (HEADERS.some(h => LOW === h || LOW.startsWith(h + ' '))) return false;
+    // Пропускаем строки где имя — просто порядковый номер (1, 2, 41 и т.д.)
+    if (/^\d{1,3}$/.test(r.name.trim())) return false;
+    return true;
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -705,7 +715,7 @@ export default function DocumentCenter() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 600 }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                      {['№','Наименование','ТН ВЭД','Кол-во','Ед.','Цена $','Характеристики',''].map(h => (
+                      {['№','Наименование','ТН ВЭД','Кол-во','Ед.',`Цена ${({'USD':'$','EUR':'€','RUB':'₽','UZS':'сум','KZT':'₸','UAH':'₴','BYN':'Br','AZN':'₼','AMD':'֏','GEL':'₾','TJS':'SM','TMT':'T','KGS':'с','MDL':'L','CNY':'¥','TRY':'₺','GBP':'£','JPY':'¥'})[currency]||currency}`,'Характеристики',''].map(h => (
                         <th key={h} style={{ padding: '6px 8px', textAlign: 'left', fontSize: 10, color: 'var(--text-3)', fontWeight: 700, letterSpacing: 0.5, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>

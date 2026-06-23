@@ -10,7 +10,8 @@ import {
 //            items: [{name,tnved,unit,qty,price}], totalAmount }
 // ─────────────────────────────────────────────────────────────────────────────
 export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
-  const { kpNum, dateStr, validStr, sellerName, buyer, incoterms, payTerms, currency, items, totalAmount } = kpData;
+  const { kpNum, dateStr, validStr, sellerName, buyer, incoterms, payTerms, currency, items, totalAmount, vatAmount = 0, grandTotal, vatRate = 0 } = kpData;
+  const finalTotal = vatRate > 0 ? (grandTotal || totalAmount) : totalAmount;
   const CURR_SYMBOLS = { USD:'$', EUR:'€', RUB:'₽', UZS:'сум', KZT:'₸', UAH:'₴',
     BYN:'Br', AZN:'₼', AMD:'֏', GEL:'₾', TJS:'SM', TMT:'T', KGS:'с', MDL:'L',
     CNY:'¥', TRY:'₺', GBP:'£', JPY:'¥' };
@@ -87,7 +88,55 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
     ]});
   });
 
+  // ── НДС строки (если vatRate > 0) ────────────────────────────────────────
+  const lightBd = () => ({ style: BorderStyle.SINGLE, size: 4, color: 'dde3ea' });
+  const vatRows = vatRate > 0 ? [
+    new TableRow({ children: [
+      new TableCell({
+        columnSpan: 6,
+        shading: { type: ShadingType.SOLID, fill: 'f8f9fb' },
+        borders: { top: lightBd(), bottom: lightBd(), left: lightBd(), right: lightBd() },
+        margins: { top: 60, bottom: 60, left: 80, right: 80 },
+        children: [new Paragraph({
+          alignment: AlignmentType.RIGHT,
+          children: [new TextRun({ text: 'Сумма без НДС / Amount excl. VAT:', color: '555555', size: 20, font: 'Calibri' })],
+        })],
+      }),
+      new TableCell({
+        shading: { type: ShadingType.SOLID, fill: 'f8f9fb' },
+        borders: { top: lightBd(), bottom: lightBd(), left: lightBd(), right: lightBd() },
+        margins: { top: 60, bottom: 60, left: 80, right: 80 },
+        children: [new Paragraph({
+          alignment: AlignmentType.RIGHT,
+          children: [new TextRun({ text: `${fmt(totalAmount)} ${currSym}`, size: 20, font: 'Calibri' })],
+        })],
+      }),
+    ]}),
+    new TableRow({ children: [
+      new TableCell({
+        columnSpan: 6,
+        shading: { type: ShadingType.SOLID, fill: 'f8f9fb' },
+        borders: { top: lightBd(), bottom: lightBd(), left: lightBd(), right: lightBd() },
+        margins: { top: 60, bottom: 60, left: 80, right: 80 },
+        children: [new Paragraph({
+          alignment: AlignmentType.RIGHT,
+          children: [new TextRun({ text: `НДС ${vatRate}% / VAT ${vatRate}%:`, color: 'e67e22', size: 20, font: 'Calibri' })],
+        })],
+      }),
+      new TableCell({
+        shading: { type: ShadingType.SOLID, fill: 'f8f9fb' },
+        borders: { top: lightBd(), bottom: lightBd(), left: lightBd(), right: lightBd() },
+        margins: { top: 60, bottom: 60, left: 80, right: 80 },
+        children: [new Paragraph({
+          alignment: AlignmentType.RIGHT,
+          children: [new TextRun({ text: `${fmt(vatAmount)} ${currSym}`, color: 'e67e22', size: 20, font: 'Calibri' })],
+        })],
+      }),
+    ]}),
+  ] : [];
+
   // ── Итоговая строка ────────────────────────────────────────────────────────
+  const totalLabel = vatRate > 0 ? `ИТОГО / TOTAL  (${incoterms} 2020, ${currency}) С НДС ${vatRate}%:` : `ИТОГО / TOTAL  (${incoterms} 2020, ${currency}):`;
   const totalRow = new TableRow({ children: [
     new TableCell({
       columnSpan: 6,
@@ -96,7 +145,7 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
       margins: { top: 100, bottom: 100, left: 80, right: 80 },
       children: [new Paragraph({
         alignment: AlignmentType.RIGHT,
-        children: [new TextRun({ text: `ИТОГО / TOTAL  (${incoterms} 2020, ${currency}):`, bold: true, color: WHITE, size: 22, font: 'Calibri' })],
+        children: [new TextRun({ text: totalLabel, bold: true, color: WHITE, size: 22, font: 'Calibri' })],
       })],
     }),
     new TableCell({
@@ -105,7 +154,7 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
       margins: { top: 100, bottom: 100, left: 80, right: 80 },
       children: [new Paragraph({
         alignment: AlignmentType.RIGHT,
-        children: [new TextRun({ text: `${fmt(totalAmount)} ${currSym}`, bold: true, color: ACCENT, size: 22, font: 'Calibri' })],
+        children: [new TextRun({ text: `${fmt(finalTotal)} ${currSym}`, bold: true, color: ACCENT, size: 22, font: 'Calibri' })],
       })],
     }),
   ]});
@@ -113,7 +162,7 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
   // ── Таблица ────────────────────────────────────────────────────────────────
   const table = new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
-    rows: [headerRow, ...dataRows, totalRow],
+    rows: [headerRow, ...dataRows, ...vatRows, totalRow],
   });
 
   // ── Информационная шапка ───────────────────────────────────────────────────
