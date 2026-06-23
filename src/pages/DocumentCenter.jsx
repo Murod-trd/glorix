@@ -245,7 +245,9 @@ export default function DocumentCenter() {
   const [generating, setGenerating] = useState(false);
   const [buyer, setBuyer] = useState('');
   const [incoterms, setIncoterms] = useState('DAP');
+  const [currency, setCurrency] = useState('USD');
   const [payTerms, setPayTerms] = useState('30% предоплата, 70% по факту отгрузки');
+  const [payCustom, setPayCustom] = useState('');
   const [tnvedQuery, setTnvedQuery] = useState('');
   const [tnvedResults, setTnvedResults] = useState([]);
   const [selectedTnved, setSelectedTnved] = useState(null);
@@ -334,19 +336,21 @@ export default function DocumentCenter() {
 
       const validItems = items.filter(i => i.name);
 
+      const currSym = { USD:'$', EUR:'€', RUB:'₽', UZS:'сум' }[currency] || '$';
       const rowsHtml = validItems.map((item, idx) => {
         const subtotal = (parseFloat(item.qty)||0) * (parseFloat(item.price)||0);
-        const bg = idx % 2 === 0 ? '#f8f9fb' : '#ffffff';
+        const bg = idx % 2 === 0 ? '#f5f7fa' : '#ffffff';
         const tnvedColor = item.tnved ? '#1a7a4a' : '#c0392b';
         const tnvedText  = item.tnved || '—';
-        return `<tr style="background:${bg}">
-          <td style="padding:8px 10px;text-align:center;border:1px solid #dde3ea;color:#888;font-size:11px">${idx+1}</td>
-          <td style="padding:8px 10px;border:1px solid #dde3ea;font-size:12px;font-weight:500">${item.name}</td>
-          <td style="padding:8px 10px;text-align:center;border:1px solid #dde3ea;font-family:monospace;font-size:11px;color:${tnvedColor};letter-spacing:.5px">${tnvedText}</td>
-          <td style="padding:8px 10px;text-align:center;border:1px solid #dde3ea;font-size:12px">${item.unit}</td>
-          <td style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;font-size:12px">${fmt(item.qty)}</td>
-          <td style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;font-size:12px">${fmt(item.price)}</td>
-          <td style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;font-size:12px;font-weight:700;color:#0a5">${fmt(subtotal)}</td>
+        const td = (content, extra='') => `<td style="padding:8px 10px;border:1px solid #dde3ea;background:${bg};color:#1a2233;font-size:12px;${extra}">${content}</td>`;
+        return `<tr>
+          ${td(idx+1, 'text-align:center;color:#888;font-size:11px')}
+          ${td(`<strong>${item.name}</strong>`)}
+          ${td(tnvedText, `text-align:center;font-family:monospace;font-size:11px;color:${tnvedColor};letter-spacing:.5px`)}
+          ${td(item.unit, 'text-align:center')}
+          ${td(fmt(item.qty), 'text-align:right')}
+          ${td(fmt(item.price) + ' ' + currSym, 'text-align:right')}
+          ${td(`<strong>${fmt(subtotal)} ${currSym}</strong>`, 'text-align:right;color:#1a5c2e')}
         </tr>`;
       }).join('');
 
@@ -380,7 +384,7 @@ export default function DocumentCenter() {
           <tr><td style="padding:5px 0;color:#888;width:200px;vertical-align:top">Продавец / Seller:</td><td style="font-weight:600">${sellerName}</td></tr>
           <tr><td style="padding:5px 0;color:#888;vertical-align:top">Покупатель / Buyer:</td><td style="font-weight:600">${buyer || '<span style="color:#c00">[Укажите покупателя / Specify buyer]</span>'}</td></tr>
           <tr><td style="padding:5px 0;color:#888">Инкотермс / Incoterms:</td><td>${incoterms} 2020</td></tr>
-          <tr><td style="padding:5px 0;color:#888">Условия оплаты / Payment:</td><td>${payTerms}</td></tr>
+          <tr><td style="padding:5px 0;color:#888">Условия оплаты / Payment:</td><td>${effectivePayTerms}</td></tr>
         </table>
 
         <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#1a2233;border-top:2px solid #1a2233;padding-top:12px;margin-bottom:10px">
@@ -395,18 +399,18 @@ export default function DocumentCenter() {
               <th style="padding:10px 8px;text-align:center;width:118px;border:1px solid #2d3d50;font-size:11px;font-weight:600">Код ТН ВЭД<br><span style="font-weight:400;font-size:9px;opacity:.7">HS Code</span></th>
               <th style="padding:10px 8px;text-align:center;width:52px;border:1px solid #2d3d50;font-size:11px;font-weight:600">Ед.изм<br><span style="font-weight:400;font-size:9px;opacity:.7">Unit</span></th>
               <th style="padding:10px 8px;text-align:right;width:82px;border:1px solid #2d3d50;font-size:11px;font-weight:600">К-во<br><span style="font-weight:400;font-size:9px;opacity:.7">Q'ty</span></th>
-              <th style="padding:10px 8px;text-align:right;width:100px;border:1px solid #2d3d50;font-size:11px;font-weight:600">Цена за ед.<br><span style="font-weight:400;font-size:9px;opacity:.7">Unit price, $</span></th>
-              <th style="padding:10px 8px;text-align:right;width:105px;border:1px solid #2d3d50;font-size:11px;font-weight:600">Сумма<br><span style="font-weight:400;font-size:9px;opacity:.7">Amount, $</span></th>
+              <th style="padding:10px 8px;text-align:right;width:100px;border:1px solid #2d3d50;font-size:11px;font-weight:600">Цена за ед.<br><span style="font-weight:400;font-size:9px;opacity:.7">Unit price, ${currSym}</span></th>
+              <th style="padding:10px 8px;text-align:right;width:105px;border:1px solid #2d3d50;font-size:11px;font-weight:600">Сумма<br><span style="font-weight:400;font-size:9px;opacity:.7">Amount, ${currSym}</span></th>
             </tr>
           </thead>
           <tbody>${rowsHtml}</tbody>
           <tfoot>
             <tr style="background:#0f1a28;color:#fff">
               <td colspan="6" style="padding:12px 10px;text-align:right;border:1px solid #2d3d50;font-weight:700;font-size:14px;letter-spacing:.5px">
-                ИТОГО / TOTAL &nbsp;(${incoterms} 2020):
+                ИТОГО / TOTAL &nbsp;(${incoterms} 2020, ${currency}):
               </td>
               <td style="padding:12px 10px;text-align:right;border:1px solid #2d3d50;font-weight:700;font-size:14px;color:#00d4aa">
-                ${fmt(totalAmount)} $
+                ${fmt(totalAmount)} ${currSym}
               </td>
             </tr>
           </tfoot>
@@ -424,8 +428,9 @@ export default function DocumentCenter() {
         </div>
       </div>`;
 
-      setKpData({ kpNum, dateStr, validStr, sellerName, buyer, incoterms, payTerms,
-        items: validItems, totalAmount });
+      const effectivePayTerms = payCustom.trim() || payTerms;
+      setKpData({ kpNum, dateStr, validStr, sellerName, buyer, incoterms,
+        payTerms: effectivePayTerms, currency, items: validItems, totalAmount });
       setGenerated(html);
       setGenerating(false);
     }, 800);
@@ -474,7 +479,7 @@ export default function DocumentCenter() {
                   <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Покупатель (кому)</label>
                   <input style={inputStyle} placeholder="Название компании покупателя" value={buyer} onChange={e => setBuyer(e.target.value)} />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                   <div>
                     <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Инкотермс 2020</label>
                     <select style={inputStyle} value={incoterms} onChange={e => setIncoterms(e.target.value)}>
@@ -482,14 +487,37 @@ export default function DocumentCenter() {
                     </select>
                   </div>
                   <div>
-                    <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Условия оплаты</label>
-                    <select style={inputStyle} value={payTerms} onChange={e => setPayTerms(e.target.value)}>
+                    <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Валюта / Currency</label>
+                    <select style={inputStyle} value={currency} onChange={e => setCurrency(e.target.value)}>
+                      <option value="USD">$ USD — Доллар США</option>
+                      <option value="EUR">€ EUR — Евро</option>
+                      <option value="RUB">₽ RUB — Рубль</option>
+                      <option value="UZS">сум UZS — Узбекский сум</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Условия оплаты (шаблон)</label>
+                    <select style={inputStyle} value={payTerms} onChange={e => { setPayTerms(e.target.value); setPayCustom(''); }}>
                       <option>30% предоплата, 70% по факту отгрузки</option>
+                      <option>50% предоплата, 50% по факту отгрузки</option>
                       <option>100% предоплата</option>
                       <option>Оплата по факту получения</option>
+                      <option>Отсрочка 30 дней</option>
+                      <option>Отсрочка 60 дней</option>
                       <option>Аккредитив (LC)</option>
                     </select>
                   </div>
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>
+                    Свои условия оплаты <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>(если нужно — заменит шаблон выше)</span>
+                  </label>
+                  <input
+                    style={inputStyle}
+                    placeholder="Например: 40% аванс, остаток в течение 10 дней после отгрузки"
+                    value={payCustom}
+                    onChange={e => setPayCustom(e.target.value)}
+                  />
                 </div>
               </div>
             </div>

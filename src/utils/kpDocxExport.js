@@ -10,7 +10,8 @@ import {
 //            items: [{name,tnved,unit,qty,price}], totalAmount }
 // ─────────────────────────────────────────────────────────────────────────────
 export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
-  const { kpNum, dateStr, validStr, sellerName, buyer, incoterms, payTerms, items, totalAmount } = kpData;
+  const { kpNum, dateStr, validStr, sellerName, buyer, incoterms, payTerms, currency, items, totalAmount } = kpData;
+  const currSym = { USD:'$', EUR:'€', RUB:'₽', UZS:'сум' }[currency] || '$';
   const validItems = (items || []).filter(i => i.name);
 
   const fmt = (n) =>
@@ -60,8 +61,8 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
       mkTh('Код ТН ВЭД / HS Code', W.tnved),
       mkTh('Ед.изм / Unit', W.unit),
       mkTh('К-во / Q\'ty', W.qty, AlignmentType.RIGHT),
-      mkTh('Цена за ед. / Unit price, $', W.price, AlignmentType.RIGHT),
-      mkTh('Сумма / Amount, $', W.sum, AlignmentType.RIGHT),
+      mkTh(`Цена за ед. / Unit price, ${currSym}`, W.price, AlignmentType.RIGHT),
+      mkTh(`Сумма / Amount, ${currSym}`, W.sum, AlignmentType.RIGHT),
     ],
   });
 
@@ -74,12 +75,12 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
 
     return new TableRow({ children: [
       mk(idx + 1, W.n, AlignmentType.CENTER),
-      mk(item.name, W.name, AlignmentType.LEFT, NAVY, true),
+      mk(item.name, W.name, AlignmentType.LEFT, '1a2233', true),
       mk(item.tnved || '—', W.tnved, AlignmentType.CENTER, item.tnved ? GREEN : RED_COL),
       mk(item.unit, W.unit, AlignmentType.CENTER),
       mk(fmt(item.qty), W.qty, AlignmentType.RIGHT),
-      mk(fmt(item.price), W.price, AlignmentType.RIGHT),
-      mk(fmt(subtotal), W.sum, AlignmentType.RIGHT, '0a5522', true),
+      mk(fmt(item.price) + ' ' + currSym, W.price, AlignmentType.RIGHT),
+      mk(fmt(subtotal) + ' ' + currSym, W.sum, AlignmentType.RIGHT, '0a5522', true),
     ]});
   });
 
@@ -92,7 +93,7 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
       margins: { top: 100, bottom: 100, left: 80, right: 80 },
       children: [new Paragraph({
         alignment: AlignmentType.RIGHT,
-        children: [new TextRun({ text: `ИТОГО / TOTAL  (${incoterms} 2020):`, bold: true, color: WHITE, size: 22, font: 'Calibri' })],
+        children: [new TextRun({ text: `ИТОГО / TOTAL  (${incoterms} 2020, ${currency}):`, bold: true, color: WHITE, size: 22, font: 'Calibri' })],
       })],
     }),
     new TableCell({
@@ -101,7 +102,7 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
       margins: { top: 100, bottom: 100, left: 80, right: 80 },
       children: [new Paragraph({
         alignment: AlignmentType.RIGHT,
-        children: [new TextRun({ text: `${fmt(totalAmount)} $`, bold: true, color: ACCENT, size: 22, font: 'Calibri' })],
+        children: [new TextRun({ text: `${fmt(totalAmount)} ${currSym}`, bold: true, color: ACCENT, size: 22, font: 'Calibri' })],
       })],
     }),
   ]});
