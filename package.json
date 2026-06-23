@@ -13,6 +13,7 @@
     "@fontsource/inter": "^5.2.8",
     "@fontsource/space-grotesk": "^5.2.10",
     "docx": "^9.7.1",
+    "fuse.js": "^7.4.2",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.18.0",
     "react": "^19.2.6",

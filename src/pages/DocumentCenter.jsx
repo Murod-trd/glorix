@@ -4,6 +4,7 @@ import { getCurrentUser } from '../data/mock';
 import { useAccountType } from '../context/AccountContext';
 import { searchHsCodes, translateProductNameToRu } from '../data/hsCodes';
 import { PRODUCT_UNITS } from '../data/marketplace';
+import { resolveTnved } from '../utils/tnvedAI.js';
 
 // Нормализация числового поля из Excel:
 // Убирает валютный суффикс (UZS, USD, руб, $...), пробелы как разделитель тысяч,
@@ -344,6 +345,13 @@ export default function DocumentCenter() {
   const [payTerms, setPayTerms] = useState('30% предоплата, 70% по факту отгрузки');
   const [payCustom, setPayCustom] = useState('');
   const [vatRate, setVatRate] = useState(0);
+  const [openAiKey, setOpenAiKey] = useState(() => {
+    try { return localStorage.getItem('glorix_openai_key') || ''; } catch { return ''; }
+  });
+  const saveApiKey = (key) => {
+    setOpenAiKey(key);
+    try { localStorage.setItem('glorix_openai_key', key); } catch {}
+  };
   const [companyLogo, setCompanyLogo] = useState(() => {
     try { return localStorage.getItem('glorix_company_logo') || null; } catch { return null; }
   });
@@ -356,29 +364,44 @@ export default function DocumentCenter() {
   const updateItem = (i, k, v) => { const arr = [...items]; arr[i][k] = v; setItems(arr); };
   const removeItem = (i) => setItems(prev => prev.filter((_, idx) => idx !== i));
 
-  const handlePaste = () => {
+  const handlePaste = async () => {
     const parsed = parsePaste(pasteText);
     if (!parsed.length) return;
     setItems(parsed);
     setShowPaste(false);
     setPasteText('');
-    // Авто-определение ТН ВЭД по названию товара для строк без кода
-    const needsSearch = parsed.some(item => !item.tnved);
-    if (needsSearch) {
-      setTnvedSearching(true);
-      try {
-        // Только словарь regex — searchHsCodes возвращал 6-значные коды,
-      // дополненные нулями, что давало случайные и ложные 10-значные коды.
-      // Лучше пустое поле, чем уверенно неверный код.
-      const enriched = parsed.map((item) => {
+
+    // ── Трёхуровневый поиск ТН ВЭД ──────────────────────────────────────────
+    // 1. regex-словарь (мгновенно, 80+ паттернов)
+    // 2. Fuse.js по базе ТН ВЭД ЕАЭС (~150 позиций, русский язык)
+    // 3. OpenAI API (если ключ задан в настройках и уверенность базы низкая)
+    const itemsWithRegex = parsed.map(item => {
+      if (item.tnved) return { ...item, _src: 'manual' };
+      const guessed = guessProductCode(item.name);
+      return guessed ? { ...item, tnved: guessed, _src: 'regex' } : { ...item, _src: '' };
+    });
+
+    const needsAI = itemsWithRegex.some(i => !i.tnved);
+    if (!needsAI) {
+      setItems(itemsWithRegex.map(({ _src, ...rest }) => rest));
+      return;
+    }
+
+    setTnvedSearching(true);
+    try {
+      const enriched = await Promise.all(
+        itemsWithRegex.map(async (item) => {
           if (item.tnved) return item;
-          const guessed = guessProductCode(item.name);
-          return guessed ? { ...item, tnved: guessed } : item;
-        });
-        setItems(enriched);
-      } finally {
-        setTnvedSearching(false);
-      }
+          const { code, source } = await resolveTnved(item.name, '');
+          return { ...item, tnved: code, _src: source };
+        })
+      );
+      // Убираем служебное поле _src перед сохранением
+      setItems(enriched.map(({ _src, ...rest }) => rest));
+    } catch(e) {
+      console.error('TNVED resolve error:', e);
+    } finally {
+      setTnvedSearching(false);
     }
   };
 
@@ -700,6 +723,31 @@ export default function DocumentCenter() {
                     {companyLogo && <img src={companyLogo} style={{ marginTop: 6, height: 32, maxWidth: 120, objectFit: 'contain', borderRadius: 4, border: '1px solid var(--border-2)' }} />}
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* OpenAI API key for TN VED auto-detection */}
+            <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 8, background: 'var(--bg-2)', border: '1px solid var(--border-2)' }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                🤖 OpenAI API — автоматический подбор ТН ВЭД
+                <span style={{ fontWeight: 400, opacity: 0.7 }}>(необязательно)</span>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  type="password"
+                  placeholder="sk-... (ключ хранится только в браузере)"
+                  value={openAiKey}
+                  onChange={e => saveApiKey(e.target.value)}
+                  style={{ ...inputStyle, flex: 1, margin: 0, fontFamily: 'monospace', fontSize: 11 }}
+                />
+                {openAiKey && (
+                  <button onClick={() => saveApiKey('')}
+                    style={{ padding: '0 10px', background: 'transparent', border: '1px solid var(--border-2)', borderRadius: 6, cursor: 'pointer', color: '#c0392b', fontSize: 14 }}>✕</button>
+                )}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 4 }}>
+                При вставке из Excel: regex-словарь → база ЕАЭС (Fuse.js) → OpenAI gpt-4o-mini.
+                {openAiKey ? ' ✅ Ключ задан — все три уровня активны.' : ' ⚠ Без ключа работают только уровни 1–2.'}
               </div>
             </div>
 
