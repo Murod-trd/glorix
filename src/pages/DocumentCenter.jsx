@@ -369,6 +369,7 @@ export default function DocumentCenter() {
           </div>`).join('')}
         </div>` : '';
 
+      const effectivePayTerms = payCustom.trim() || payTerms;
       const html = `<div id="glorix-kp-doc" style="font-family:Georgia,'Times New Roman',serif;color:#1a2233;background:#fff;padding:36px 40px;max-width:960px">
 
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #1a2233">
@@ -431,7 +432,6 @@ export default function DocumentCenter() {
         </div>
       </div>`;
 
-      const effectivePayTerms = payCustom.trim() || payTerms;
       setKpData({ kpNum, dateStr, validStr, sellerName, buyer, incoterms,
         payTerms: effectivePayTerms, currency, items: validItems, totalAmount });
       setGenerated(html);
