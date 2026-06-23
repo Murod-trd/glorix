@@ -38,21 +38,56 @@ function normalizeNum(s = '') {
 function parsePaste(text) {
   // Полный список единиц (в нижнем регистре для сравнения)
   const UNIT_SET = new Set([
-    'м', 'м²', 'м³', 'кг', 'г', 'т', 'тонна', 'шт', 'шт.', 'штука',
-    'литр', 'л', 'рулон', 'пог.м', 'погм', 'компл', 'компл.', 'комплект',
-    'упак', 'упак.', 'упаковка', 'мешок', 'паллет', 'паллета',
+    'м', 'м²', 'м³', 'м2', 'м3', 'кв.м', 'куб.м', 'кв м', 'м кв', 'м кв.',
+    'кг', 'г', 'т', 'тонна', 'тн',
+    'шт', 'шт.', 'штука', 'штук', 'ед', 'ед.',
+    'литр', 'л', 'мл',
+    'рулон', 'пог.м', 'пм', 'погм', 'п.м',
+    'компл', 'компл.', 'комплект',
+    'упак', 'упак.', 'упаковка', 'мешок', 'паллет', 'паллета', 'пал',
     'пар', 'набор', 'ящик', 'коробка', 'пачка', 'партия', 'лот',
-    'm', 'kg', 'pcs', 'pc', 'set', 'roll', 'box', 'bag',
+    'm', 'm2', 'm3', 'kg', 'pcs', 'pc', 'set', 'roll', 'box', 'bag', 'ton',
   ]);
   const isUnit = (s) => UNIT_SET.has((s || '').trim().toLowerCase()) || UNIT_SET.has((s || '').trim());
   const isTnved = (s) => /^\d{8,10}$/.test((s || '').replace(/\s/g, ''));
 
-  const lines = text.trim().split('\n').filter(l => l.trim());
-  return lines.map(line => {
-    const hasTabs = line.includes('\t');
-    const cols = hasTabs
-      ? line.split('\t').map(c => c.trim().replace(/"/g, ''))
-      : line.split(',').map(c => c.trim().replace(/"/g, ''));
+  // Разбираем TSV с Excel-кавычками (многострочные ячейки заключены в "…")
+  const parseExcelTSV = (raw) => {
+    const rows = [];
+    let cols = [], field = '', inQ = false;
+    for (let i = 0; i <= raw.length; i++) {
+      const ch = raw[i];
+      if (ch === '"') {
+        if (inQ && raw[i+1] === '"') { field += '"'; i++; }
+        else inQ = !inQ;
+      } else if (ch === '\t' && !inQ) {
+        cols.push(field.trim()); field = '';
+      } else if ((ch === '\n' || ch === '\r' || ch === undefined) && !inQ) {
+        if (ch === '\r' && raw[i+1] === '\n') i++;
+        cols.push(field.trim()); field = '';
+        if (cols.some(c => c)) rows.push(cols);
+        cols = [];
+      } else {
+        field += (ch || '');
+      }
+    }
+    return rows;
+  };
+  const rawRows = parseExcelTSV(text.trim());
+  // Объединяем строки-продолжения: если у строки нет числовых данных (qty=0 price=0)
+  // и следующая строка — фрагмент (начинается с '(' или пробела), склеиваем имена
+  const mergedRows = [];
+  for (let ri = 0; ri < rawRows.length; ri++) {
+    const row = rawRows[ri];
+    const hasNumericData = row.slice(1).some(c => /[0-9]/.test(c) && parseFloat(c.replace(/[\s,]/g,'')) > 0);
+    if (!hasNumericData && mergedRows.length > 0) {
+      // Это продолжение предыдущей строки
+      mergedRows[mergedRows.length - 1][0] += ' ' + row[0];
+    } else {
+      mergedRows.push([...row]);
+    }
+  }
+  return mergedRows.map(cols => {
 
     const name = cols[0] || '';
     if (!name) return null;
@@ -176,6 +211,38 @@ const PRODUCT_TNVED_MAP = [
   { re: /^(труб.*ПЭ|ПЭ.*труб|полиэтилен.*труб)/i,              code: '3917210000' }, // ПЭ трубы
   { re: /^(фланец)/i,                                           code: '7307910000' }, // фланцы
 
+  // ── ИНСТРУМЕНТЫ И ОСНАСТКА (Глава 82–84) ───────────────────────────────────────
+  { re: /^(бур|сверло).*(бетон)/i,                              code: '8207199000' }, // буры по бетону
+  { re: /^(сверло).*(металл|по ме)/i,                          code: '8207120000' }, // сверла по металлу
+  { re: /^(сверло).*(дерев|по де)/i,                           code: '8207190000' }, // сверла по дереву
+  { re: /^(сверло)/i,                                           code: '8207199000' }, // сверла общие
+  { re: /^(диск.*отрезн|круг.*отрезн|диск.*шлиф|круг.*шлиф)/i, code: '6804220000' }, // отрезные/шлиф диски
+  { re: /^(бита|насадк).*(шуруп|дрель|шестигр|торцев)/i,       code: '8207900000' }, // биты и насадки
+  { re: /^(пила.*торцов|торцов.*пила|пила.*циркул|болгарка)/i, code: '8467190000' }, // электро пилы/УШМ
+  { re: /^(шпатель)/i,                                          code: '8205590000' }, // шпатели ручные
+  { re: /^(нож).*(гипсокарт|строит|универс|монтаж)/i,          code: '8211920000' }, // строительный нож
+  { re: /^(степлер)/i,                                          code: '8305200000' }, // скобосшиватель
+  { re: /^(ножниц).*(металл|листов)/i,                         code: '8208100000' }, // ножницы по металлу
+  { re: /^(пистолет).*(герметик|клей|монтаж)/i,                code: '8467890000' }, // пистолет для герметика
+  { re: /^(компрессор.*EPA|компрессор.*EVK)/i,                  code: '8414809000' }, // компрессор (уже есть, дублируем для точности)
+
+  // ── РАСХОДНЫЕ МАТЕРИАЛЫ И СРЕДСТВА ЗАЩИТЫ ───────────────────────────────────
+  { re: /^(краги|перчатк).*(свар|защит|рабоч)/i,               code: '3926200000' }, // рабочие/сварочные перчатки
+  { re: /^(перчатк)/i,                                          code: '3926200000' }, // перчатки любые
+  { re: /^(плёнк|пленк).*(полиэтил|ПЭ|полиэт)/i,              code: '3920200000' }, // полиэтиленовая плёнка
+  { re: /^(строп).*(текстил|синтет)/i,                          code: '6307900000' }, // текстильные стропы
+  { re: /^(строп).*(цеп|стал)/i,                               code: '7316000000' }, // цепные/стальные стропы
+  { re: /^(отбивочн.*шнур|шнур.*отбивочн)/i,                   code: '5607490000' }, // шнур/бечёвка
+  { re: /^(скотч|лента.*клей|скотч.*алюм|алюм.*скотч)/i,       code: '3919100000' }, // скотч/клейкие ленты
+  { re: /^(лента.*алюм|фольг.*лента)/i,                         code: '7607190000' }, // алюминиевая лента
+  { re: /^(сигнальн.*лента|лента.*сигнал)/i,                   code: '3920990000' }, // сигнальная лента ПЭ
+  { re: /^(жилк|леска|монофил)/i,                               code: '5404100000' }, // монофильная нить/леска
+  { re: /^(серпянк|стеклоткань.*лента|сетк.*строит)/i,         code: '7019590000' }, // серпянка стеклосетка
+  { re: /^(мембран).*(гидроизол|кровельн|тераспан|изоспан)/i,  code: '3921190000' }, // гидроизоляционные мембраны
+  { re: /^(валик.*маляр|маляр.*валик)/i,                       code: '3215900000' }, // малярный валик
+  { re: /^(шланг).*(карчер|высок.*давл|гидро)/i,               code: '3917320000' }, // шланг высокого давления
+  { re: /^(WD|WD-40|спрей.*универс|аэрозоль)/i,                code: '3403110000' }, // универсальные смазки/спреи
+
   // ── СТРОИТЕЛЬНЫЕ МАТЕРИАЛЫ ───────────────────────────────────────────────────
   { re: /^цемент/i,                                             code: '2523290000' }, // цемент
   { re: /^кирпич/i,                                             code: '6901000000' }, // кирпич
@@ -248,6 +315,10 @@ export default function DocumentCenter() {
   const [currency, setCurrency] = useState('USD');
   const [payTerms, setPayTerms] = useState('30% предоплата, 70% по факту отгрузки');
   const [payCustom, setPayCustom] = useState('');
+  const [vatRate, setVatRate] = useState(0);
+  const [companyLogo, setCompanyLogo] = useState(() => {
+    try { return localStorage.getItem('glorix_company_logo') || null; } catch { return null; }
+  });
   const [tnvedQuery, setTnvedQuery] = useState('');
   const [tnvedResults, setTnvedResults] = useState([]);
   const [selectedTnved, setSelectedTnved] = useState(null);
@@ -373,14 +444,20 @@ export default function DocumentCenter() {
       const html = `<div id="glorix-kp-doc" style="font-family:Georgia,'Times New Roman',serif;color:#1a2233;background:#fff;padding:36px 40px;max-width:960px">
 
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #1a2233">
-          <div>
-            <div style="font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#888;margin-bottom:6px">GLORIX PLATFORM &nbsp;·&nbsp; Верифицировано ✓</div>
-            <div style="font-size:20px;font-weight:700;letter-spacing:.5px">КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ</div>
-            <div style="font-size:13px;color:#666;margin-top:3px">COMMERCIAL OFFER &nbsp;·&nbsp; <strong>№${kpNum}</strong></div>
+          <div style="display:flex;align-items:center;gap:16px">
+            <div style="width:44px;height:44px;background:#1a2233;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#00d4aa;letter-spacing:-1px;flex-shrink:0">GLX</div>
+            <div>
+              <div style="font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#888;margin-bottom:4px">GLORIX PLATFORM &nbsp;·&nbsp; Верифицировано ✓</div>
+              <div style="font-size:20px;font-weight:700;letter-spacing:.5px">КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ</div>
+              <div style="font-size:13px;color:#666;margin-top:2px">COMMERCIAL OFFER &nbsp;·&nbsp; <strong>№${kpNum}</strong></div>
+            </div>
           </div>
-          <div style="text-align:right;font-size:12px;color:#555;line-height:1.8">
-            <div>Дата / Date: <strong>${dateStr}</strong></div>
-            <div>Действительно / Valid: <strong>${validStr}</strong></div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+            ${companyLogo ? `<img src="${companyLogo}" style="height:56px;max-width:160px;object-fit:contain;border:1px solid #eee;border-radius:6px;padding:4px" />` : `<div style="height:56px;width:160px;border:2px dashed #dde3ea;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#aaa">Логотип компании</div>`}
+            <div style="text-align:right;font-size:11px;color:#555;line-height:1.7">
+              <div>Дата / Date: <strong>${dateStr}</strong></div>
+              <div>Действительно / Valid: <strong>${validStr}</strong></div>
+            </div>
           </div>
         </div>
 
@@ -409,12 +486,13 @@ export default function DocumentCenter() {
           </thead>
           <tbody>${rowsHtml}</tbody>
           <tfoot>
+            ${vatHtml}
             <tr style="background:#0f1a28;color:#fff">
               <td colspan="6" style="padding:12px 10px;text-align:right;border:1px solid #2d3d50;font-weight:700;font-size:14px;letter-spacing:.5px">
-                ИТОГО / TOTAL &nbsp;(${incoterms} 2020, ${currency}):
+                ИТОГО / TOTAL &nbsp;(${incoterms} 2020, ${currency})${vatRate > 0 ? ' С НДС ' + vatRate + '%' : ''}:
               </td>
               <td style="padding:12px 10px;text-align:right;border:1px solid #2d3d50;font-weight:700;font-size:14px;color:#00d4aa">
-                ${fmt(totalAmount)} ${currSym}
+                ${fmt(vatRate > 0 ? grandTotal : totalAmount)} ${currSym}
               </td>
             </tr>
           </tfoot>
@@ -432,8 +510,27 @@ export default function DocumentCenter() {
         </div>
       </div>`;
 
+      const vatAmount = totalAmount * (vatRate / 100);
+      const grandTotal = totalAmount + vatAmount;
+      const vatHtml = vatRate > 0 ? `
+        <tr style="background:#f8f9fb">
+          <td colspan="6" style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;color:#555;font-size:12px">
+            Сумма без НДС / Amount excl. VAT:
+          </td>
+          <td style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;font-size:12px">
+            ${fmt(totalAmount)} ${currSym}
+          </td>
+        </tr>
+        <tr style="background:#f8f9fb">
+          <td colspan="6" style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;color:#e67e22;font-size:12px">
+            НДС ${vatRate}% / VAT ${vatRate}%:
+          </td>
+          <td style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;font-size:12px;color:#e67e22">
+            ${fmt(vatAmount)} ${currSym}
+          </td>
+        </tr>` : '';
       setKpData({ kpNum, dateStr, validStr, sellerName, buyer, incoterms,
-        payTerms: effectivePayTerms, currency, items: validItems, totalAmount });
+        payTerms: effectivePayTerms, currency, vatRate, items: validItems, totalAmount, vatAmount, grandTotal });
       setGenerated(html);
       setGenerating(false);
     }, 0);
@@ -535,6 +632,46 @@ export default function DocumentCenter() {
                     value={payCustom}
                     onChange={e => setPayCustom(e.target.value)}
                   />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>НДС / VAT</label>
+                    <select style={inputStyle} value={vatRate} onChange={e => setVatRate(Number(e.target.value))}>
+                      <option value={0}>Без НДС (0%)</option>
+                      <option value={12}>НДС 12%</option>
+                      <option value={15}>НДС 15% (Узбекистан)</option>
+                      <option value={20}>НДС 20% (Россия/ЕАЭС)</option>
+                      <option value={10}>НДС 10%</option>
+                      <option value={18}>НДС 18%</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>
+                      Логотип компании
+                      {companyLogo && <span style={{ color: '#1a7a4a', marginLeft: 6 }}>✓ загружен</span>}
+                    </label>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <label style={{ ...inputStyle, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flex: 1, margin: 0 }}>
+                        <span>📁</span>
+                        <span style={{ fontSize: 11 }}>{companyLogo ? 'Заменить логотип' : 'Загрузить логотип'}</span>
+                        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => {
+                          const file = e.target.files[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = ev => {
+                            setCompanyLogo(ev.target.result);
+                            try { localStorage.setItem('glorix_company_logo', ev.target.result); } catch {}
+                          };
+                          reader.readAsDataURL(file);
+                        }} />
+                      </label>
+                      {companyLogo && (
+                        <button style={{ ...inputStyle, padding: '0 8px', margin: 0, cursor: 'pointer', flexShrink: 0, background: 'transparent', border: '1px solid var(--border-2)', borderRadius: 6, color: '#c0392b', fontSize: 14 }}
+                          onClick={() => { setCompanyLogo(null); try { localStorage.removeItem('glorix_company_logo'); } catch {} }}>✕</button>
+                      )}
+                    </div>
+                    {companyLogo && <img src={companyLogo} style={{ marginTop: 6, height: 32, maxWidth: 120, objectFit: 'contain', borderRadius: 4, border: '1px solid var(--border-2)' }} />}
+                  </div>
                 </div>
               </div>
             </div>

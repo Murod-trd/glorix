@@ -13,19 +13,19 @@
 // для потенциальных партнёров/инвесторов не из Узбекистана.
 const users = {
   buyer: {
-    id: 'u1', name: 'Tashkent Agro LLC', country: 'UZ', flag: '🇺🇿',
+    id: 'u1', name: 'Tashkent Agro LLC', country: 'UZ', flag: '🇺🇿', logoDataUrl: null,
     role: 'buyer', roleLabel: 'Покупатель',
     trustScore: 87, totalDeals: 23, successDeals: 20, verified: true,
     joined: '2024-03-15',
   },
   seller: {
-    id: 'u2', name: 'KazSteel Trading', country: 'KZ', flag: '🇰🇿',
+    id: 'u2', name: 'KazSteel Trading', country: 'KZ', flag: '🇰🇿', logoDataUrl: null,
     role: 'seller', roleLabel: 'Продавец',
     trustScore: 91, totalDeals: 45, successDeals: 43, verified: true,
     joined: '2023-08-01',
   },
   both: {
-    id: 'u3', name: 'Sibmetall Group', country: 'RU', flag: '🇷🇺',
+    id: 'u3', name: 'Sibmetall Group', country: 'RU', flag: '🇷🇺', logoDataUrl: null,
     role: 'both', roleLabel: 'Покупатель + Продавец',
     trustScore: 96, totalDeals: 89, successDeals: 87, verified: true,
     joined: '2022-11-10',
