@@ -74,20 +74,9 @@ function parsePaste(text) {
     return rows;
   };
   const rawRows = parseExcelTSV(text.trim());
-  // Объединяем строки-продолжения: если у строки нет числовых данных (qty=0 price=0)
-  // и следующая строка — фрагмент (начинается с '(' или пробела), склеиваем имена
-  const mergedRows = [];
-  for (let ri = 0; ri < rawRows.length; ri++) {
-    const row = rawRows[ri];
-    const hasNumericData = row.slice(1).some(c => /[0-9]/.test(c) && parseFloat(c.replace(/[\s,]/g,'')) > 0);
-    if (!hasNumericData && mergedRows.length > 0) {
-      // Это продолжение предыдущей строки
-      mergedRows[mergedRows.length - 1][0] += ' ' + row[0];
-    } else {
-      mergedRows.push([...row]);
-    }
-  }
-  return mergedRows.map(cols => {
+  // TSV-парсер уже обрабатывает многострочные ячейки Excel (в кавычках)
+  // Не нужно склеивать строки вручную — это только удаляет реальные позиции
+  return rawRows.map(cols => {
 
     const name = cols[0] || '';
     if (!name) return null;
@@ -440,6 +429,25 @@ export default function DocumentCenter() {
           </div>`).join('')}
         </div>` : '';
 
+      const vatAmount = totalAmount * (vatRate / 100);
+      const grandTotal = totalAmount + vatAmount;
+      const vatHtml = vatRate > 0 ? `
+        <tr style="background:#f8f9fb">
+          <td colspan="6" style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;color:#555;font-size:12px">
+            Сумма без НДС / Amount excl. VAT:
+          </td>
+          <td style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;font-size:12px">
+            ${fmt(totalAmount)} ${currSym}
+          </td>
+        </tr>
+        <tr style="background:#f8f9fb">
+          <td colspan="6" style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;color:#e67e22;font-size:12px">
+            НДС ${vatRate}% / VAT ${vatRate}%:
+          </td>
+          <td style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;font-size:12px;color:#e67e22">
+            ${fmt(vatAmount)} ${currSym}
+          </td>
+        </tr>` : '';
       const effectivePayTerms = payCustom.trim() || payTerms;
       const html = `<div id="glorix-kp-doc" style="font-family:Georgia,'Times New Roman',serif;color:#1a2233;background:#fff;padding:36px 40px;max-width:960px">
 
@@ -510,25 +518,6 @@ export default function DocumentCenter() {
         </div>
       </div>`;
 
-      const vatAmount = totalAmount * (vatRate / 100);
-      const grandTotal = totalAmount + vatAmount;
-      const vatHtml = vatRate > 0 ? `
-        <tr style="background:#f8f9fb">
-          <td colspan="6" style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;color:#555;font-size:12px">
-            Сумма без НДС / Amount excl. VAT:
-          </td>
-          <td style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;font-size:12px">
-            ${fmt(totalAmount)} ${currSym}
-          </td>
-        </tr>
-        <tr style="background:#f8f9fb">
-          <td colspan="6" style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;color:#e67e22;font-size:12px">
-            НДС ${vatRate}% / VAT ${vatRate}%:
-          </td>
-          <td style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;font-size:12px;color:#e67e22">
-            ${fmt(vatAmount)} ${currSym}
-          </td>
-        </tr>` : '';
       setKpData({ kpNum, dateStr, validStr, sellerName, buyer, incoterms,
         payTerms: effectivePayTerms, currency, vatRate, items: validItems, totalAmount, vatAmount, grandTotal });
       setGenerated(html);
