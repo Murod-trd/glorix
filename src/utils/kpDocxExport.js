@@ -40,7 +40,7 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
                   borderColor = BORDER, size = 18 }) =>
     new TableCell({
       width: { size: width, type: WidthType.DXA },
-      shading: { type: ShadingType.SOLID, fill },
+      shading: { type: ShadingType.CLEAR, fill, color: 'auto' },
       borders: { top: bd(borderColor), bottom: bd(borderColor), left: bd(borderColor), right: bd(borderColor) },
       margins: { top: 80, bottom: 80, left: 80, right: 80 },
       children: [new Paragraph({
@@ -95,7 +95,7 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
     new TableRow({ children: [
       new TableCell({
         columnSpan: 6,
-        shading: { type: ShadingType.SOLID, fill: 'f8f9fb' },
+        shading: { type: ShadingType.CLEAR, fill: 'f8f9fb', color: 'auto' },
         borders: { top: lightBd(), bottom: lightBd(), left: lightBd(), right: lightBd() },
         margins: { top: 60, bottom: 60, left: 80, right: 80 },
         children: [new Paragraph({
@@ -104,7 +104,7 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
         })],
       }),
       new TableCell({
-        shading: { type: ShadingType.SOLID, fill: 'f8f9fb' },
+        shading: { type: ShadingType.CLEAR, fill: 'f8f9fb', color: 'auto' },
         borders: { top: lightBd(), bottom: lightBd(), left: lightBd(), right: lightBd() },
         margins: { top: 60, bottom: 60, left: 80, right: 80 },
         children: [new Paragraph({
@@ -116,7 +116,7 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
     new TableRow({ children: [
       new TableCell({
         columnSpan: 6,
-        shading: { type: ShadingType.SOLID, fill: 'f8f9fb' },
+        shading: { type: ShadingType.CLEAR, fill: 'f8f9fb', color: 'auto' },
         borders: { top: lightBd(), bottom: lightBd(), left: lightBd(), right: lightBd() },
         margins: { top: 60, bottom: 60, left: 80, right: 80 },
         children: [new Paragraph({
@@ -125,7 +125,7 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
         })],
       }),
       new TableCell({
-        shading: { type: ShadingType.SOLID, fill: 'f8f9fb' },
+        shading: { type: ShadingType.CLEAR, fill: 'f8f9fb', color: 'auto' },
         borders: { top: lightBd(), bottom: lightBd(), left: lightBd(), right: lightBd() },
         margins: { top: 60, bottom: 60, left: 80, right: 80 },
         children: [new Paragraph({
@@ -141,7 +141,7 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
   const totalRow = new TableRow({ children: [
     new TableCell({
       columnSpan: 6,
-      shading: { type: ShadingType.SOLID, fill: FOOTER },
+      shading: { type: ShadingType.CLEAR, fill: FOOTER, color: 'auto' },
       borders: { top: darkBd(), bottom: darkBd(), left: darkBd(), right: darkBd() },
       margins: { top: 100, bottom: 100, left: 80, right: 80 },
       children: [new Paragraph({
@@ -150,7 +150,7 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
       })],
     }),
     new TableCell({
-      shading: { type: ShadingType.SOLID, fill: FOOTER },
+      shading: { type: ShadingType.CLEAR, fill: FOOTER, color: 'auto' },
       borders: { top: darkBd(), bottom: darkBd(), left: darkBd(), right: darkBd() },
       margins: { top: 100, bottom: 100, left: 80, right: 80 },
       children: [new Paragraph({

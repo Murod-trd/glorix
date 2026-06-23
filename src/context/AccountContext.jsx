@@ -15,7 +15,7 @@ const STORAGE_KEY = 'glorix_account_type';
 
 function readInitial() {
   const stored = localStorage.getItem(STORAGE_KEY);
-  return VALID_TYPES.includes(stored) ? stored : 'buyer';
+  return VALID_TYPES.includes(stored) ? stored : null;
 }
 
 const AccountContext = createContext(null);

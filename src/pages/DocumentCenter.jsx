@@ -75,24 +75,39 @@ function parsePaste(text) {
     return rows;
   };
   const rawRows = parseExcelTSV(text.trim());
+
+  // Слова-заголовки: такая строка НЕ склеивается со следующей, а просто пропускается
+  const SKIP_WORDS = new Set([
+    'наименование', 'описание', 'description', 'name', 'товар', 'product',
+    '№', 'no', 'n/n', 'п/п', 'номер', 'поз', 'позиция',
+    'итого', 'итог', 'total', 'всего', 'сумма итого', 'grand total',
+  ]);
+  const isSkipRow = (row) => {
+    const w = (row[0] || '').trim().toLowerCase();
+    return SKIP_WORDS.has(w) || [...SKIP_WORDS].some(h => w.startsWith(h + ' ') || w.startsWith(h + '/'));
+  };
+
   // Умное склеивание: если строка без данных (qty=0, price=0), а следующая имеет данные
   // → это разрыв длинного названия. Объединяем имена, берём данные из следующей строки.
+  // ВАЖНО: строки-заголовки (Наименование, Итого…) НЕ склеиваются, а пропускаются.
   const mergedRows = [];
   for (let ri = 0; ri < rawRows.length; ri++) {
     const row = rawRows[ri];
+    if (isSkipRow(row)) continue;  // заголовок/итого — выбрасываем без склейки
     const hasData = row.slice(1).some(c => parseFloat((c||'').replace(/[\s,]/g,'')) > 0);
     if (!hasData && row[0] && row[0].trim()) {
       const next = rawRows[ri + 1];
-      const nextHasData = next && next.slice(1).some(c => parseFloat((c||'').replace(/[\s,]/g,'')) > 0);
+      const nextHasData = next && !isSkipRow(next) &&
+        next.slice(1).some(c => parseFloat((c||'').replace(/[\s,]/g,'')) > 0);
       if (nextHasData) {
-        // Склеиваем название, берём данные из next
+        // Склеиваем название многострочного товара, берём данные из next
         const merged = [...next];
         merged[0] = row[0].trim() + ' ' + (next[0] || '').trim();
         mergedRows.push(merged);
         ri++; // пропускаем следующую строку
         continue;
       }
-      // Пустая строка без продолжения — пропускаем (раздел/заголовок)
+      // Строка без числовых данных и без продолжения — пропускаем
     } else {
       mergedRows.push([...row]);
     }
