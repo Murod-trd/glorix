@@ -1,13 +1,138 @@
 /**
- * Трёхуровневый поиск ТН ВЭД ЕАЭС:
- *   1. (в DocumentCenter.jsx) regex-словарь — мгновенно
- *   2. Word-overlap по базе ЕАЭС (~150 записей, русские описания)
- *   3. OpenAI gpt-4o (expert customs broker prompt) — если user предоставил ключ
+ * GLORIX — Two-Step TN VED Classification Engine (JS)
+ * ─────────────────────────────────────────────────────
+ * Шаг 1  LLM парсит товар → JSON {item_type, material, heading, is_stainless, has_thread}
+ * Шаг 2  Программный фильтр: ТОЛЬКО внутри 4-значной позиции + исключение чужих маркеров
+ * Шаг 3  LLM выбирает лучший код из топ-5 кандидатов
  */
 
 import TNVED_DB from '../data/tnvedDb.js';
 
-// ── Предобработка запроса ────────────────────────────────────────────────────
+// ── Системный промпт Шаг 1 ──────────────────────────────────────────────────
+const STEP1_SYSTEM = `You are a customs classification expert (TN VED EAEU).
+Analyze the product and return ONLY a JSON object with exactly these fields:
+- "technical_english_name": precise customs terminology
+- "material": e.g. "stainless steel A2", "carbon steel", "polyethylene", "rubber"  
+- "has_thread": boolean — true ONLY if the item itself is threaded (bolt/screw/nut). false for washers/pins/plates/film.
+- "item_type": exactly one of: bolt|nut|washer|screw|anchor|pin|drill_bit|cable|pipe|glove|tool_manual|tool_electric|film|mesh|sealant|sling|rebar|other
+- "suggested_4_digit_heading": 4-digit HS string e.g. "7318" for fasteners, "8207" for drill bits
+- "is_stainless": boolean — true if stainless/A2/A4/нержав/corrosion-resistant
+Return ONLY valid JSON, no markdown, no explanation.`;
+
+// ── Маркеры типов — запрещены в описаниях чужих типов ───────────────────────
+const TYPE_MARKERS = {
+  bolt:          ['bolt', 'hex bolt'],
+  nut:           ['hex nut', ' nut ', 'nuts'],
+  washer:        ['washer', 'plain washer', 'spring washer', 'lock washer', 'flat washer', 'split washer'],
+  screw:         ['screw', 'self-tapping', 'wood screw'],
+  anchor:        ['anchor'],
+  drill_bit:     ['drill bit', 'sds', 'rotary hammer drill', 'tap', 'die'],
+  glove:         ['glove', 'gauntlet'],
+  tool_manual:   ['hand tool', 'manual', 'wrench', 'spanner', 'shovel'],
+  tool_electric: ['electric drill', 'power tool', 'chain saw'],
+  film:          ['film', 'sheet', 'polyethylene'],
+  mesh:          ['mesh', 'woven fabric', 'fiberglass mesh'],
+  sealant:       ['sealant', 'putty', 'filler'],
+  sling:         ['sling', 'strap', 'lifting'],
+  rebar:         ['rebar', 'reinforcing bar'],
+  cable:         ['cable', 'wire'],
+  pipe:          ['pipe', 'tube'],
+};
+const STAINLESS_KW = new Set(['stainless', 'a2', 'a4', 'corrosion-resistant', 'inox']);
+
+// ── Шаг 1: парсинг через LLM ────────────────────────────────────────────────
+async function step1Parse(productName, apiKey) {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: STEP1_SYSTEM },
+        { role: 'user', content: `Product: ${productName}` },
+      ],
+      temperature: 0,
+      max_tokens: 200,
+      response_format: { type: 'json_object' },
+    }),
+  });
+  if (!res.ok) throw new Error(`OpenAI step1 ${res.status}`);
+  const data = await res.json();
+  return JSON.parse(data.choices?.[0]?.message?.content || '{}');
+}
+
+// ── Шаг 2: программная фильтрация базы ──────────────────────────────────────
+function step2Filter(parsed) {
+  const heading     = String(parsed.suggested_4_digit_heading || '').trim();
+  const itemType    = (parsed.item_type || 'other').toLowerCase();
+  const isStainless = !!parsed.is_stainless;
+  const hasThread   = parsed.has_thread !== false; // true by default
+
+  // 1. Только внутри 4-значной позиции
+  let candidates = TNVED_DB.filter(e => e.code.startsWith(heading));
+  if (!candidates.length) candidates = [...TNVED_DB]; // fallback: вся база
+
+  // 2. Маркеры ДРУГИХ типов — запрещены
+  const myMarkers  = new Set(TYPE_MARKERS[itemType] || []);
+  const forbidden  = new Set();
+  for (const [t, markers] of Object.entries(TYPE_MARKERS)) {
+    if (t !== itemType) markers.forEach(m => { if (!myMarkers.has(m)) forbidden.add(m); });
+  }
+
+  // 3. Без резьбы — дополнительно запрещаем резьбовые термины
+  if (!hasThread) {
+    ['bolt', 'screw', 'nut', 'threaded', 'thread'].forEach(w => forbidden.add(w));
+  }
+
+  const isBad = e => {
+    const d = e.desc.toLowerCase();
+    return [...forbidden].some(f => d.includes(f));
+  };
+
+  const filtered = candidates.filter(e => !isBad(e));
+  candidates = filtered.length ? filtered : candidates; // fallback при перефильтрации
+
+  // 4. Нержавейка — поднимаем приоритет stainless записей
+  if (isStainless) {
+    const ss = candidates.filter(e =>
+      [...STAINLESS_KW].some(k => e.desc.toLowerCase().includes(k))
+    );
+    if (ss.length) candidates = ss;
+  }
+
+  return candidates.slice(0, 5);
+}
+
+// ── Шаг 3: финальный выбор ──────────────────────────────────────────────────
+async function step3Final(productName, candidates, apiKey) {
+  if (!candidates.length) return '';
+  if (candidates.length === 1) return candidates[0].code;
+
+  const options = candidates.map(e => `${e.code}: ${e.desc}`).join('\n');
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content:
+          'You are a senior customs broker. Pick the single most accurate 10-digit HS code '
+          + 'from the candidates below. Reply with ONLY the 10-digit code, nothing else.' },
+        { role: 'user', content: `Product: ${productName}\n\nCandidates:\n${options}` },
+      ],
+      max_tokens: 12,
+      temperature: 0,
+    }),
+  });
+  if (!res.ok) throw new Error(`OpenAI step3 ${res.status}`);
+  const data = await res.json();
+  const raw = (data.choices?.[0]?.message?.content || '').trim().replace(/\D/g, '');
+  return /^\d{10}$/.test(raw) ? raw : candidates[0].code;
+}
+
+// ── Публичный API ────────────────────────────────────────────────────────────
+
+/** Word-overlap поиск по локальной базе (быстрый, без API) */
 export function cleanQuery(name) {
   let s = name.toLowerCase();
   s = s.replace(/\d+[.,]?\d*\s*[хx×]\s*\d+[.,]?\d*/gi, ' ');
@@ -22,156 +147,50 @@ export function cleanQuery(name) {
   return s.replace(/\s+/g, ' ').trim();
 }
 
-// ── Word-overlap scorer ──────────────────────────────────────────────────────
-function overlapScore(queryWords, descWords) {
-  if (!queryWords.length) return 0;
-  const descLong = descWords.filter(w => w.length >= 3);
-  let hits = 0;
-  for (const qw of queryWords) {
-    const found = descLong.some(dw =>
-      dw === qw || dw.startsWith(qw) || qw.startsWith(dw)
-    );
-    if (found) hits++;
-  }
-  return hits / queryWords.length;
-}
-
 export function searchTnvedDB(name) {
   if (!name || name.length < 3) return null;
   const cleaned = cleanQuery(name);
   const queryWords = cleaned.split(' ').filter(w => w.length >= 3);
   if (!queryWords.length) return null;
 
-  let best = null;
-  let bestScore = 0;
+  const descLong = (ws) => ws.filter(w => w.length >= 3);
+  const score = (qws, dws) => {
+    const dl = descLong(dws);
+    let hits = 0;
+    for (const qw of qws) {
+      if (dl.some(dw => dw === qw || dw.startsWith(qw) || qw.startsWith(dw))) hits++;
+    }
+    return hits / qws.length;
+  };
+
+  let best = null, bestScore = 0;
   for (const entry of TNVED_DB) {
-    const descWords = entry.desc.toLowerCase().split(/\s+/);
-    const score = overlapScore(queryWords, descWords);
-    if (score > bestScore) { bestScore = score; best = entry; }
+    const dws = entry.desc.toLowerCase().split(/\s+/);
+    const s = score(queryWords, dws);
+    if (s > bestScore) { bestScore = s; best = entry; }
   }
-  if (!best || bestScore < 0.5) return null;
-  return { code: best.code, score: bestScore };
-}
-
-// ── Системный промпт эксперта-таможенника ───────────────────────────────────
-const EXPERT_SYSTEM_PROMPT = `You are an expert Customs Broker and TN VED (ТН ВЭД ЕАЭС / HS Code) Classification Engine.
-Your sole purpose is to analyze commercial product descriptions (usually in Russian) and output the single most accurate, valid 10-digit TN VED EAEU code.
-
-### CLASSIFICATION ALGORITHM (apply in strict order):
-
-1. TECHNICAL TRANSLATION
-   Convert commercial/slang names to dry customs terminology:
-   - "Краги" → Leather protective gloves for welding
-   - "Валик малярный" → Paint rollers
-   - "Отбивочный шнур" → Measuring and marking instruments
-   - "Ерш сантехнический" → Toilet brush, plastic
-
-2. MATERIAL IS KING (analyze material BEFORE function keywords)
-   - "A2" / "Нержавейка" / "нержав" → stainless/corrosion-resistant steel subheadings
-     e.g., bolt A2 → 7318158201 (NOT generic 7318159000)
-   - "Ду" / "черная сталь" / "ст20" → black/carbon steel → Chapter 73
-   - "Пластик" / "ПВХ" / "полимер" → Chapter 39
-   - "Медь" → Chapter 74; "Алюминий" → Chapter 76; "Латунь" → Chapter 74
-
-3. DIMENSIONAL BOUNDARY CHECK
-   - Roll width > 30 cm → use codes for "other" width category
-     e.g., fiberglass mesh 1m wide → 7019690000 NOT 7019610000
-   - Film thickness ≤ 0.125 mm (43 мкм) → 3920102800; > 0.125 mm → 3920102500
-   - Pipe diameter (Ду/DN) determines subheadings in Chapter 73
-
-4. POWER SOURCE CHECK (CRITICAL for tools)
-   - Manual / hand-operated → Chapter 82 or 83
-     e.g., manual caulking gun → 8205590000; manual stapler → 8203400000
-   - Electric / pneumatic / hydraulic → Chapter 84 or 85
-     e.g., Makita drill → 8467219000; air compressor → 8414809000
-
-5. ITEM ISOLATION
-   - Never mix different items into one code
-   - "Болт + Гайка" must produce TWO different codes
-
-### HS CODE EXAMPLES (EAEU 10-digit):
-- Стальная арматура рифлёная → 7214200000
-- Болт стальной (не нержав.) → 7318159000
-- Болт A2 нержавейка → 7318158201
-- Гайка стальная → 7318160000
-- Шуруп/саморез → 7318120009
-- Дюбель пластиковый → 3926909709
-- Анкер стальной → 7318210000
-- Кабель ВВГ медный → 8544421900
-- Труба ПВХ → 3917230009
-- Труба стальная черная → 7306409100
-- Серпянка (ширина >30 см) → 7019690000
-- Пленка ПЭ 43 мкм → 3920102800
-- Герметик силиконовый → 3214100000
-- Краска алкидная → 3210000000
-- Шланг резиновый → 4009210000
-- Перчатки защитные кожаные (краги) → 4203210000
-- Перчатки трикотажные х/б → 6116920000
-- Нивелир лазерный → 9015800000
-- Инструмент ручной (молоток, гаечный ключ) → 8204110000 / 8205599000
-- Электроинструмент дрель → 8467219000
-- Компрессор воздушный → 8414809000
-- Цемент → 2523290000
-- Кирпич силикатный → 6901000000
-- Кирпич керамический → 6904100000
-- Фанера → 4412310000
-- OSB-плита → 4410110009
-- Минвата, теплоизоляция → 7019900000
-- Пенопласт ПСБ-С → 3921110000
-- Краска водно-дисперсионная → 3209100000
-- Грунтовка → 3211000000
-- Шпаклёвка → 3214901000
-- Валик малярный → 8364000000
-- Кисть малярная → 9603290000
-- Строп текстильный → 6307909800
-- Лопата, кирка (ручной инструмент) → 8201300000
-
-### OUTPUT FORMAT:
-Respond with EXACTLY 10 digits, nothing else. No spaces, no dashes, no explanation.
-If genuinely uncertain between two valid codes, output the more specific (longer match) one.`;
-
-/**
- * Вызывает OpenAI API с промптом эксперта-таможенника.
- */
-export async function fetchTnvedFromAI(productName) {
-  const apiKey = localStorage.getItem('glorix_openai_key') || '';
-  if (!apiKey) return null;
-
-  try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [
-          { role: 'system', content: EXPERT_SYSTEM_PROMPT },
-          { role: 'user', content: `Classify this product: ${productName}` },
-        ],
-        max_tokens: 15,
-        temperature: 0,
-      }),
-    });
-    if (!res.ok) throw new Error(`OpenAI ${res.status}`);
-    const data = await res.json();
-    const raw = (data.choices?.[0]?.message?.content || '').trim().replace(/\D/g, '');
-    if (/^\d{10}$/.test(raw)) return raw;
-    return null;
-  } catch (e) {
-    console.warn('TNVED AI error:', e.message);
-    return null;
-  }
+  return best && bestScore >= 0.5 ? { code: best.code, score: bestScore } : null;
 }
 
 /**
- * Главная функция: DB word-overlap → OpenAI expert.
+ * Главная функция: DB word-overlap → Two-Step LLM (если ключ есть).
  */
 export async function resolveTnved(name) {
+  // Быстрый путь: local DB
   const dbResult = searchTnvedDB(name);
   if (dbResult) return { code: dbResult.code, source: 'db' };
-  const aiCode = await fetchTnvedFromAI(name);
-  if (aiCode) return { code: aiCode, source: 'ai' };
-  return { code: '', source: '' };
+
+  // Медленный путь: Two-Step LLM
+  const apiKey = localStorage.getItem('glorix_openai_key') || '';
+  if (!apiKey) return { code: '', source: '' };
+
+  try {
+    const parsed     = await step1Parse(name, apiKey);
+    const candidates = step2Filter(parsed);
+    const finalCode  = await step3Final(name, candidates, apiKey);
+    return finalCode ? { code: finalCode, source: 'ai' } : { code: '', source: '' };
+  } catch (e) {
+    console.warn('TNVED two-step error:', e.message);
+    return { code: '', source: '' };
+  }
 }
