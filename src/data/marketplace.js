@@ -19,6 +19,7 @@ export const products = [
     price: 6.5, currency: 'USD', unit: 'мешок', minOrder: 100, maxOrder: 50000,
     stock: 12000, stockAuto: false,
     photoId: 'cement',
+    photo: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       { group: 'Основные', items: [
         { p: 'Марка', v: 'М400 (CEM I 32.5)' },
@@ -61,6 +62,7 @@ export const products = [
     price: 2.8, currency: 'USD', unit: 'кг', minOrder: 500, maxOrder: 100000,
     stock: 45000, stockAuto: false,
     photoId: 'cottonYarn',
+    photo: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       { group: 'Основные', items: [
         { p: 'Номер пряжи', v: 'Ne 30/1' },
@@ -100,6 +102,7 @@ export const products = [
     price: 1.05, currency: 'USD', unit: 'литр', minOrder: 1000, maxOrder: 500000,
     stock: 800000, stockAuto: true,
     photoId: 'sunflowerOil',
+    photo: 'https://images.unsplash.com/photo-1474979399-fbc7f3b4d50f?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       { group: 'Основные', items: [
         { p: 'Тип', v: 'Рафинированное дезодорированное' },
@@ -140,6 +143,7 @@ export const products = [
     price: 680, currency: 'USD', unit: 'тонна', minOrder: 5, maxOrder: 5000,
     stock: 850, stockAuto: false,
     photoId: 'rebar',
+    photo: 'https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       { group: 'Основные', items: [
         { p: 'Марка стали', v: 'А500С (B500B EN)' },
@@ -180,6 +184,7 @@ export const products = [
     price: 1.9, currency: 'USD', unit: 'кг', minOrder: 200, maxOrder: 50000,
     stock: 15000, stockAuto: true,
     photoId: 'ldpeFilm',
+    photo: 'https://images.unsplash.com/photo-1578926288207-a90a5366cf72?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       { group: 'Основные', items: [
         { p: 'Материал', v: 'LDPE (полиэтилен низкого давления)' },
@@ -217,6 +222,7 @@ export const products = [
     price: 1850, currency: 'USD', unit: 'штука', minOrder: 1, maxOrder: 100,
     stock: 24, stockAuto: false,
     photoId: 'pump',
+    photo: 'https://images.unsplash.com/photo-1581092334623-f1c3a48ba748?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       { group: 'Основные', items: [
         { p: 'Тип', v: 'Центробежный одноступенчатый' },
@@ -270,6 +276,7 @@ export const products = [
     stock: 8500,
     stockAuto: false,
     photoId: 'wheat',
+    photo: 'https://images.unsplash.com/photo-1574323347407-fba10a73a9c7?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -350,6 +357,7 @@ export const products = [
     stock: 3200,
     stockAuto: false,
     photoId: 'rice',
+    photo: 'https://images.unsplash.com/photo-1586201375761-83865001e91d?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -428,6 +436,7 @@ export const products = [
     stock: 1800,
     stockAuto: false,
     photoId: 'spices',
+    photo: 'https://images.unsplash.com/photo-1532336953949-076b1f09ded7?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -501,6 +510,7 @@ export const products = [
     stock: 320000,
     stockAuto: false,
     photoId: 'brick',
+    photo: 'https://images.unsplash.com/photo-1505798577917-a65157d3320a?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -574,6 +584,7 @@ export const products = [
     stock: 14500,
     stockAuto: false,
     photoId: 'metalRoof',
+    photo: 'https://images.unsplash.com/photo-1603468620905-8de7d86b781e?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -648,6 +659,7 @@ export const products = [
     stock: 9800,
     stockAuto: false,
     photoId: 'ceramicTile',
+    photo: 'https://images.unsplash.com/photo-1519710164239-da1a0e6c8d43?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -722,6 +734,7 @@ export const products = [
     stock: 1200,
     stockAuto: false,
     photoId: 'laptop',
+    photo: 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -796,6 +809,7 @@ export const products = [
     stock: 4500,
     stockAuto: false,
     photoId: 'smartphone',
+    photo: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -871,6 +885,7 @@ export const products = [
     stock: 65000,
     stockAuto: false,
     photoId: 'cable',
+    photo: 'https://images.unsplash.com/photo-1598300042247-d088f8ab3a91?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -945,6 +960,7 @@ export const products = [
     stock: 2100,
     stockAuto: false,
     photoId: 'powerSupply',
+    photo: 'https://images.unsplash.com/photo-1608283396622-f48e5e1ddb18?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -1019,6 +1035,7 @@ export const products = [
     stock: 1800,
     stockAuto: false,
     photoId: 'polypropylene',
+    photo: 'https://images.unsplash.com/photo-1580508174046-a66dbba7ef78?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -1093,6 +1110,7 @@ export const products = [
     stock: 8000,
     stockAuto: false,
     photoId: 'paint',
+    photo: 'https://images.unsplash.com/photo-1562259949-e8e7689d7828?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -1165,6 +1183,7 @@ export const products = [
     stock: 6200,
     stockAuto: false,
     photoId: 'fertilizer',
+    photo: 'https://images.unsplash.com/photo-1530836369250-ef72a3f5cda8?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -1238,6 +1257,7 @@ export const products = [
     stock: 450,
     stockAuto: false,
     photoId: 'acid',
+    photo: 'https://images.unsplash.com/photo-1614935151651-cf129a8c4ec7?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -1311,6 +1331,7 @@ export const products = [
     stock: 3200,
     stockAuto: false,
     photoId: 'silkFabric',
+    photo: 'https://images.unsplash.com/photo-1592861956775-c36f0e6d9eb0?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -1384,6 +1405,7 @@ export const products = [
     stock: 5400,
     stockAuto: false,
     photoId: 'clothing',
+    photo: 'https://images.unsplash.com/photo-1558769132-cb1aea50d3a9?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -1457,6 +1479,7 @@ export const products = [
     stock: 18000,
     stockAuto: false,
     photoId: 'syntheticFabric',
+    photo: 'https://images.unsplash.com/photo-1529374814-4b8f5bbed00c?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -1530,6 +1553,7 @@ export const products = [
     stock: 2400,
     stockAuto: false,
     photoId: 'steelSheet',
+    photo: 'https://images.unsplash.com/photo-1536859355608-6e6b8c1a5bfc?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -1603,6 +1627,7 @@ export const products = [
     stock: 380,
     stockAuto: false,
     photoId: 'aluminumProfile',
+    photo: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -1675,6 +1700,7 @@ export const products = [
     stock: 6800,
     stockAuto: false,
     photoId: 'copperWire',
+    photo: 'https://images.unsplash.com/photo-1573920111840-6b93f1f2c9bd?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -1748,6 +1774,7 @@ export const products = [
     stock: 85000,
     stockAuto: false,
     photoId: 'cardboardBox',
+    photo: 'https://images.unsplash.com/photo-1601628828688-632f0e5d773c?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -1820,6 +1847,7 @@ export const products = [
     stock: 450000,
     stockAuto: false,
     photoId: 'petBottle',
+    photo: 'https://images.unsplash.com/photo-1550583724-aa0e00fdb9f1?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -1894,6 +1922,7 @@ export const products = [
     stock: 220000,
     stockAuto: false,
     photoId: 'ppBag',
+    photo: 'https://images.unsplash.com/photo-1548630435-91c1b82dfcad?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -1966,6 +1995,7 @@ export const products = [
     stock: 18,
     stockAuto: false,
     photoId: 'compressor',
+    photo: 'https://images.unsplash.com/photo-1565184526408-65ecf83ede03?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -2040,6 +2070,7 @@ export const products = [
     stock: 4,
     stockAuto: false,
     photoId: 'lathe',
+    photo: 'https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',
@@ -2115,6 +2146,7 @@ export const products = [
     stock: 320,
     stockAuto: false,
     photoId: 'weldingMachine',
+    photo: 'https://images.unsplash.com/photo-1565194788836-e0e68a8de57a?w=600&h=400&fit=crop&auto=format&q=80',
     specs: [
       {
         group: 'Основные',

@@ -3,6 +3,20 @@
 New entries go at the **top** in `## YYYY-MM-DD — Title (commit hash)` format. When a change affects any rule in `BUSINESS_RULES.md`, `ARCHITECTURE.md`, `SYSTEM_DESIGN.md`, or `DECISIONS.md`, update those files in the same commit — this log records that something changed; the other documents must reflect the new current state.
 
 ---
+## 2026-06-23 — Сессия 25: Реальные фото товаров в маркетплейсе
+
+### Добавлено
+- `photo` поле у всех 32 статических продуктов в `marketplace.js` — конкретные Unsplash photo URL для каждой категории товаров
+- `ProductImage` компонент в `Marketplace.jsx`: показывает `<img>` с реальным фото; при ошибке загрузки (CDN недоступен, 404) автоматически падает на SVG-иллюстрацию через `onError`
+
+### Затронутые файлы
+- `src/data/marketplace.js` — добавлено поле `photo: '...'` к каждому из 32 продуктов (p1–p32)
+- `src/pages/Marketplace.jsx` — добавлен компонент `ProductImage`, заменены 3 места рендеринга: карточка товара, модалка товара, корзина
+
+### Архитектурное решение
+Реальные фото используются через Unsplash CDN (images.unsplash.com). Выбраны конкретные photo ID — не случайные. Graceful degradation: при блокировке CDN в CIS/РФ пользователь видит SVG-иллюстрацию (onError fallback), сайт полностью функционален.
+
+---
 ## 2026-06-23 — Сессия 24: UX-фиксы маркетплейса и DocumentCenter
 
 ### Исправлено

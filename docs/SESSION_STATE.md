@@ -1,5 +1,48 @@
 # GLORIX — SESSION STATE (читать первым, в любом новом чате)
 
+## ТЕКУЩАЯ ТОЧКА (актуально на 2026-06-23, сессия 25)
+
+### Реализовано в сессии 25
+Задача: реальные фото товаров вместо геометрических SVG-иллюстраций.
+
+**marketplace.js**: добавлено поле `photo` к каждому из 32 продуктов (p1–p32):
+```js
+photo: 'https://images.unsplash.com/photo-{ID}?w=600&h=400&fit=crop&auto=format&q=80'
+```
+Использованы конкретные photo ID (не search/seed API) — детерминированные URL.
+
+**Marketplace.jsx**: добавлен компонент `ProductImage` (после импортов, до `Stars`):
+```jsx
+function ProductImage({ product, style = {} }) {
+  const [imgFailed, setImgFailed] = useState(false);
+  if (product.photo && !imgFailed) {
+    return (
+      <img src={product.photo} alt={product.title}
+        onError={() => setImgFailed(true)}
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', ...style }}
+      />
+    );
+  }
+  return <ProductIllustration id={product.photoId} />;
+}
+```
+Заменены 3 вхождения `<ProductIllustration id={product.photoId} />`:
+- ProductModal (блок 260px × полная ширина)
+- ProductCard (блок 180px)
+- CartPanel (миниатюра 50px)
+
+Пикер SVG-иллюстраций в AddProductModal оставлен без изменений (там правильно показывать SVG при выборе типа).
+
+**Архитектура fallback**: product.photo → `<img onError={...}>` → SVG. Если Unsplash недоступен в CIS, пользователь видит SVG без каких-либо ошибок.
+
+### Пользовательские продукты (localStorage)
+Не имеют поля `photo` — для них сразу показывается SVG по `photoId`. Это корректно и ожидаемо (без backend нельзя загрузить фото).
+
+### Статус
+Сессия 25 завершена. Все изменения запушены.
+
+---
+
 Это единственный файл, который заменяет историю чата. Любой новый чат должен
 прочитать его первым и продолжать работу, как если бы чат не менялся —
 без повторных вопросов "с чего начать" и без пересказа уже известного.
@@ -12,7 +55,7 @@
 
 ---
 
-## ТЕКУЩАЯ ТОЧКА (актуально на 2026-06-23, сессия 24)
+### ИСТОРИЯ — (актуально на 2026-06-23, сессия 24)
 
 **Последний коммит**: будет создан этим коммитом поверх `2ae11d0`
 **Статус репо**: git remote настроен и работает, история полная

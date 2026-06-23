@@ -7,6 +7,22 @@ import { useCart } from '../context/CartContext';
 import { screenForSanctions, checkExportRestriction } from '../utils/sanctionsScreening';
 import { getAllProducts, addUserProduct, getEffectiveStock, decrementStock, addOrder } from '../data/marketplaceStore';
 import ProductIllustration, { PRODUCT_ILLUSTRATION_IDS } from '../components/ProductIllustration';
+// ProductImage: показывает реальное фото с Unsplash, при ошибке загрузки — SVG-иллюстрацию
+function ProductImage({ product, style = {} }) {
+  const [imgFailed, setImgFailed] = useState(false);
+  if (product.photo && !imgFailed) {
+    return (
+      <img
+        src={product.photo}
+        alt={product.title}
+        onError={() => setImgFailed(true)}
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', ...style }}
+      />
+    );
+  }
+  return <ProductImage product={product} />;
+}
+
 
 function Stars({ n }) {
   return <span style={{ color: '#F5A623', fontSize: 12 }}>{'★'.repeat(Math.round(n))}{'☆'.repeat(5-Math.round(n))}</span>;
@@ -76,7 +92,7 @@ function ProductModal({ product, onClose }) {
             {/* Left */}
             <div style={{ padding: '28px 24px', borderRight: '1px solid var(--border)' }}>
               <div style={{ height: 260, background: 'var(--navy-3)', borderRadius: 10, overflow: 'hidden', marginBottom: 14 }}>
-                <ProductIllustration id={product.photoId} />
+                <ProductImage product={product} />
               </div>
               <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 8 }}>{product.title}</div>
               <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -216,7 +232,7 @@ function ProductCard({ product, onClick }) {
       onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(0,212,170,0.35)'; e.currentTarget.style.transform='translateY(-3px)'; e.currentTarget.style.boxShadow='0 8px 32px rgba(0,0,0,0.3)'; }}
       onMouseLeave={e => { e.currentTarget.style.borderColor='var(--border)'; e.currentTarget.style.transform='none'; e.currentTarget.style.boxShadow='none'; }}>
       <div style={{ height: 180, background: 'var(--navy-3)', position: 'relative', overflow: 'hidden' }}>
-        <ProductIllustration id={product.photoId} />
+        <ProductImage product={product} />
         <div style={{ position: 'absolute', top: 8, left: 8 }}>
           {product.seller.verified && <span className="badge badge-green" style={{ fontSize: 10 }}>✓ Верифицирован</span>}
         </div>
@@ -484,7 +500,7 @@ function CartModal({ onClose, onOrderComplete }) {
             {itemChecks.map(item => (
               <div key={item.product.id} style={{ display: 'flex', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
                 <div style={{ width: 50, height: 50, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
-                  <ProductIllustration id={item.product.photoId} />
+                  <ProductImage product={item.product} />
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>{item.product.title}</div>
