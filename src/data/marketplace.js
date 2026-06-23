@@ -19,7 +19,7 @@ export const products = [
     price: 6.5, currency: 'USD', unit: 'мешок', minOrder: 100, maxOrder: 50000,
     stock: 12000, stockAuto: false,
     photoId: 'cement',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dc/Portland_cement_bags.jpg/600px-Portland_cement_bags.jpg',
+    photo: 'https://images.pexels.com/photos/29519165/pexels-photo-29519165.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       { group: 'Основные', items: [
         { p: 'Марка', v: 'М400 (CEM I 32.5)' },
@@ -62,7 +62,7 @@ export const products = [
     price: 2.8, currency: 'USD', unit: 'кг', minOrder: 500, maxOrder: 100000,
     stock: 45000, stockAuto: false,
     photoId: 'cottonYarn',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/Cotton_thread.jpg/600px-Cotton_thread.jpg',
+    photo: 'https://images.pexels.com/photos/6850590/pexels-photo-6850590.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       { group: 'Основные', items: [
         { p: 'Номер пряжи', v: 'Ne 30/1' },
@@ -102,7 +102,7 @@ export const products = [
     price: 1.05, currency: 'USD', unit: 'литр', minOrder: 1000, maxOrder: 500000,
     stock: 800000, stockAuto: true,
     photoId: 'sunflowerOil',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Sunflower_oil_and_sunflower.jpg/600px-Sunflower_oil_and_sunflower.jpg',
+    photo: 'https://images.pexels.com/photos/12773708/pexels-photo-12773708.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       { group: 'Основные', items: [
         { p: 'Тип', v: 'Рафинированное дезодорированное' },
@@ -143,7 +143,7 @@ export const products = [
     price: 680, currency: 'USD', unit: 'тонна', minOrder: 5, maxOrder: 5000,
     stock: 850, stockAuto: false,
     photoId: 'rebar',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/25/Steel_rebar.jpg/600px-Steel_rebar.jpg',
+    photo: 'https://images.pexels.com/photos/29299824/pexels-photo-29299824.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       { group: 'Основные', items: [
         { p: 'Марка стали', v: 'А500С (B500B EN)' },
@@ -184,7 +184,7 @@ export const products = [
     price: 1.9, currency: 'USD', unit: 'кг', minOrder: 200, maxOrder: 50000,
     stock: 15000, stockAuto: true,
     photoId: 'ldpeFilm',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Polyethylene_film.jpg/600px-Polyethylene_film.jpg',
+    photo: 'https://images.pexels.com/photos/18541871/pexels-photo-18541871.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       { group: 'Основные', items: [
         { p: 'Материал', v: 'LDPE (полиэтилен низкого давления)' },
@@ -222,7 +222,7 @@ export const products = [
     price: 1850, currency: 'USD', unit: 'штука', minOrder: 1, maxOrder: 100,
     stock: 24, stockAuto: false,
     photoId: 'pump',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Centrifugal_pump.jpg/600px-Centrifugal_pump.jpg',
+    photo: 'https://images.pexels.com/photos/35645884/pexels-photo-35645884.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       { group: 'Основные', items: [
         { p: 'Тип', v: 'Центробежный одноступенчатый' },
@@ -276,7 +276,7 @@ export const products = [
     stock: 8500,
     stockAuto: false,
     photoId: 'wheat',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Wheat_close-up.JPG/600px-Wheat_close-up.JPG',
+    photo: 'https://images.pexels.com/photos/326082/pexels-photo-326082.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -357,7 +357,7 @@ export const products = [
     stock: 3200,
     stockAuto: false,
     photoId: 'rice',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ad/Unpolished_rice.jpg/600px-Unpolished_rice.jpg',
+    photo: 'https://images.pexels.com/photos/36346840/pexels-photo-36346840.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -436,7 +436,7 @@ export const products = [
     stock: 1800,
     stockAuto: false,
     photoId: 'spices',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/Assorted_spices.jpg/600px-Assorted_spices.jpg',
+    photo: 'https://images.pexels.com/photos/35185310/pexels-photo-35185310.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -510,7 +510,7 @@ export const products = [
     stock: 320000,
     stockAuto: false,
     photoId: 'brick',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/01/Brick.jpg/600px-Brick.jpg',
+    photo: 'https://images.pexels.com/photos/19688828/pexels-photo-19688828.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -584,7 +584,7 @@ export const products = [
     stock: 14500,
     stockAuto: false,
     photoId: 'metalRoof',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/da/Corrugated_metal_roof.jpg/600px-Corrugated_metal_roof.jpg',
+    photo: 'https://images.pexels.com/photos/10443918/pexels-photo-10443918.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -659,7 +659,7 @@ export const products = [
     stock: 9800,
     stockAuto: false,
     photoId: 'ceramicTile',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Ceramic_floor_tiles.jpg/600px-Ceramic_floor_tiles.jpg',
+    photo: 'https://images.pexels.com/photos/32021732/pexels-photo-32021732.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -734,7 +734,7 @@ export const products = [
     stock: 1200,
     stockAuto: false,
     photoId: 'laptop',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f2/Dell_Inspiron_laptop.jpg/600px-Dell_Inspiron_laptop.jpg',
+    photo: 'https://images.pexels.com/photos/11129922/pexels-photo-11129922.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -809,7 +809,7 @@ export const products = [
     stock: 4500,
     stockAuto: false,
     photoId: 'smartphone',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c0/Android_smartphone.jpg/600px-Android_smartphone.jpg',
+    photo: 'https://images.pexels.com/photos/47261/pexels-photo-47261.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -885,7 +885,7 @@ export const products = [
     stock: 65000,
     stockAuto: false,
     photoId: 'cable',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Electrical_cables.jpg/600px-Electrical_cables.jpg',
+    photo: 'https://images.pexels.com/photos/28286038/pexels-photo-28286038.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -960,7 +960,7 @@ export const products = [
     stock: 2100,
     stockAuto: false,
     photoId: 'powerSupply',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/ATX_power_supply.jpg/600px-ATX_power_supply.jpg',
+    photo: 'https://images.pexels.com/photos/33174696/pexels-photo-33174696.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -1035,7 +1035,7 @@ export const products = [
     stock: 1800,
     stockAuto: false,
     photoId: 'polypropylene',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Polypropylene_pellets.jpg/600px-Polypropylene_pellets.jpg',
+    photo: 'https://images.pexels.com/photos/1331699/pexels-photo-1331699.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -1110,7 +1110,7 @@ export const products = [
     stock: 8000,
     stockAuto: false,
     photoId: 'paint',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Paint_cans.jpg/600px-Paint_cans.jpg',
+    photo: 'https://images.pexels.com/photos/1887946/pexels-photo-1887946.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -1183,7 +1183,7 @@ export const products = [
     stock: 6200,
     stockAuto: false,
     photoId: 'fertilizer',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/NPK_fertilizer.jpg/600px-NPK_fertilizer.jpg',
+    photo: 'https://images.pexels.com/photos/25974981/pexels-photo-25974981.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -1257,7 +1257,7 @@ export const products = [
     stock: 450,
     stockAuto: false,
     photoId: 'acid',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/Sulfuric_acid_corrosive.jpg/600px-Sulfuric_acid_corrosive.jpg',
+    photo: 'https://images.pexels.com/photos/15730185/pexels-photo-15730185.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -1331,7 +1331,7 @@ export const products = [
     stock: 3200,
     stockAuto: false,
     photoId: 'silkFabric',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Silk_threads.jpg/600px-Silk_threads.jpg',
+    photo: 'https://images.pexels.com/photos/6487380/pexels-photo-6487380.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -1405,7 +1405,7 @@ export const products = [
     stock: 5400,
     stockAuto: false,
     photoId: 'clothing',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/db/Clothing_store.jpg/600px-Clothing_store.jpg',
+    photo: 'https://images.pexels.com/photos/37420545/pexels-photo-37420545.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -1479,7 +1479,7 @@ export const products = [
     stock: 18000,
     stockAuto: false,
     photoId: 'syntheticFabric',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e2/Polyester_fabric.jpg/600px-Polyester_fabric.jpg',
+    photo: 'https://images.pexels.com/photos/15076732/pexels-photo-15076732.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -1553,7 +1553,7 @@ export const products = [
     stock: 2400,
     stockAuto: false,
     photoId: 'steelSheet',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/cc/Steel_sheet_metal.jpg/600px-Steel_sheet_metal.jpg',
+    photo: 'https://images.pexels.com/photos/17963670/pexels-photo-17963670.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -1627,7 +1627,7 @@ export const products = [
     stock: 380,
     stockAuto: false,
     photoId: 'aluminumProfile',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/fd/Aluminium_extrusions.jpg/600px-Aluminium_extrusions.jpg',
+    photo: 'https://images.pexels.com/photos/19825178/pexels-photo-19825178.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -1700,7 +1700,7 @@ export const products = [
     stock: 6800,
     stockAuto: false,
     photoId: 'copperWire',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Copper_wire_coils.jpg/600px-Copper_wire_coils.jpg',
+    photo: 'https://images.pexels.com/photos/11133641/pexels-photo-11133641.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -1774,7 +1774,7 @@ export const products = [
     stock: 85000,
     stockAuto: false,
     photoId: 'cardboardBox',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/Cardboard_boxes.jpg/600px-Cardboard_boxes.jpg',
+    photo: 'https://images.pexels.com/photos/36504458/pexels-photo-36504458.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -1847,7 +1847,7 @@ export const products = [
     stock: 450000,
     stockAuto: false,
     photoId: 'petBottle',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c6/Plastic_bottles.jpg/600px-Plastic_bottles.jpg',
+    photo: 'https://images.pexels.com/photos/5719821/pexels-photo-5719821.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -1922,7 +1922,7 @@ export const products = [
     stock: 220000,
     stockAuto: false,
     photoId: 'ppBag',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ee/Polypropylene_woven_bag.jpg/600px-Polypropylene_woven_bag.jpg',
+    photo: 'https://images.pexels.com/photos/2827121/pexels-photo-2827121.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -1995,7 +1995,7 @@ export const products = [
     stock: 18,
     stockAuto: false,
     photoId: 'compressor',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/32/Reciprocating_compressor.jpg/600px-Reciprocating_compressor.jpg',
+    photo: 'https://images.pexels.com/photos/31257317/pexels-photo-31257317.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -2070,7 +2070,7 @@ export const products = [
     stock: 4,
     stockAuto: false,
     photoId: 'lathe',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Metal_lathe.jpg/600px-Metal_lathe.jpg',
+    photo: 'https://images.pexels.com/photos/15603045/pexels-photo-15603045.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
@@ -2146,7 +2146,7 @@ export const products = [
     stock: 320,
     stockAuto: false,
     photoId: 'weldingMachine',
-    photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/SMAW_weld_area.jpg/600px-SMAW_weld_area.jpg',
+    photo: 'https://images.pexels.com/photos/17245900/pexels-photo-17245900.jpeg?auto=compress&cs=tinysrgb&w=600',
     specs: [
       {
         group: 'Основные',
