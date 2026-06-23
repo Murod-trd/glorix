@@ -436,7 +436,7 @@ export default function DocumentCenter() {
         payTerms: effectivePayTerms, currency, items: validItems, totalAmount });
       setGenerated(html);
       setGenerating(false);
-    }, 800);
+    }, 0);
   };
 
   const inputStyle = { padding: '8px 10px', background: 'var(--navy-3)', border: '1px solid var(--border-2)', borderRadius: 7, color: 'var(--text)', fontSize: 12, width: '100%' };
@@ -618,7 +618,7 @@ export default function DocumentCenter() {
                     <tr style={{ borderTop: '1px solid var(--border)' }}>
                       <td colSpan={5} style={{ padding: '8px', fontSize: 12, color: 'var(--text-2)', textAlign: 'right', fontWeight: 600 }}>ИТОГО:</td>
                       <td colSpan={3} style={{ padding: '8px', fontSize: 14, color: 'var(--accent)', fontWeight: 700, fontFamily: 'var(--font-display)' }}>
-                        ${totalAmount.toLocaleString(undefined,{maximumFractionDigits:2})}
+                        {({'USD':'$','EUR':'€','RUB':'₽','UZS':'сум','KZT':'₸','UAH':'₴','BYN':'Br','AZN':'₼','AMD':'֏','GEL':'₾','TJS':'SM','TMT':'T','KGS':'с','MDL':'L','CNY':'¥','TRY':'₺','GBP':'£','JPY':'¥'})[currency] || currency}{' '}{totalAmount.toLocaleString('ru-RU',{maximumFractionDigits:2})}
                       </td>
                     </tr>
                   </tfoot>
