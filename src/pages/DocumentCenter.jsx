@@ -356,7 +356,7 @@ export default function DocumentCenter() {
   const updateItem = (i, k, v) => { const arr = [...items]; arr[i][k] = v; setItems(arr); };
   const removeItem = (i) => setItems(prev => prev.filter((_, idx) => idx !== i));
 
-  const handlePaste = async () => {
+  const handlePaste = () => {
     const parsed = parsePaste(pasteText);
     if (!parsed.length) return;
     setItems(parsed);
@@ -367,20 +367,14 @@ export default function DocumentCenter() {
     if (needsSearch) {
       setTnvedSearching(true);
       try {
-        const enriched = await Promise.all(parsed.map(async (item) => {
+        // Только словарь regex — searchHsCodes возвращал 6-значные коды,
+      // дополненные нулями, что давало случайные и ложные 10-значные коды.
+      // Лучше пустое поле, чем уверенно неверный код.
+      const enriched = parsed.map((item) => {
           if (item.tnved) return item;
-          try {
-            // 1. Быстрая проверка по словарю для электрокабелей
-            const guessed = guessProductCode(item.name);
-            if (guessed) return { ...item, tnved: guessed };
-            // 2. Поиск в базе HS (6-знач.), дополняем до 10 знаков ТН ВЭД
-            const { results } = await searchHsCodes(item.name);
-            if (!results.length) return item;
-            const rawCode = results[0].code.replace(/\D/g, '');
-            const tnvedCode = rawCode.padEnd(10, '0');
-            return { ...item, tnved: tnvedCode };
-          } catch { return item; }
-        }));
+          const guessed = guessProductCode(item.name);
+          return guessed ? { ...item, tnved: guessed } : item;
+        });
         setItems(enriched);
       } finally {
         setTnvedSearching(false);
@@ -434,6 +428,7 @@ export default function DocumentCenter() {
       const fmt = (n) => (parseFloat(n)||0).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
       const validItems = items.filter(i => i.name);
+      const missingCodes = validItems.filter(i => !i.tnved).length;
 
       const CURR_SYMBOLS = { USD:'$', EUR:'€', RUB:'₽', UZS:'сум', KZT:'₸', UAH:'₴',
         BYN:'Br', AZN:'₼', AMD:'֏', GEL:'₾', TJS:'SM', TMT:'T', KGS:'с', MDL:'L',
@@ -442,8 +437,8 @@ export default function DocumentCenter() {
       const rowsHtml = validItems.map((item, idx) => {
         const subtotal = (parseFloat(item.qty)||0) * (parseFloat(item.price)||0);
         const bg = idx % 2 === 0 ? '#f5f7fa' : '#ffffff';
-        const tnvedColor = item.tnved ? '#1a7a4a' : '#c0392b';
-        const tnvedText  = item.tnved || '—';
+        const tnvedColor = item.tnved ? '#1a7a4a' : '#e74c3c';
+        const tnvedText  = item.tnved || '⚠ требует кода';
         const td = (content, extra='') => `<td style="padding:8px 10px;border:1px solid #dde3ea;background:${bg};color:#1a2233;font-size:12px;${extra}">${content}</td>`;
         return `<tr>
           ${td(idx+1, 'text-align:center;color:#888;font-size:11px')}
@@ -514,6 +509,10 @@ export default function DocumentCenter() {
           <tr><td style="padding:5px 0;color:#888">Инкотермс / Incoterms:</td><td>${incoterms} 2020</td></tr>
           <tr><td style="padding:5px 0;color:#888">Условия оплаты / Payment:</td><td>${effectivePayTerms}</td></tr>
         </table>
+
+        ${missingCodes > 0 ? `<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:#856404">
+          ⚠ ${missingCodes} позиций без кода ТН ВЭД — введите коды вручную перед отправкой покупателю
+        </div>` : ''}
 
         <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#1a2233;border-top:2px solid #1a2233;padding-top:12px;margin-bottom:10px">
           Спецификация товаров / Goods Specification
@@ -757,7 +756,7 @@ export default function DocumentCenter() {
                           <input style={{ ...inputStyle, fontSize: 11 }} placeholder="Товар" autoComplete="off" value={item.name} onChange={e => updateItem(i,'name',e.target.value)} />
                         </td>
                         <td style={{ padding: '4px 6px', width: 110 }}>
-                          <input style={{ ...inputStyle, fontSize: 11, background: tnvedSearching && !item.tnved ? 'rgba(0,212,170,0.06)' : undefined }} placeholder={tnvedSearching && !item.tnved ? '⏳ поиск...' : '1001990000'} autoComplete="off" value={item.tnved} onChange={e => updateItem(i,'tnved',e.target.value)} />
+                          <input style={{ ...inputStyle, fontSize: 11, background: tnvedSearching && !item.tnved ? 'rgba(0,212,170,0.06)' : undefined }} placeholder={tnvedSearching && !item.tnved ? '⏳ поиск...' : '0000000000'} autoComplete="off" value={item.tnved} onChange={e => updateItem(i,'tnved',e.target.value)} />
                         </td>
                         <td style={{ padding: '4px 6px', width: 70 }}>
                           <input style={{ ...inputStyle, fontSize: 11 }} type="number" placeholder="500" value={item.qty} onChange={e => updateItem(i,'qty',e.target.value)} />
