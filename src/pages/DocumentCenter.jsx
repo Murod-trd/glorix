@@ -110,12 +110,12 @@ function parsePaste(text) {
 // searchHsCodes может ошибиться (7312=стальной трос, 7115=платина),
 // поэтому сначала проверяем по названию товара.
 const CABLE_TNVED_MAP = [
-  { re: /^(КСРПнг|КСРПнг\(А\)|КСРП)/i,        code: '8544429007' }, // кабели сигнальные, FRHF
-  { re: /^(ВВГ|АВВГнг|АВВГ|ВВГнг|ВВГп)/i,     code: '8544499108' }, // силовые кабели ВВГ (Cu, ПВХ, ≤1000В)
-  { re: /^(ПВС|ПВВС)/i,                        code: '8544492900' }, // провод ПВС (гибкий, многожильный)
-  { re: /^(КГ|КГнг|КГП)/i,                   code: '8544492900' }, // кабель КГ (резиновая изоляция)
-  { re: /^(NYM|NYY|SWA|H07|H05)/i,             code: '8544492900' }, // евро-марки ≤1000В
-  { re: /кабель|провод|wire|cable/i,            code: '8544420000' }, // общий фолбэк для кабельной продукции
+  { re: /^(КСРПнг|КСРПнг\(А\)|КСРП|КСПВ|КИПнг)/i,         code: '8544429007' },
+  { re: /^(ВВГ|АВВГнг|АВВГ|ВВГнг|ВВГп|ВВГз|АВВГз)/i,        code: '8544499108' },
+  { re: /^(ПВС|ПВВС|ПУНП|ПУГНП|ПВА|ШВВП|АПУНП)/i,           code: '8544499108' },
+  { re: /^(КГ |КГнг|КГП|КГтп|КГ-)/i,                         code: '8544499108' },
+  { re: /^(NYM|NYY|SWA|H07|H05|YKY|ВБШв|АВБШв)/i,            code: '8544499108' },
+  { re: /кабель|провод|wire|cable/i,                           code: '8544499108' },
 ];
 function guessElectricalCode(name) {
   for (const { re, code } of CABLE_TNVED_MAP) {
@@ -216,50 +216,106 @@ export default function DocumentCenter() {
     setGenerating(true);
     setTimeout(() => {
       const sellerName = getCurrentUser(accountType).name;
-      const kpNum = `КП-${Date.now().toString().slice(-6)}`;
-      const dateStr   = new Date().toLocaleDateString('ru-RU');
-      const validStr  = new Date(Date.now()+30*24*60*60*1000).toLocaleDateString('ru-RU');
-
-      // Форматирование числа в российской локали: 5 000,00
+      const kpNum    = `КП-${Date.now().toString().slice(-6)}`;
+      const dateStr  = new Date().toLocaleDateString('ru-RU');
+      const validStr = new Date(Date.now()+30*24*60*60*1000).toLocaleDateString('ru-RU');
       const fmt = (n) => (parseFloat(n)||0).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-      const rows = items.filter(i => i.name).map((item, idx) => {
+      const validItems = items.filter(i => i.name);
+
+      const rowsHtml = validItems.map((item, idx) => {
         const subtotal = (parseFloat(item.qty)||0) * (parseFloat(item.price)||0);
-        return `| ${idx+1} | ${item.name} | ${item.tnved || '—'} | ${item.unit} | ${fmt(item.qty)} | ${fmt(item.price)} | ${fmt(subtotal)} |`;
-      }).join('\n');
+        const bg = idx % 2 === 0 ? '#f8f9fb' : '#ffffff';
+        const tnvedColor = item.tnved ? '#1a7a4a' : '#c0392b';
+        const tnvedText  = item.tnved || '—';
+        return `<tr style="background:${bg}">
+          <td style="padding:8px 10px;text-align:center;border:1px solid #dde3ea;color:#888;font-size:11px">${idx+1}</td>
+          <td style="padding:8px 10px;border:1px solid #dde3ea;font-size:12px;font-weight:500">${item.name}</td>
+          <td style="padding:8px 10px;text-align:center;border:1px solid #dde3ea;font-family:monospace;font-size:11px;color:${tnvedColor};letter-spacing:.5px">${tnvedText}</td>
+          <td style="padding:8px 10px;text-align:center;border:1px solid #dde3ea;font-size:12px">${item.unit}</td>
+          <td style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;font-size:12px">${fmt(item.qty)}</td>
+          <td style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;font-size:12px">${fmt(item.price)}</td>
+          <td style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;font-size:12px;font-weight:700;color:#0a5">${fmt(subtotal)}</td>
+        </tr>`;
+      }).join('');
 
-      const techSpecs = items.filter(i => i.name && i.specs);
+      const techSpecs = validItems.filter(i => i.specs);
+      const techHtml = techSpecs.length > 0 ? `
+        <div style="margin-top:24px;padding-top:14px;border-top:1px solid #dde3ea">
+          <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#1a2233;margin-bottom:10px">
+            Технические характеристики / Technical Specifications
+          </div>
+          ${techSpecs.map((item,i) => `<div style="font-size:11px;margin-bottom:6px;padding:6px 10px;border-left:3px solid #00d4aa;background:#f8fffe">
+            <div style="font-weight:600;margin-bottom:2px">${i+1}. ${item.name}</div>
+            <div style="color:#555">${item.specs}</div>
+          </div>`).join('')}
+        </div>` : '';
 
-      setGenerated(
-`КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ / COMMERCIAL OFFER  №${kpNum}
+      const html = `<div id="glorix-kp-doc" style="font-family:Georgia,'Times New Roman',serif;color:#1a2233;background:#fff;padding:36px 40px;max-width:960px">
 
-ПРОДАВЕЦ / SELLER:    ${sellerName}
-                      Верифицировано платформой GLORIX ✓
-ПОКУПАТЕЛЬ / BUYER:   ${buyer || '[Укажите покупателя / Specify buyer]'}
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #1a2233">
+          <div>
+            <div style="font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#888;margin-bottom:6px">GLORIX PLATFORM &nbsp;·&nbsp; Верифицировано ✓</div>
+            <div style="font-size:20px;font-weight:700;letter-spacing:.5px">КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ</div>
+            <div style="font-size:13px;color:#666;margin-top:3px">COMMERCIAL OFFER &nbsp;·&nbsp; <strong>№${kpNum}</strong></div>
+          </div>
+          <div style="text-align:right;font-size:12px;color:#555;line-height:1.8">
+            <div>Дата / Date: <strong>${dateStr}</strong></div>
+            <div>Действительно / Valid: <strong>${validStr}</strong></div>
+          </div>
+        </div>
 
-ДАТА / DATE:          ${dateStr}
-ДЕЙСТВИТЕЛЬНО / VALID UNTIL: ${validStr}
-УСЛОВИЯ / INCOTERMS:  ${incoterms} 2020
-ОПЛАТА / PAYMENT:     ${payTerms}
+        <table style="width:100%;border-collapse:collapse;margin-bottom:24px;font-size:12px">
+          <tr><td style="padding:5px 0;color:#888;width:200px;vertical-align:top">Продавец / Seller:</td><td style="font-weight:600">${sellerName}</td></tr>
+          <tr><td style="padding:5px 0;color:#888;vertical-align:top">Покупатель / Buyer:</td><td style="font-weight:600">${buyer || '<span style="color:#c00">[Укажите покупателя / Specify buyer]</span>'}</td></tr>
+          <tr><td style="padding:5px 0;color:#888">Инкотермс / Incoterms:</td><td>${incoterms} 2020</td></tr>
+          <tr><td style="padding:5px 0;color:#888">Условия оплаты / Payment:</td><td>${payTerms}</td></tr>
+        </table>
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-СПЕЦИФИКАЦИЯ ТОВАРОВ / GOODS SPECIFICATION
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-| № | Наименование / Description | Код ТН ВЭД / HS Code | Ед.изм / Unit | К-во / Q\'ty | Цена за ед. / Unit price | Сумма / Amount |
-|---|---------------------------|---------------------|--------------|-------------|--------------------------|----------------|
-${rows}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ИТОГО / TOTAL:  ${fmt(totalAmount)} USD      ${incoterms} 2020
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${techSpecs.length > 0 ? `
-ТЕХНИЧЕСКИЕ ХАРАКТЕРИСТИКИ / TECHNICAL SPECIFICATIONS:
-${techSpecs.map((item,idx) => `${idx+1}. ${item.name}:\n   ${item.specs}`).join('\n')}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━` : ''}
-Подпись / Signature: ____________________
-Печать / Stamp:      ____________________`
-      );
+        <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#1a2233;border-top:2px solid #1a2233;padding-top:12px;margin-bottom:10px">
+          Спецификация товаров / Goods Specification
+        </div>
+
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="background:#1a2233;color:#fff">
+              <th style="padding:10px 8px;text-align:center;width:34px;border:1px solid #2d3d50;font-size:11px;font-weight:600">№</th>
+              <th style="padding:10px 8px;text-align:left;border:1px solid #2d3d50;font-size:11px;font-weight:600">Наименование<br><span style="font-weight:400;font-size:9px;opacity:.7">Description</span></th>
+              <th style="padding:10px 8px;text-align:center;width:118px;border:1px solid #2d3d50;font-size:11px;font-weight:600">Код ТН ВЭД<br><span style="font-weight:400;font-size:9px;opacity:.7">HS Code</span></th>
+              <th style="padding:10px 8px;text-align:center;width:52px;border:1px solid #2d3d50;font-size:11px;font-weight:600">Ед.изм<br><span style="font-weight:400;font-size:9px;opacity:.7">Unit</span></th>
+              <th style="padding:10px 8px;text-align:right;width:82px;border:1px solid #2d3d50;font-size:11px;font-weight:600">К-во<br><span style="font-weight:400;font-size:9px;opacity:.7">Q'ty</span></th>
+              <th style="padding:10px 8px;text-align:right;width:100px;border:1px solid #2d3d50;font-size:11px;font-weight:600">Цена за ед.<br><span style="font-weight:400;font-size:9px;opacity:.7">Unit price, $</span></th>
+              <th style="padding:10px 8px;text-align:right;width:105px;border:1px solid #2d3d50;font-size:11px;font-weight:600">Сумма<br><span style="font-weight:400;font-size:9px;opacity:.7">Amount, $</span></th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+          <tfoot>
+            <tr style="background:#0f1a28;color:#fff">
+              <td colspan="6" style="padding:12px 10px;text-align:right;border:1px solid #2d3d50;font-weight:700;font-size:14px;letter-spacing:.5px">
+                ИТОГО / TOTAL &nbsp;(${incoterms} 2020):
+              </td>
+              <td style="padding:12px 10px;text-align:right;border:1px solid #2d3d50;font-weight:700;font-size:14px;color:#00d4aa">
+                ${fmt(totalAmount)} $
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+
+        ${techHtml}
+
+        <div style="margin-top:40px;display:flex;justify-content:space-between;font-size:12px;color:#555;border-top:1px solid #dde3ea;padding-top:20px">
+          <div>Подпись / Signature: &nbsp; ____________________</div>
+          <div>Печать / Stamp: &nbsp; ____________________</div>
+        </div>
+
+        <div style="margin-top:18px;text-align:center;font-size:9px;color:#ccc;border-top:1px solid #f0f0f0;padding-top:10px">
+          Сформировано платформой GLORIX · glorix.uz · ${dateStr}
+        </div>
+      </div>`;
+
+      setGenerated(html);
       setGenerating(false);
-    }, 1500);
+    }, 800);
   };
 
   const inputStyle = { padding: '8px 10px', background: 'var(--navy-3)', border: '1px solid var(--border-2)', borderRadius: 7, color: 'var(--text)', fontSize: 12, width: '100%' };
@@ -423,9 +479,24 @@ ${techSpecs.map((item,idx) => `${idx+1}. ${item.name}:\n   ${item.specs}`).join(
               <div style={{ fontWeight: 600 }}>Результат КП</div>
               {generated && (
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn btn-ghost" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => import('../utils/pdfExport').then(m => m.downloadTextAsPdf(generated, 'glorix-kp.pdf'))}>⬇ PDF</button>
-                  <button className="btn btn-ghost" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => import('../utils/docxExport').then(m => m.downloadTextAsDocx(generated, 'glorix-kp.docx'))}>⬇ Word</button>
-                  <button className="btn btn-ghost" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => { navigator.clipboard?.writeText(generated); alert('Скопировано!'); }}>📋 Копировать</button>
+                  <button className="btn btn-ghost" style={{ fontSize: 12, padding: '5px 12px' }} onClick={async () => {
+                    const el = document.getElementById('glorix-kp-doc');
+                    if (!el) return;
+                    const h2c = (await import('html2canvas')).default;
+                    const canvas = await h2c(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+                    const { jsPDF } = await import('jspdf');
+                    const pdf = new jsPDF({ unit: 'px', format: [canvas.width/2, canvas.height/2] });
+                    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width/2, canvas.height/2);
+                    pdf.save('glorix-kp.pdf');
+                  }}>⬇ PDF</button>
+                  <button className="btn btn-ghost" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => {
+                    const plain = document.getElementById('glorix-kp-doc')?.innerText || '';
+                    import('../utils/docxExport').then(m => m.downloadTextAsDocx(plain, 'glorix-kp.docx'));
+                  }}>⬇ Word</button>
+                  <button className="btn btn-ghost" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => {
+                    const plain = document.getElementById('glorix-kp-doc')?.innerText || '';
+                    navigator.clipboard?.writeText(plain); alert('Скопировано!');
+                  }}>📋 Копировать</button>
                 </div>
               )}
             </div>
@@ -454,7 +525,7 @@ ${techSpecs.map((item,idx) => `${idx+1}. ${item.name}:\n   ${item.specs}`).join(
                   <span className="badge badge-green" style={{ fontSize: 10 }}>✓ Верифицировано GLORIX</span>
                   <span className="badge badge-blue" style={{ fontSize: 10 }}>◎ ИИ-черновик</span>
                 </div>
-                <pre style={{ fontSize: 12, lineHeight: 1.8, color: 'var(--text)', background: 'var(--navy-3)', padding: '18px 22px', borderRadius: 8, whiteSpace: 'pre-wrap', fontFamily: 'Georgia, "Times New Roman", serif', maxHeight: 500, overflowY: 'auto' }}>{generated}</pre>
+                <div style={{ maxHeight: 560, overflowY: 'auto', borderRadius: 8, border: '1px solid var(--border-2)', background: '#fff' }} dangerouslySetInnerHTML={{ __html: generated }} />
                 <div style={{ marginTop: 10, padding: '8px 12px', background: 'var(--gold-dim)', border: '1px solid rgba(245,166,35,0.2)', borderRadius: 7, fontSize: 11, color: 'var(--gold)' }}>
                   ⚠ Черновик. Проверьте данные, поставьте подпись и печать. В документе нигде не указано что создан ИИ.
                 </div>
