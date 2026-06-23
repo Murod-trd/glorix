@@ -80,14 +80,35 @@ export default function DocumentCenter() {
   const [tnvedQuery, setTnvedQuery] = useState('');
   const [tnvedResults, setTnvedResults] = useState([]);
   const [selectedTnved, setSelectedTnved] = useState(null);
+  const [tnvedSearching, setTnvedSearching] = useState(false); // авто-поиск ТН ВЭД после вставки
 
   const addItem = () => setItems(prev => [...prev, { name: '', tnved: '', qty: '', unit: 'кг', price: '', specs: '' }]);
   const updateItem = (i, k, v) => { const arr = [...items]; arr[i][k] = v; setItems(arr); };
   const removeItem = (i) => setItems(prev => prev.filter((_, idx) => idx !== i));
 
-  const handlePaste = () => {
+  const handlePaste = async () => {
     const parsed = parsePaste(pasteText);
-    if (parsed.length) { setItems(parsed); setShowPaste(false); setPasteText(''); }
+    if (!parsed.length) return;
+    setItems(parsed);
+    setShowPaste(false);
+    setPasteText('');
+    // Авто-определение ТН ВЭД по названию товара для строк без кода
+    const needsSearch = parsed.some(item => !item.tnved);
+    if (needsSearch) {
+      setTnvedSearching(true);
+      try {
+        const enriched = await Promise.all(parsed.map(async (item) => {
+          if (item.tnved) return item;
+          try {
+            const { results } = await searchHsCodes(item.name);
+            return results.length ? { ...item, tnved: results[0].code } : item;
+          } catch { return item; }
+        }));
+        setItems(enriched);
+      } finally {
+        setTnvedSearching(false);
+      }
+    }
   };
 
   const [tnvedLoading, setTnvedLoading] = useState(false);
@@ -255,9 +276,10 @@ ____________________     ____________________
                 <textarea value={pasteText} onChange={e => setPasteText(e.target.value)}
                   placeholder={'Пшеница 3кл\t1001990000\t500\tтонна\t188\tВлажность ≤14%, протеин ≥12%\nЦемент М400\t2523290000\t100\tмешок\t6.5\tМарка М400, ГОСТ 31108'}
                   style={{ width: '100%', height: 100, padding: '10px', background: 'var(--navy-3)', border: '1px solid var(--border-2)', borderRadius: 8, color: 'var(--text)', fontSize: 12, fontFamily: 'monospace', resize: 'vertical' }} />
-                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
                   <button className="btn btn-ghost" onClick={() => setShowPaste(false)} style={{ fontSize: 12, padding: '6px 14px' }}>Отмена</button>
                   <button className="btn btn-primary" onClick={handlePaste} style={{ fontSize: 12, padding: '6px 14px' }}>Импортировать {parsePaste(pasteText).length > 0 ? `(${parsePaste(pasteText).length} строк)` : ''}</button>
+                  {tnvedSearching && <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 4 }}>⏳ Определяю ТН ВЭД...</span>}
                 </div>
               </div>
             )}
@@ -281,10 +303,10 @@ ____________________     ____________________
                       <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                         <td style={{ padding: '6px 8px', fontSize: 12, color: 'var(--text-3)', width: 24 }}>{i+1}</td>
                         <td style={{ padding: '4px 6px', minWidth: 140 }}>
-                          <input style={{ ...inputStyle, fontSize: 11 }} placeholder="Товар" value={item.name} onChange={e => updateItem(i,'name',e.target.value)} />
+                          <input style={{ ...inputStyle, fontSize: 11 }} placeholder="Товар" autoComplete="off" value={item.name} onChange={e => updateItem(i,'name',e.target.value)} />
                         </td>
                         <td style={{ padding: '4px 6px', width: 110 }}>
-                          <input style={{ ...inputStyle, fontSize: 11 }} placeholder="1001990000" value={item.tnved} onChange={e => updateItem(i,'tnved',e.target.value)} />
+                          <input style={{ ...inputStyle, fontSize: 11, background: tnvedSearching && !item.tnved ? 'rgba(0,212,170,0.06)' : undefined }} placeholder={tnvedSearching && !item.tnved ? '⏳ поиск...' : '1001990000'} autoComplete="off" value={item.tnved} onChange={e => updateItem(i,'tnved',e.target.value)} />
                         </td>
                         <td style={{ padding: '4px 6px', width: 70 }}>
                           <input style={{ ...inputStyle, fontSize: 11 }} type="number" placeholder="500" value={item.qty} onChange={e => updateItem(i,'qty',e.target.value)} />
