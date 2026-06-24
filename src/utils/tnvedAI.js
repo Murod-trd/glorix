@@ -26,7 +26,7 @@ async function loadFullDb() {
       return r.json();
     })
     .then(arr => {
-      _dbCache = arr; // [[code, desc], ...]
+      _dbCache = arr; // [[code, desc, explanation|null], ...]
       _dbPromise = null;
       console.log(`[TNVED] База загружена: ${arr.length} кодов`);
       return arr;
@@ -391,28 +391,29 @@ export async function searchTnvedDB(name) {
   if (route) {
     if (route.subCode) {
       // Точное попадание по ключевым словам — возвращаем код напрямую
-      return { code: route.subCode, score: 1.0 };
+      const exRow = db.find(e => e[0] === route.subCode);
+      return { code: route.subCode, score: 1.0, explanation: exRow?.[2] || null };
     }
     // Сужаем пул до subheading-префикса
     const narrowed = db.filter(e => e[0].startsWith(route.prefix));
     if (narrowed.length > 0) {
       // Word-overlap внутри сужённого пула
       let best = null, bestScore = -1;
-      for (const [code, desc] of narrowed) {
+      for (const [code, desc, expl] of narrowed) {
         const s = wordScore(qWords, desc);
-        if (s > bestScore) { bestScore = s; best = { code, desc }; }
+        if (s > bestScore) { bestScore = s; best = { code, desc, expl }; }
       }
-      if (best) return { code: best.code, score: Math.max(bestScore, 0.5) };
+      if (best) return { code: best.code, score: Math.max(bestScore, 0.5), explanation: best.expl || null };
     }
   }
 
   // ── Шаг 2: глобальный word-overlap по всей базе ────────────────────────
   let best = null, bestScore = 0;
-  for (const [code, desc] of db) {
+  for (const [code, desc, expl] of db) {
     const s = wordScore(qWords, desc);
-    if (s > bestScore) { bestScore = s; best = { code, desc }; }
+    if (s > bestScore) { bestScore = s; best = { code, desc, expl }; }
   }
-  return best && bestScore >= 0.35 ? { code: best.code, score: bestScore } : null;
+  return best && bestScore >= 0.35 ? { code: best.code, score: bestScore, explanation: best.expl || null } : null;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -463,4 +464,22 @@ export async function resolveTnved(name) {
   if (offline) return { code: offline.code, source: 'offline', confidence: 'low' };
 
   return { code: '', source: '', confidence: 'none' };
+}
+
+/**
+ * getExplanation(code)
+ * Возвращает текст официальных Пояснений к ТН ВЭД для данного кода (или главы).
+ * Читает из локального кэша tnved_db.json — без API, без токенов.
+ * После запуска parse_pdf_explanations.py поле explanation заполнено.
+ */
+export async function getExplanation(code) {
+  if (!code) return null;
+  const db = await loadFullDb();
+  // Точное совпадение
+  const row = db.find(e => e[0] === code);
+  if (row && row[2]) return row[2];
+  // Совпадение по префиксу главы (первые 2 цифры)
+  const prefix = String(code).slice(0, 2);
+  const chapterRow = db.find(e => e[0].startsWith(prefix) && e[2]);
+  return chapterRow?.[2] || null;
 }
