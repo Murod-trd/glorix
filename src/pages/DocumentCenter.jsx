@@ -203,10 +203,9 @@ const PRODUCT_TNVED_MAP = [
   { re: /^(лист.*стал|стал.*лист|листов.*прокат)/i,            code: '7208390000' }, // горячекатаный лист
   { re: /^(оцинк.*лист|лист.*оцинк)/i,                         code: '7210410000' }, // оцинкованный лист
   { re: /^(сетк).*(стал|метал|оцинк)/i,                        code: '7314200000' }, // стальная сетка
-  // болт/гайка/шайба — маршрутизируются через resolveTnved → KEYWORD_ROUTES (разные коды!)
-  { re: /^болт/i,                                                   code: null }, // → resolveTnved
-  { re: /^гайк/i,                                                   code: null }, // → resolveTnved
-  { re: /^(шайб|гровер)/i,                                         code: null }, // → resolveTnved
+  { re: /^болт/i,                                               code: '7318150009' }, // болты
+  { re: /^гайк/i,                                               code: '7318160009' }, // гайки
+  { re: /^(шайб|гровер)/i,                                     code: '7318220009' }, // шайбы/гровер
   { re: /^(винт|шуруп|саморез)/i,                               code: '7318149900' }, // шурупы/саморезы
   { re: /^(электрод).*(свар)/i,                                 code: '8311100000' }, // сварочные электроды
 
@@ -345,7 +344,7 @@ const PRODUCT_TNVED_MAP = [
 function guessProductCode(name) {
   for (const { re, code } of PRODUCT_TNVED_MAP) {
     if (re.test(name.trim())) {
-      // code: null → не перехватываем, пусть resolveTnved (KEYWORD_ROUTES) даст точный код
+      // if null — will fall through to server TF-IDF via resolveTnved
       return code || null;
     }
   }
@@ -381,6 +380,8 @@ export default function DocumentCenter() {
   const [tnvedResults, setTnvedResults] = useState([]);
   const [selectedTnved, setSelectedTnved] = useState(null);
   const [tnvedSearching, setTnvedSearching] = useState(false); // авто-поиск ТН ВЭД после вставки
+  const [batchProgress, setBatchProgress] = useState(0);  // обработано позиций
+  const [batchTotal, setBatchTotal]       = useState(0);  // всего позиций в батче
 
   const addItem = () => setItems(prev => [...prev, { name: '', tnved: '', qty: '', unit: 'кг', price: '', specs: '' }]);
   const updateItem = (i, k, v) => { const arr = [...items]; arr[i][k] = v; setItems(arr); };
@@ -410,20 +411,37 @@ export default function DocumentCenter() {
     }
 
     setTnvedSearching(true);
+    setBatchProgress(0);
+    setBatchTotal(itemsWithRegex.filter(i => !i.tnved).length);
     try {
-      const enriched = await Promise.all(
-        itemsWithRegex.map(async (item) => {
-          if (item.tnved) return item;
-          const { code, source } = await resolveTnved(item.name, '');
-          return { ...item, tnved: code, _src: source };
-        })
-      );
-      // Убираем служебное поле _src перед сохранением
-      setItems(enriched.map(({ _src, ...rest }) => rest));
+      const enriched = [...itemsWithRegex];
+      const unresolved = enriched.map((item, idx) => (!item.tnved ? idx : null)).filter(i => i !== null);
+      const BATCH = 25;
+      let done = 0;
+
+      for (let b = 0; b < unresolved.length; b += BATCH) {
+        const chunk = unresolved.slice(b, b + BATCH);
+        const names = chunk.map(idx => enriched[idx].name);
+        const data = await fetch('/api/classify-batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: names }),
+        }).then(r => r.json());
+
+        (data.results || []).forEach((res, i) => {
+          enriched[chunk[i]].tnved = res.code || '';
+          enriched[chunk[i]]._src = res.code ? 'tfidf' : 'none';
+        });
+        done += chunk.length;
+        setBatchProgress(done);
+        setItems(enriched.map(({ _src, ...rest }) => rest));
+      }
     } catch(e) {
-      console.error('TNVED resolve error:', e);
+      console.error('TNVED batch error:', e);
     } finally {
       setTnvedSearching(false);
+      setBatchProgress(0);
+      setBatchTotal(0);
     }
   };
 
@@ -799,7 +817,24 @@ export default function DocumentCenter() {
                 <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
                   <button className="btn btn-ghost" onClick={() => setShowPaste(false)} style={{ fontSize: 12, padding: '6px 14px' }}>Отмена</button>
                   <button className="btn btn-primary" onClick={handlePaste} style={{ fontSize: 12, padding: '6px 14px' }}>Импортировать {parsePaste(pasteText).length > 0 ? `(${parsePaste(pasteText).length} строк)` : ''}</button>
-                  {tnvedSearching && <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 4 }}>⏳ Определяю ТН ВЭД...</span>}
+                  {tnvedSearching && (
+                    <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 4 }}>
+                      {batchTotal > 0
+                        ? `⏳ Классифицирую: ${batchProgress} / ${batchTotal}`
+                        : '⏳ Определяю ТН ВЭД...'}
+                    </span>
+                  )}
+                  {tnvedSearching && batchTotal > 0 && (
+                    <div style={{ width: '100%', marginTop: 6, height: 4, background: 'rgba(0,212,170,0.15)', borderRadius: 2 }}>
+                      <div style={{
+                        height: '100%',
+                        borderRadius: 2,
+                        background: 'var(--accent)',
+                        width: `${Math.round(batchProgress / batchTotal * 100)}%`,
+                        transition: 'width 0.3s ease',
+                      }} />
+                    </div>
+                  )}
                 </div>
               </div>
             )}
