@@ -1,4 +1,4 @@
-import { bm25Search, preloadBM25Index } from './tnvedBM25.js';
+import { semanticSearch, preloadSemanticEngine, semanticStatus } from './tnvedSemantic.js';
 /**
  * GLORIX — TN VED EAEU Classification Engine v6
  * ─────────────────────────────────────────────
@@ -469,17 +469,15 @@ export async function searchTnvedDB(name) {
     }
   }
 
-  // ── Шаг 2: BM25-поиск по всей базе (локальный ИИ-движок) ──────────────────
-  try {
-    const bm25results = await bm25Search(name, { topK: 1, minScore: 0.3 });
-    if (bm25results.length > 0) {
-      const best = bm25results[0];
-      const row = db.find(e => e[0] === best.code);
-      return { code: best.code, score: best.score, explanation: row?.[2] || null };
-    }
-  } catch (_bm25err) { /* BM25 недоступен — fallback */ }
+  // ── Шаг 2: Нейросетевой семантический поиск (BERT, offline) ────────────────
+  const semResults = await semanticSearch(name, 1).catch(() => null);
+  if (semResults && semResults.length > 0) {
+    const best = semResults[0];
+    const row = db.find(e => e[0] === best.code);
+    return { code: best.code, score: best.score, explanation: row?.[2] || null };
+  }
 
-  // ── Fallback: word-overlap (если BM25 не загрузился) ─────────────────────
+  // ── Fallback: word-overlap (пока не сгенерированы эмбеддинги) ────────────
   let best = null, bestScore = 0;
   for (const [code, desc, expl] of db) {
     const s = wordScore(qWords, desc);
@@ -505,7 +503,7 @@ export async function resolveTnved(name) {
 
   // Предзагрузка базы (async, в фоне — если не загружена)
   loadFullDb().catch(() => {});
-  preloadBM25Index(); // прогрев BM25-индекса
+  preloadSemanticEngine(); // прогрев нейросетевого движка
 
   // ── Путь с API ─────────────────────────────────────────────────────────────
   if (apiKey) {
