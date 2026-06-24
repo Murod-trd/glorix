@@ -1,10 +1,9 @@
 /**
- * GLORIX Sparse TF-IDF Search Engine v2
- * — pymorphy2 lemmatized corpus (built server-side)
- * — inflection lookup table for correct Russian morphology at query time
- * — synonym expansion for user-friendly terms not in ТН ВЭД vocabulary
- * — sparse cosine similarity (no LSA — exact term matching)
- * Pure Node.js ESM, no external deps, Vercel serverless compatible
+ * GLORIX Sparse TF-IDF Search Engine v3
+ * — pymorphy2 lemmatized corpus, min_df=1 (every unique term indexed)
+ * — inflection lookup table: 120K forms → lemma
+ * — synonym expansion: ADDS to query, never replaces the original word
+ * — sparse cosine similarity (no LSA)
  */
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
@@ -13,7 +12,6 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA = join(__dirname, '..', '_data');
 
-// ── Cold-start cache ────────────────────────────────────────
 let _eng = null;
 
 function getEngine() {
@@ -25,11 +23,6 @@ function getEngine() {
   const inflections = JSON.parse(readFileSync(join(DATA, 'inflections.json'), 'utf8'));
   const synonyms    = JSON.parse(readFileSync(join(DATA, 'synonyms.json'),    'utf8'));
 
-  // Parse sparse binary matrix
-  // Header: uint32 vocab_size | uint32 n_docs
-  // IDF:    float32 × vocab_size
-  // Offsets: uint32 × (n_docs + 1)  — byte offset into sparse data
-  // Sparse: for each doc: [n_terms uint16] + n_terms × [idx uint16, val float32]
   const raw = readFileSync(join(DATA, 'matrix.bin'));
   const buf = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
   const dv  = new DataView(buf);
@@ -38,19 +31,16 @@ function getEngine() {
   const nDocs     = dv.getUint32(4, true);
   let off = 8;
 
-  const idf = new Float32Array(buf, off, vocabSize); off += vocabSize * 4;
-
-  // Offsets array: relative byte offsets from start of sparse data section
-  const offsets = new Uint32Array(buf, off, nDocs + 1); off += (nDocs + 1) * 4;
-  const sparseStart = off;  // byte offset where sparse data begins
+  const idf     = new Float32Array(buf, off, vocabSize); off += vocabSize * 4;
+  const offsets = new Uint32Array(buf, off, nDocs + 1);  off += (nDocs + 1) * 4;
+  const sparseStart = off;
 
   _eng = { vocab, codes, descs, inflections, synonyms,
            idf, offsets, buf, sparseStart, vocabSize, nDocs };
-  console.log(`[Engine v2] vocab=${vocabSize} docs=${nDocs} sparse`);
+  console.log(`[Engine v3] vocab=${vocabSize} docs=${nDocs} min_df=1`);
   return _eng;
 }
 
-// ── Stop words ──────────────────────────────────────────────
 const STOP = new Set([
   'и','в','на','из','по','от','до','за','не','но','с','к','для','при','как',
   'что','это','все','они','его','или','же','а','о','об','во','со','ко','да',
@@ -67,12 +57,20 @@ const STOP = new Set([
   'включаются','гр','об',
 ]);
 
-// ── Lemmatize word using inflection lookup table ─────────────
 function lemmatize(word, inflections) {
-  return inflections[word] || word;  // falls back to the word itself
+  return inflections[word] || word;
 }
 
-// ── Tokenize with lemmatization + synonym expansion ─────────
+/**
+ * tokenize — original word ALWAYS included in result.
+ * Synonyms strictly APPEND to the query; they never replace.
+ *
+ * For each raw word w:
+ *   1. lemmatize(w) → lem
+ *   2. push lem (original, normalized)
+ *   3. look up synonyms[w] OR synonyms[lem] (handles inflected user input)
+ *   4. push each synonym that differs from lem (no self-duplicates)
+ */
 function tokenize(text, inflections, synonyms) {
   const raw = (text.toLowerCase().match(/[а-яё]{3,}/g) || []);
   const result = [];
@@ -80,22 +78,22 @@ function tokenize(text, inflections, synonyms) {
   for (const w of raw) {
     if (STOP.has(w)) continue;
 
-    // Check synonym expansion first
-    if (synonyms[w]) {
-      for (const syn of synonyms[w]) {
-        if (!STOP.has(syn)) result.push(syn);
-      }
-      continue;
-    }
-
+    // Always push the normalized original
     const lem = lemmatize(w, inflections);
     if (!STOP.has(lem) && lem.length >= 3) result.push(lem);
+
+    // Append synonyms (check raw form first, then lemma)
+    const synList = synonyms[w] || synonyms[lem];
+    if (synList) {
+      for (const syn of synList) {
+        if (!STOP.has(syn) && syn !== lem) result.push(syn);
+      }
+    }
   }
 
   return result;
 }
 
-// ── Sparse dot product: doc i · query vector ────────────────
 function sparseDocDot(eng, docIdx, qVec) {
   const { offsets, buf, sparseStart } = eng;
   const byteStart = sparseStart + offsets[docIdx];
@@ -112,7 +110,6 @@ function sparseDocDot(eng, docIdx, qVec) {
   return dot;
 }
 
-// ── Search ───────────────────────────────────────────────────
 export function search(query, topK = 5) {
   const eng = getEngine();
   const { vocab, codes, descs, inflections, synonyms, idf, vocabSize, nDocs } = eng;
@@ -120,11 +117,9 @@ export function search(query, topK = 5) {
   const terms = tokenize(query, inflections, synonyms);
   if (!terms.length) return [];
 
-  // Build TF map (sublinear: log(1 + count))
   const tf = new Map();
   for (const t of terms) tf.set(t, (tf.get(t) || 0) + 1);
 
-  // Build query TF-IDF vector
   const qVec = new Float32Array(vocabSize);
   let qNorm = 0;
   for (const [t, cnt] of tf) {
@@ -134,25 +129,23 @@ export function search(query, topK = 5) {
       qVec[idx] = w;
       qNorm += w * w;
     }
+    // terms absent from min_df=1 vocab are stop words or misspellings — silently skip
   }
   if (qNorm === 0) return [];
   qNorm = Math.sqrt(qNorm);
   for (let i = 0; i < vocabSize; i++) qVec[i] /= qNorm;
 
-  // Score all docs via sparse cosine similarity
   const scores = new Float32Array(nDocs);
   for (let i = 0; i < nDocs; i++) {
     scores[i] = sparseDocDot(eng, i, qVec);
   }
 
-  // Top-K
   return Array.from({ length: nDocs }, (_, i) => i)
     .sort((a, b) => scores[b] - scores[a])
     .slice(0, topK)
     .map(i => ({ code: codes[i], desc: descs[i], score: +scores[i].toFixed(4) }));
 }
 
-// ── Get explanation ──────────────────────────────────────────
 let _db = null;
 function getDb() {
   if (_db) return _db;
