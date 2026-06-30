@@ -67,10 +67,11 @@ def extract_pdf(filepath: str | Path) -> list[PdfChunk]:
     """
     filepath = Path(filepath)
     doc = fitz.open(str(filepath))
-    source_name = filepath.name
+    source_name = str(filepath)
 
     # Извлечь весь текст со структурой шрифтов
     raw_pages = []
+    page_count = len(doc)
     for page_num, page in enumerate(doc, 1):
         blocks = page.get_text("dict")["blocks"]
         page_elements = []
@@ -98,7 +99,7 @@ def extract_pdf(filepath: str | Path) -> list[PdfChunk]:
     # Нарезать на смысловые чанки
     chunks = _build_chunks(paragraphs, source_name)
 
-    print(f"[PDFExtractor] {source_name}: {len(chunks)} чанков из {len(doc)} страниц")
+    print(f"[PDFExtractor] {source_name}: {len(chunks)} чанков из {page_count} страниц")
     return chunks
 
 
@@ -167,7 +168,7 @@ def _build_paragraphs(raw_pages: list) -> list[dict]:
 def _build_chunks(paragraphs: list[dict], source_file: str) -> list[PdfChunk]:
     """Сгруппировать параграфы в смысловые чанки."""
     chunks = []
-    current_chapter = ""
+    current_chapter = _chapter_from_source(source_file)
     current_section = ""
     current_heading = ""
     buffer = []
@@ -229,9 +230,9 @@ def _build_chunks(paragraphs: list[dict], source_file: str) -> list[PdfChunk]:
             continue
 
         # Обычный текст — буферизировать
-        buffer.append(para)
         if not buffer:
             buffer_page = para["page"]
+        buffer.append(para)
 
         # Если буфер накопил достаточно — сохранить чанк
         total_len = sum(len(p["text"]) for p in buffer)
@@ -240,6 +241,16 @@ def _build_chunks(paragraphs: list[dict], source_file: str) -> list[PdfChunk]:
 
     flush_buffer()
     return chunks
+
+
+def _chapter_from_source(source_file: str) -> str:
+    """Infer chapter from docs/explanations filenames such as ru.73_2022.pdf."""
+    name = Path(source_file).name
+    match = re.search(r"(?:^|[._-])ru\.(\d{2})(?:[._-]|$)", name, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    match = re.search(r"(?:^|[._-])(\d{2})(?:[._-]|$)", name)
+    return match.group(1) if match else ""
 
 
 def _classify_text(text: str) -> str:

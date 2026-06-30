@@ -16,6 +16,7 @@ LLM Client — взаимодействие с локальной моделью
 
 from __future__ import annotations
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Optional
@@ -133,9 +134,9 @@ SYSTEM_PROMPT = """Ты — эксперт по классификации то�
 
 
 def classify_with_llm(
-    product_description: str,
-    retrieved_codes: list[dict],
-    retrieved_pdf_chunks: list[dict],
+    product_description: str = "",
+    retrieved_codes: list[dict] | None = None,
+    retrieved_pdf_chunks: list[dict] | None = None,
     model: str = OLLAMA_MODEL,
     extra_context: str = None,
     description: str = None,       # алиас для product_description
@@ -156,6 +157,11 @@ def classify_with_llm(
     # Алиас
     if description is not None and not product_description:
         product_description = description
+    retrieved_codes = retrieved_codes or []
+    retrieved_pdf_chunks = retrieved_pdf_chunks or []
+    if _env_flag("MOCK_LLM"):
+        return _mock_llm_response(product_description, retrieved_codes, retrieved_pdf_chunks)
+
     context  = _build_context(retrieved_codes, retrieved_pdf_chunks)
     if extra_context:
         context = extra_context + "\n\n" + context
@@ -185,6 +191,47 @@ def classify_with_llm(
                 f"Выполните: ollama pull {model}"
             ) from e
         raise
+
+
+def _env_flag(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _mock_llm_response(
+    product_description: str,
+    retrieved_codes: list[dict],
+    retrieved_pdf_chunks: list[dict],
+) -> LLMResponse:
+    """Deterministic dev/test LLM: pick the top retrieved code and report mock reasoning."""
+    if not retrieved_codes:
+        return LLMResponse.needs_clarification(
+            "MOCK_LLM: no retrieved TN VED candidates",
+            ["Build the knowledge base before classification"],
+        )
+
+    top = retrieved_codes[0]
+    code = top.get("code")
+    if not code:
+        return LLMResponse.needs_clarification(
+            "MOCK_LLM: top retrieved candidate has no code",
+            ["Check indexed TN VED payloads"],
+        )
+
+    source_count = len(retrieved_pdf_chunks or [])
+    return LLMResponse(
+        code=code,
+        confidence=0.82,
+        requires_clarification=False,
+        clarification_message=None,
+        missing_information=[],
+        reasoning=(
+            "MOCK_LLM dev-mode response. The top retrieved TN VED code was selected "
+            "to validate backend wiring, evidence assembly, and API response shape. "
+            "This is not real AI classification quality."
+        ),
+        opi_rule_applied="ОПИ 1",
+        raw_response=f"MOCK_LLM selected {code}; pdf_chunks_seen={source_count}; description={product_description[:120]}",
+    )
 
 
 def _build_context(codes: list[dict], pdf_chunks: list[dict]) -> str:

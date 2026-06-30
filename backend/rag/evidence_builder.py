@@ -283,7 +283,7 @@ def _collect_pdf_chunks(chapter: str, retrieved_pdf_chunks: list[dict]) -> list[
             text = item.get("text", "")
             chunks.append(PDFChunk(
                 source_file=item.get("source_file", item.get("source", "unknown")),
-                page=item.get("page", 0),
+                page=item.get("page", item.get("page_num", 0)),
                 chapter=item_chapter,
                 text_excerpt=text[:200],
                 relevance_score=item.get("rrf_score", item.get("score", 0.0)),
@@ -339,7 +339,7 @@ def _extract_notes(
                         note_type="exclusion",
                         text=snippet,
                         applies_to_code=proposed_code if chapter_ref else item_chapter + "xx",
-                        source=f"{source} стр.{item.get('page', '?')}",
+                        source=f"{source} стр.{item.get('page', item.get('page_num', '?'))}",
                     ))
                     break
 
@@ -351,7 +351,7 @@ def _extract_notes(
                         note_type="definition",
                         text=snippet,
                         applies_to_code=proposed_code if chapter_ref else item_chapter + "xx",
-                        source=f"{source} стр.{item.get('page', '?')}",
+                        source=f"{source} стр.{item.get('page', item.get('page_num', '?'))}",
                     ))
                     break
 
@@ -363,7 +363,7 @@ def _extract_notes(
                         note_type="inclusion",
                         text=snippet,
                         applies_to_code=proposed_code if chapter_ref else item_chapter + "xx",
-                        source=f"{source} стр.{item.get('page', '?')}",
+                        source=f"{source} стр.{item.get('page', item.get('page_num', '?'))}",
                     ))
                     break
 

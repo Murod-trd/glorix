@@ -40,7 +40,8 @@ from .validator    import validate_classification, ValidationResult
 # правила вдвое без обоснования. Теперь один источник OPI-вердиктов.
 from .evidence_builder import build_evidence, build_refusal_questions, Evidence
 from .devil_advocate         import check_classification as devil_check, DevilResult
-from .rule_engine            import run_rule_engine, RuleEngineReport, FullOPIReport
+from .opi_checker            import FullOPIReport
+from .rule_engine            import run_rule_engine, RuleEngineReport
 from .product_feature_extractor import extract_features, ProductFeatures
 
 import sys
@@ -111,23 +112,23 @@ class ClassificationResult:
     evidence: Optional[Evidence]
 
     # OPI / Rule Engine
-    opi_report: Optional[FullOPIReport]
+    opi_report: Optional[FullOPIReport] = None
     rule_engine_report: Optional[RuleEngineReport] = None
     product_features: Optional[ProductFeatures] = None
 
     # Аудит второго мнения
-    devil_result: Optional[DevilResult]
+    devil_result: Optional[DevilResult] = None
 
     # Первичная LLM
-    llm_response: Optional[LLMResponse]
-    validation_result: Optional[ValidationResult]
+    llm_response: Optional[LLMResponse] = None
+    validation_result: Optional[ValidationResult] = None
 
     # Метаданные
-    reasoning: str
-    sources_used: list[str]
-    opi_rule_applied: str
-    processing_time_ms: int
-    audit_trail: list[dict]
+    reasoning: str = ""
+    sources_used: list[str] = field(default_factory=list)
+    opi_rule_applied: str = ""
+    processing_time_ms: int = 0
+    audit_trail: list[dict] = field(default_factory=list)
 
     def to_dict(self, include_audit: bool = False) -> dict:
         base = {
@@ -279,18 +280,9 @@ def classify(
         "is_sufficient": evidence.is_sufficient,
     })
 
-    if EVIDENCE_REQUIRED and not evidence.is_sufficient:
-        questions = build_refusal_questions(evidence, codes[:5], description)
-        return _clarification_result(
-            "Недостаточно документальных доказательств для выбранного кода: "
-            + "; ".join(evidence.insufficiency_reasons),
-            questions + evidence.missing_information,
-            top10, evidence, None, None, start_ms, audit
-        )
-
     # ── Шаг 8: Rule Engine (ОПИ 1–6 как Python-объекты) ─────────────────
-    # v5: используется ТОЛЬКО rule_engine.py. opi_checker.py удалён из pipeline.
-    # Причина: см. комментарий к импортам выше.
+    # Run before evidence-gated clarification so /classify/explain still
+    # exposes rule diagnostics for the proposed code.
     rule_engine_report = run_rule_engine(
         proposed_code=proposed_code,
         product_description=description,
@@ -307,6 +299,18 @@ def classify(
         "heuristics_used": rule_engine_report.heuristics_used,
     })
 
+    if EVIDENCE_REQUIRED and not evidence.is_sufficient:
+        questions = build_refusal_questions(evidence, codes[:5], description)
+        return _clarification_result(
+            "Недостаточно документальных доказательств для выбранного кода: "
+            + "; ".join(evidence.insufficiency_reasons),
+            questions + evidence.missing_information,
+            top10, evidence, None, None, start_ms, audit,
+            rule_engine_report=rule_engine_report,
+            product_features=features,
+            llm_response=llm_resp,
+        )
+
     # Rule Engine delta применяется непосредственно к raw_confidence
     adj_confidence_opi = min(1.0, max(0.0,
         raw_confidence + rule_engine_report.total_confidence_delta
@@ -319,7 +323,10 @@ def classify(
             "Rule Engine обнаружил блокирующие проблемы: "
             + "; ".join(rule_engine_report.blocking_issues[:2]),
             questions,
-            top10, evidence, None, None, start_ms, audit
+            top10, evidence, None, None, start_ms, audit,
+            rule_engine_report=rule_engine_report,
+            product_features=features,
+            llm_response=llm_resp,
         )
 
     # ── Шаг 9: Validator ─────────────────────────────────────────────────
@@ -342,7 +349,11 @@ def classify(
         return _clarification_result(
             "Валидация не пройдена: " + "; ".join(validation.issues),
             questions,
-            top10, evidence, None, None, start_ms, audit
+            top10, evidence, None, None, start_ms, audit,
+            rule_engine_report=rule_engine_report,
+            product_features=features,
+            llm_response=llm_resp,
+            validation_result=validation,
         )
 
     adj_confidence = validation.adjusted_confidence
@@ -350,11 +361,12 @@ def classify(
     # ── Шаг 10: Devil Advocate (независимое опровержение) ───────────────
     # Попытаться подключить Ollama клиент для adversarial LLM проверки
     _ollama_client = None
-    try:
-        import ollama as _ollama_mod
-        _ollama_client = _ollama_mod
-    except Exception:
-        logger.warning("Ollama не доступен — devil advocate работает только в статическом режиме")
+    if os.getenv("MOCK_LLM", "").strip().lower() not in {"1", "true", "yes", "on"}:
+        try:
+            import ollama as _ollama_mod
+            _ollama_client = _ollama_mod
+        except Exception:
+            logger.warning("Ollama не доступен — devil advocate работает только в статическом режиме")
 
     devil = devil_check(
         proposed_code=proposed_code,
@@ -378,7 +390,11 @@ def classify(
             "Независимая проверка обнаружила серьёзные противоречия: "
             + "; ".join(devil.reasons_against[:2]),
             questions,
-            top10, evidence, None, devil, start_ms, audit
+            top10, evidence, None, devil, start_ms, audit,
+            rule_engine_report=rule_engine_report,
+            product_features=features,
+            llm_response=llm_resp,
+            validation_result=validation,
         )
 
     # ── Шаг 11: Независимая LLM верификация (при WARN) ────────────────────
@@ -422,7 +438,11 @@ def classify(
             f"(порог {MIN_CONFIDENCE_TO_ANSWER}). "
             f"Проблемы: {'; '.join(devil.reasons_against[:1] + validation.warnings[:1])}",
             questions,
-            top10, evidence, None, devil, start_ms, audit
+            top10, evidence, None, devil, start_ms, audit,
+            rule_engine_report=rule_engine_report,
+            product_features=features,
+            llm_response=llm_resp,
+            validation_result=validation,
         )
 
     # ── Шаг 13: Успешный ответ (Шаг 14 = журнал решений в audit_trail) ──
@@ -564,6 +584,10 @@ def _clarification_result(
     devil: Optional[DevilResult],
     start_ms: int,
     audit: list[dict],
+    rule_engine_report: Optional[RuleEngineReport] = None,
+    product_features: Optional[ProductFeatures] = None,
+    llm_response: Optional[LLMResponse] = None,
+    validation_result: Optional[ValidationResult] = None,
 ) -> ClassificationResult:
     return ClassificationResult(
         code=None,
@@ -574,11 +598,13 @@ def _clarification_result(
         top10_candidates=top10,
         evidence=evidence,
         opi_report=opi_report,
+        rule_engine_report=rule_engine_report,
+        product_features=product_features,
         devil_result=devil,
-        llm_response=None,
-        validation_result=None,
+        llm_response=llm_response,
+        validation_result=validation_result,
         reasoning="",
-        sources_used=[],
+        sources_used=_collect_sources(evidence) if evidence else [],
         opi_rule_applied="",
         processing_time_ms=int(time.time() * 1000) - start_ms,
         audit_trail=audit,

@@ -11,6 +11,7 @@ main.py v3 — FastAPI backend для ТН ВЭД классификатора.
 
 from __future__ import annotations
 import logging
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -46,7 +47,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-REBUILD_TOKEN = "tnved-rebuild-2024"
+REBUILD_TOKEN = os.getenv("REBUILD_TOKEN", "")
 
 
 # ── Pydantic схемы ───────────────────────────────────────────────────────
@@ -114,6 +115,7 @@ class ExplainResponse(BaseModel):
 
     # Шаг 5: TOP-10
     top10_candidates: list[dict] = []
+    sources_used: list[str] = []
 
     # Шаг 6: LLM
     llm_proposed_code: Optional[str] = None
@@ -127,6 +129,7 @@ class ExplainResponse(BaseModel):
     evidence_excel_count: int = 0
     evidence_pdf_count: int = 0
     evidence_notes: list[str] = []
+    evidence: Optional[EvidenceInfo] = None
 
     # Шаг 8: Rule Engine
     rule_engine: Optional[RuleEngineInfo] = None
@@ -336,7 +339,28 @@ async def classify_explain_endpoint(req: ClassifyRequest):
 async def health():
     """Проверка состояния системы."""
     import httpx
-    status: dict = {"status": "ok", "version": "3.0.0", "warnings": []}
+    status: dict = {
+        "status": "ok",
+        "version": "3.0.0",
+        "warnings": [],
+        "app_env": os.getenv("APP_ENV", ""),
+        "mock_embedder": os.getenv("MOCK_EMBEDDER", "").strip().lower() in {"1", "true", "yes", "on"},
+        "mock_llm": os.getenv("MOCK_LLM", "").strip().lower() in {"1", "true", "yes", "on"},
+    }
+
+    backend_dir = Path(__file__).resolve().parent.parent
+    docs_explanations = (backend_dir / "../docs/explanations").resolve()
+    configured_pdf_dirs = []
+    for raw in os.getenv("PDF_DIRS", "").split(","):
+        raw = raw.strip()
+        if not raw:
+            continue
+        path = Path(raw)
+        if not path.is_absolute():
+            path = (backend_dir / path).resolve()
+        configured_pdf_dirs.append(path.resolve())
+    status["docs_explanations_detected"] = docs_explanations.exists() and any(docs_explanations.glob("**/*.pdf"))
+    status["docs_explanations_included"] = docs_explanations in configured_pdf_dirs
 
     # Проверить Ollama
     try:
@@ -358,6 +382,8 @@ async def health():
         client = get_client()
         codes_count = client.count(CODES_COLLECTION).count
         pdf_count   = client.count(PDF_COLLECTION).count
+        status["codes_count"] = codes_count
+        status["pdf_chunks_count"] = pdf_count
         status["qdrant"] = {
             "status": "ok",
             "codes_count": codes_count,
@@ -382,7 +408,7 @@ async def health():
 @app.post("/rebuild")
 async def rebuild_knowledge_base(x_rebuild_token: str = Header(..., alias="X-Rebuild-Token")):
     """Перестроить базу знаний из Excel и PDF-файлов."""
-    if x_rebuild_token != REBUILD_TOKEN:
+    if not REBUILD_TOKEN or x_rebuild_token != REBUILD_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid rebuild token")
 
     build_script = Path(__file__).parent.parent / "build_knowledge_base.py"
@@ -413,7 +439,7 @@ async def run_benchmark_endpoint(
     model: str = "qwen2.5:7b-instruct-q4_K_M",
 ):
     """Запустить benchmark на встроенном наборе тестов."""
-    if x_rebuild_token != REBUILD_TOKEN:
+    if not REBUILD_TOKEN or x_rebuild_token != REBUILD_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid rebuild token")
 
     benchmark_script = Path(__file__).parent.parent / "tests" / "benchmark.py"
@@ -601,6 +627,25 @@ def _result_to_explain_response(result: ClassificationResult) -> ExplainResponse
     ev_excel = len(ev.excel_records) if ev else 0
     ev_pdf = len(ev.pdf_chunks) if ev else 0
     ev_notes = [n.text[:150] for n in (ev.notes_found or [])] if ev else []
+    evidence_info = None
+    if ev:
+        evidence_info = EvidenceInfo(
+            proposed_code=ev.proposed_code,
+            is_sufficient=ev.is_sufficient,
+            evidence_score=round(ev.evidence_score, 3),
+            excel_records=[
+                ExcelRecordInfo(**r.to_dict()) for r in ev.excel_records[:5]
+            ],
+            pdf_chunks=[
+                PDFChunkInfo(**c.to_dict()) for c in ev.pdf_chunks[:5]
+            ],
+            notes_found=[
+                NoteInfo(**n.to_dict()) for n in ev.notes_found[:5]
+            ],
+            rules_applied=ev.rules_applied,
+            insufficiency_reasons=ev.insufficiency_reasons,
+            missing_information=ev.missing_information,
+        )
 
     # Validation
     vr = result.validation_result
@@ -648,6 +693,7 @@ def _result_to_explain_response(result: ClassificationResult) -> ExplainResponse
             "pdf_chunks_found": retrieval_step.get("pdf_chunks_found", 0),
         },
         top10_candidates=[c.to_dict() for c in result.top10_candidates],
+        sources_used=result.sources_used,
 
         # Шаг 6
         llm_proposed_code=llm_code,
@@ -661,6 +707,7 @@ def _result_to_explain_response(result: ClassificationResult) -> ExplainResponse
         evidence_excel_count=ev_excel,
         evidence_pdf_count=ev_pdf,
         evidence_notes=ev_notes[:4],
+        evidence=evidence_info,
 
         # Шаг 8
         rule_engine=re_info,

@@ -12,6 +12,17 @@ dist
 dist-ssr
 *.local
 
+# Python / backend generated files
+__pycache__/
+*.py[cod]
+*.pyc_new
+.pytest_cache/
+.venv/
+backend/.venv/
+qdrant_storage/
+backend/qdrant_storage/
+backend/data/qdrant_storage/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
