@@ -24,6 +24,7 @@ import NotFound from './pages/NotFound';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AccountProvider, useAccountType } from './context/AccountContext';
 import { CartProvider } from './context/CartContext';
+import { AuthProvider } from './context/AuthContext';
 import './index.css';
 
 // Все роуты кроме /account-select и /onboarding закрыты до выбора роли
@@ -75,6 +76,7 @@ function AppLayout() {
 export default function App() {
   return (
     <ErrorBoundary>
+    <AuthProvider>
     <AccountProvider>
     <CartProvider>
     <BrowserRouter>
@@ -86,6 +88,7 @@ export default function App() {
     </BrowserRouter>
     </CartProvider>
     </AccountProvider>
+    </AuthProvider>
     </ErrorBoundary>
   );
 }

@@ -33,3 +33,17 @@ backend/data/qdrant_storage/
 *.njsproj
 *.sln
 *.sw?
+
+# Secrets & local env (PR #2 auth foundation) — keep .env.example tracked
+.env
+.env.local
+.env.*.local
+
+# Local databases (SQLite dev)
+*.db
+*.db-journal
+prisma/dev.db
+prisma/*.db
+
+# Prisma generated client (regenerated via `prisma generate`)
+node_modules/.prisma/
