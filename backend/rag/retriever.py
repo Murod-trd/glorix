@@ -18,8 +18,21 @@ Hybrid Retriever — объединяет семантический (dense) и 
 from __future__ import annotations
 from typing import Optional
 
+import logging
 import numpy as np
-from rank_bm25 import BM25Okapi
+
+# Lazy BM25 import — rank_bm25 — необязательная зависимость.
+# Без неё система работает только на dense-поиске (Qdrant).
+try:
+    from rank_bm25 import BM25Okapi
+    _BM25_AVAILABLE = True
+except Exception:
+    BM25Okapi = None  # type: ignore
+    _BM25_AVAILABLE = False
+    logging.getLogger(__name__).warning(
+        "[Retriever] rank_bm25 не установлен — BM25 sparse search отключён. "
+        "Установите: pip install rank-bm25"
+    )
 
 from ingestion.embedder import embed_query
 from store.qdrant_store import (
@@ -71,11 +84,14 @@ class HybridRetriever:
             if offset is None:
                 break
         self._bm25_codes_meta = all_codes
-        self._bm25_codes = BM25Okapi([
-            self._tokenize(r.get("full_text", "") + " " + r.get("description", ""))
-            for r in all_codes
-        ])
-        print(f"[Retriever] BM25 коды: {len(all_codes)} записей")
+        if _BM25_AVAILABLE and all_codes:
+            self._bm25_codes = BM25Okapi([
+                self._tokenize(r.get("full_text", "") + " " + r.get("description", ""))
+                for r in all_codes
+            ])
+        else:
+            self._bm25_codes = None
+        print(f"[Retriever] BM25 коды: {len(all_codes)} записей (BM25={'ON' if self._bm25_codes else 'OFF'})")
 
         # PDF-чанки
         offset, all_pdf = None, []
@@ -89,11 +105,14 @@ class HybridRetriever:
             if offset is None:
                 break
         self._bm25_pdf_meta = all_pdf
-        self._bm25_pdf = BM25Okapi([
-            self._tokenize(r.get("text", ""))
-            for r in all_pdf
-        ])
-        print(f"[Retriever] BM25 PDF: {len(all_pdf)} записей")
+        if _BM25_AVAILABLE and all_pdf:
+            self._bm25_pdf = BM25Okapi([
+                self._tokenize(r.get("text", ""))
+                for r in all_pdf
+            ])
+        else:
+            self._bm25_pdf = None
+        print(f"[Retriever] BM25 PDF: {len(all_pdf)} записей (BM25={'ON' if self._bm25_pdf else 'OFF'})")
         self._initialized = True
 
     def retrieve(
@@ -132,22 +151,26 @@ class HybridRetriever:
             chapter_filter=None,    # ← То же для PDF.
         )
 
-        # BM25 sparse search
-        query_tokens = self._tokenize(query)
+        # BM25 sparse search (пропускается если rank_bm25 не установлен)
+        sparse_codes, sparse_pdf = [], []
+        if self._bm25_codes is not None or self._bm25_pdf is not None:
+            query_tokens = self._tokenize(query)
 
-        bm25_code_scores = self._bm25_codes.get_scores(query_tokens)
-        top_code_idx = np.argsort(bm25_code_scores)[::-1][:top_k * 2]
-        sparse_codes = [
-            {**self._bm25_codes_meta[i], "bm25_score": float(bm25_code_scores[i])}
-            for i in top_code_idx if bm25_code_scores[i] > 0
-        ]
+        if self._bm25_codes is not None:
+            bm25_code_scores = self._bm25_codes.get_scores(query_tokens)
+            top_code_idx = np.argsort(bm25_code_scores)[::-1][:top_k * 2]
+            sparse_codes = [
+                {**self._bm25_codes_meta[i], "bm25_score": float(bm25_code_scores[i])}
+                for i in top_code_idx if bm25_code_scores[i] > 0
+            ]
 
-        bm25_pdf_scores = self._bm25_pdf.get_scores(query_tokens)
-        top_pdf_idx = np.argsort(bm25_pdf_scores)[::-1][:top_k * 2]
-        sparse_pdf = [
-            {**self._bm25_pdf_meta[i], "bm25_score": float(bm25_pdf_scores[i])}
-            for i in top_pdf_idx if bm25_pdf_scores[i] > 0
-        ]
+        if self._bm25_pdf is not None:
+            bm25_pdf_scores = self._bm25_pdf.get_scores(query_tokens)
+            top_pdf_idx = np.argsort(bm25_pdf_scores)[::-1][:top_k * 2]
+            sparse_pdf = [
+                {**self._bm25_pdf_meta[i], "bm25_score": float(bm25_pdf_scores[i])}
+                for i in top_pdf_idx if bm25_pdf_scores[i] > 0
+            ]
 
         # RRF fusion
         fused_codes = self._rrf_fuse(dense_codes, sparse_codes, "code", top_k * 2)

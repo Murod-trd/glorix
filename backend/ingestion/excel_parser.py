@@ -27,14 +27,25 @@ def parse_excel(filepath: str | Path) -> list[dict]:
     if not filepath.exists():
         raise FileNotFoundError(f"Excel файл не найден: {filepath}")
 
-    # Попробовать все листы, взять первый непустой
+    # Попробовать все листы, взять первый с >100 строками
+    # Если не найден — взять первый непустой (тесты с маленькими фикстурами)
     xl = pd.ExcelFile(filepath)
     df = None
+    fallback_df = None
     for sheet in xl.sheet_names:
         candidate = pd.read_excel(filepath, sheet_name=sheet, header=None, dtype=str)
         if len(candidate) > 100:
             df = candidate
             break
+        elif len(candidate) > 0 and fallback_df is None:
+            fallback_df = candidate
+    if df is None and fallback_df is not None:
+        import logging
+        logging.getLogger(__name__).warning(
+            "[ExcelParser] Лист < 100 строк — используется как fallback (%d строк). "
+            "Для production используйте полную выгрузку ТН ВЭД.", len(fallback_df)
+        )
+        df = fallback_df
     if df is None:
         raise ValueError("Не удалось найти лист с данными ТН ВЭД")
 

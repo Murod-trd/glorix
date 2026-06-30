@@ -175,6 +175,36 @@ def search_pdf_chunks(
     return [{"score": r.score, **r.payload} for r in results]
 
 
+
+def get_health_info(client: QdrantClient) -> dict:
+    """
+    Вернуть статус Qdrant для /health endpoint.
+    Включает: режим (embedded/external), наличие коллекций, счётчики.
+    """
+    qdrant_mode = "embedded" if os.getenv("USE_EMBEDDED_QDRANT", "0") == "1" else "external"
+    info: dict = {"mode": qdrant_mode, "collections": {}}
+
+    existing = {c.name for c in client.get_collections().collections}
+    for name in [COLLECTION_CODES, COLLECTION_PDF]:
+        exists = name in existing
+        entry: dict = {"exists": exists}
+        if exists:
+            try:
+                count = client.count(name).count
+                entry["count"] = count
+            except Exception as e:
+                entry["count_error"] = str(e)
+        info["collections"][name] = entry
+
+    codes_count = info["collections"].get(COLLECTION_CODES, {}).get("count", 0)
+    pdf_count   = info["collections"].get(COLLECTION_PDF,   {}).get("count", 0)
+    info["codes_count"] = codes_count
+    info["pdf_chunks_count"] = pdf_count
+    info["collections_exist"] = all(
+        info["collections"][n]["exists"] for n in [COLLECTION_CODES, COLLECTION_PDF]
+    )
+    return info
+
 def get_collection_stats(client: QdrantClient) -> dict:
     """Статистика коллекций."""
     stats = {}

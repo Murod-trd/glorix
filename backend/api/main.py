@@ -44,7 +44,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+def _get_default_model() -> str:
+    """Взять модель из env OLLAMA_MODEL или из config.DEFAULT_LLM_MODEL."""
+    try:
+        from config import DEFAULT_LLM_MODEL
+        return os.getenv("OLLAMA_MODEL", DEFAULT_LLM_MODEL)
+    except ImportError:
+        return os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct-q4_K_M")
+
 REBUILD_TOKEN = os.getenv("REBUILD_TOKEN", "change-this-token")
+if REBUILD_TOKEN == "change-this-token":
+    logger.warning(
+        "REBUILD_TOKEN не задан в .env — использован небезопасный дефолт. "
+        "Установите REBUILD_TOKEN в .env перед production-деплоем."
+    )
 
 
 # ── Pydantic схемы ───────────────────────────────────────────────────────
@@ -157,7 +171,10 @@ class ClassifyRequest(BaseModel):
     chapter_hint: Optional[str] = Field(None, max_length=2,
                                         description="Подсказка главы (опционально)")
     include_audit: bool = Field(False, description="Включить полный audit trail")
-    model: str = Field("qwen2.5:7b-instruct-q4_K_M", description="LLM модель")
+    model: str = Field(
+        default_factory=lambda: _get_default_model(),
+        description="LLM модель (default: DEFAULT_LLM_MODEL из config или env OLLAMA_MODEL)",
+    )
 
 
 class CandidateInfo(BaseModel):
@@ -353,16 +370,17 @@ async def health():
 
     # Проверить Qdrant
     try:
-        from store.qdrant_store import get_client, COLLECTION_CODES, COLLECTION_PDF
-        client = get_client()
-        codes_count = client.count(COLLECTION_CODES).count
-        pdf_count   = client.count(COLLECTION_PDF).count
-        status["qdrant"] = {
-            "status": "ok",
-            "codes_count": codes_count,
-            "pdf_chunks_count": pdf_count,
-        }
-        if codes_count < 1000:
+        from store.qdrant_store import get_client, get_health_info
+        qdrant_client = get_client()
+        qdrant_info = get_health_info(qdrant_client)
+        codes_count = qdrant_info["codes_count"]
+        pdf_count   = qdrant_info["pdf_chunks_count"]
+        status["qdrant"] = {"status": "ok", **qdrant_info}
+        if not qdrant_info.get("collections_exist"):
+            status["warnings"].append(
+                "Qdrant-коллекции не найдены. Запустите POST /rebuild для индексации."
+            )
+        elif codes_count < 1000:
             status["warnings"].append(
                 f"База кодов мала: {codes_count} записей (ожидается >1000). "
                 "Запустите POST /rebuild"
@@ -409,7 +427,7 @@ async def rebuild_knowledge_base(x_rebuild_token: str = Header(..., alias="X-Reb
 async def run_benchmark_endpoint(
     x_rebuild_token: str = Header(..., alias="X-Rebuild-Token"),
     limit: int = 50,
-    model: str = "qwen2.5:7b-instruct-q4_K_M",
+    model: str = _get_default_model(),
 ):
     """Запустить benchmark на встроенном наборе тестов."""
     if x_rebuild_token != REBUILD_TOKEN:

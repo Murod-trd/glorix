@@ -1,7 +1,6 @@
 """
 LLM Client — взаимодействие с локальной моделью через Ollama. (v2)
 
-Модель: qwen2.5:7b-instruct-q4_K_M
   ~4.7 GB RAM, CPU-friendly, хорошая поддержка русского языка.
 
 Изменения v2:
@@ -18,12 +17,21 @@ from __future__ import annotations
 import json
 import re
 import os
+import logging
 from dataclasses import dataclass, field
 from typing import Optional
+
+logger = logging.getLogger(__name__)
+
 try:
     import ollama
 except ImportError:
-    ollama = None  # type: ignore — Ollama установлена на production сервере
+    ollama = None  # type: ignore
+
+# ── Dev-mode ──────────────────────────────────────────────────────────────
+# MOCK_LLM=1 — не вызывает Ollama, возвращает top-1 кандидат.
+# ЗАПРЕЩЕНО использовать в production.
+MOCK_LLM: bool = os.getenv("MOCK_LLM", "0") == "1"
 
 
 @dataclass
@@ -157,13 +165,22 @@ def classify_with_llm(
     # Алиас
     if description is not None and not product_description:
         product_description = description
+
+    # ── Dev-mode: MOCK_LLM=1 ───────────────────────────────────────────
+    if MOCK_LLM:
+        return _mock_llm_response(product_description, retrieved_codes)
+
     context  = _build_context(retrieved_codes, retrieved_pdf_chunks)
     if extra_context:
         context = extra_context + "\n\n" + context
     user_msg = _build_user_message(product_description, context)
 
     if ollama is None:
-        raise RuntimeError("Пакет ollama не установлен. Установите зависимости: pip install -r requirements.txt; затем запустите Ollama и модель.")
+        raise RuntimeError(
+            "Пакет ollama не установлен. "
+            "Установите зависимости: pip install -r requirements.txt\n"
+            "Или включите dev-mode без Ollama: export MOCK_LLM=1"
+        )
 
     try:
         response = ollama.chat(
@@ -189,6 +206,53 @@ def classify_with_llm(
                 f"Выполните: ollama pull {model}"
             ) from e
         raise
+
+
+
+def _mock_llm_response(
+    product_description: str,
+    retrieved_codes: list[dict],
+) -> "LLMResponse":
+    """
+    MOCK_LLM=1: возвращает top-1 кандидат без вызова Ollama.
+
+    Назначение: проверка pipeline (импорты, сериализация, audit_trail)
+    без запуска тяжёлой ML-модели.
+
+    ЗАПРЕЩЕНО использовать для реальной классификации.
+    Результат НЕ является таможенным решением.
+    """
+    logger.warning(
+        "[LLM] MOCK MODE (MOCK_LLM=1) — реальный Ollama НЕ вызывается. "
+        "НЕ использовать для production."
+    )
+    if not retrieved_codes:
+        return LLMResponse.needs_clarification(
+            "MOCK_LLM=1: нет кандидатов из retriever для mock-ответа.",
+            missing=["Запустите build_knowledge_base.py и добавьте данные."],
+        )
+
+    top = retrieved_codes[0]
+    code = top.get("code") or top.get("payload", {}).get("code", "")
+    desc = top.get("description") or top.get("payload", {}).get("description", "")
+    score = top.get("score", top.get("rrf_score", 0.0))
+
+    mock_reasoning = (
+        f"MOCK_LLM=1: выбран top-1 candidate без вызова Ollama. "
+        f"Не использовать в production.\n"
+        f"Код: {code}, описание: {desc[:120]}, score: {score:.3f}"
+    )
+
+    return LLMResponse(
+        code=code,
+        confidence=min(float(score), 0.60),   # намеренно низкая confidence
+        requires_clarification=False,
+        clarification_message=None,
+        missing_information=[],
+        reasoning=mock_reasoning,
+        opi_rule_applied="MOCK (ОПИ не применялось)",
+        raw_response="[MOCK_LLM=1]",
+    )
 
 
 def _build_context(codes: list[dict], pdf_chunks: list[dict]) -> str:

@@ -40,6 +40,8 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+MOCK_LLM: bool = os.getenv("MOCK_LLM", "0") == "1"
+
 try:
     from config import (
         DEVIL_TEMPERATURE,
@@ -69,6 +71,7 @@ class DevilResult:
     static_checks_passed: bool          # результат статических проверок (без LLM)
     static_issues: list[str]            # проблемы найденные статически
     raw_llm_response: Optional[str] = None
+    llm_check_performed: bool = False  # True если Ollama была вызвана
 
     @property
     def blocks(self) -> bool:
@@ -83,6 +86,7 @@ class DevilResult:
             "confidence_delta": self.confidence_delta,
             "static_checks_passed": self.static_checks_passed,
             "static_issues": self.static_issues,
+            "llm_check_performed": self.llm_check_performed,
         }
 
 
@@ -127,7 +131,22 @@ def check_classification(
             static_issues=static_issues,
         )
 
-    # ── Этап 2: LLM-проверка (если доступна) ────────────────────────
+    # ── Этап 2: LLM-проверка (если доступна и не dev-mode) ─────────
+    if MOCK_LLM:
+        # MOCK_LLM=1 — пропускаем LLM devil advocate (нет Ollama)
+        verdict = "WARN" if not static_passed else "APPROVE"
+        confidence_delta = -WARN_CONFIDENCE_DROP if not static_passed else 0.0
+        return DevilResult(
+            verdict=verdict,
+            reasons_against=static_issues,
+            alternative_code=_find_best_alternative(proposed_code, top_candidates) if not static_passed else None,
+            missing_info=["MOCK_LLM=1 — LLM devil advocate не вызывался"],
+            confidence_delta=confidence_delta,
+            static_checks_passed=static_passed,
+            static_issues=static_issues,
+            llm_check_performed=False,
+        )
+
     if ollama_client is not None:
         llm_result = _run_llm_check(
             proposed_code, product_description,
@@ -159,6 +178,7 @@ def check_classification(
                 static_checks_passed=static_passed,
                 static_issues=static_issues,
                 raw_llm_response=json.dumps(llm_result, ensure_ascii=False)[:500],
+                llm_check_performed=True,
             )
 
     # ── Только статика, LLM недоступна ──────────────────────────────
