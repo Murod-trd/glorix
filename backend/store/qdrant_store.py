@@ -9,6 +9,7 @@ Qdrant Store — векторная база знаний.
 """
 
 from __future__ import annotations
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -20,28 +21,57 @@ from qdrant_client.models import (
 import numpy as np
 import uuid
 
-STORAGE_PATH = Path(__file__).parent.parent.parent / "qdrant_storage"
-
 COLLECTION_CODES = "tnved_codes"
 COLLECTION_PDF = "pdf_chunks"
+CODES_COLLECTION = COLLECTION_CODES
+PDF_COLLECTION = COLLECTION_PDF
 VECTOR_DIM = 768  # multilingual-e5-base
 
 
+def _env_flag(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _backend_dir() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def _resolve_backend_path(value: str | Path) -> Path:
+    path = Path(value)
+    if not path.is_absolute():
+        path = _backend_dir() / path
+    return path.resolve()
+
+
+def get_storage_path() -> Path:
+    configured = os.getenv("QDRANT_PATH")
+    if configured:
+        return _resolve_backend_path(configured)
+    data_dir = _resolve_backend_path(os.getenv("DATA_DIR", "./data"))
+    return data_dir / "qdrant_storage"
+
+
 def get_client() -> QdrantClient:
-    """Получить embedded-клиент Qdrant."""
-    STORAGE_PATH.mkdir(exist_ok=True)
-    return QdrantClient(path=str(STORAGE_PATH))
+    """Получить Qdrant client. Embedded mode is the default for local/dev."""
+    qdrant_url = os.getenv("QDRANT_URL")
+    if qdrant_url and not _env_flag("USE_EMBEDDED_QDRANT"):
+        return QdrantClient(url=qdrant_url)
+
+    storage_path = get_storage_path()
+    storage_path.mkdir(parents=True, exist_ok=True)
+    return QdrantClient(path=str(storage_path))
 
 
 def init_collections(client: QdrantClient, recreate: bool = False):
     """Создать коллекции (или пересоздать при rebuild)."""
-    existing = [c.name for c in client.get_collections().collections]
-
     for name in [COLLECTION_CODES, COLLECTION_PDF]:
-        if name in existing and recreate:
-            client.delete_collection(name)
-            print(f"[Qdrant] Коллекция {name} удалена")
-        if name not in existing or recreate:
+        if recreate:
+            client.recreate_collection(
+                collection_name=name,
+                vectors_config=VectorParams(size=VECTOR_DIM, distance=Distance.COSINE),
+            )
+            print(f"[Qdrant] Коллекция {name} пересоздана (dim={VECTOR_DIM})")
+        elif not client.collection_exists(name):
             client.create_collection(
                 collection_name=name,
                 vectors_config=VectorParams(size=VECTOR_DIM, distance=Distance.COSINE),
@@ -88,7 +118,8 @@ def upsert_pdf_chunks(client: QdrantClient, chunks: list, embeddings: np.ndarray
 
         points = []
         for chunk, vec in zip(batch_chunks, batch_vectors):
-            chunk_id = str(uuid.uuid4())
+            chunk_key = f"{chunk.source_file}|{chunk.page_num}|{chunk.text[:200]}"
+            chunk_id = str(uuid.uuid5(uuid.NAMESPACE_URL, chunk_key))
             points.append(PointStruct(
                 id=chunk_id,
                 vector=vec.tolist(),

@@ -1,238 +1,125 @@
-# AUDIT REPORT — Glorix ТН ВЭД Classifier v7
+# TN VED Backend Audit Report
 
-**Версия:** v7  
-**Дата:** 2026-06-30  
-**Автор:** Murod (murodakbarov40@gmail.com)  
-**Репозиторий:** https://github.com/Murod-trd/glorix
+Date: 2026-06-30
+Repository: Murod-trd/glorix
+Scope: Python FastAPI TN VED backend under `backend/`
 
----
+## Current Result
 
-## 1. Назначение системы
+Dev-mode passed with the full TN VED Excel source and real PDF explanations.
 
-Glorix — система автоматической классификации товаров по кодам ТН ВЭД ЕАЭС (10-значные коды таможенного союза).
+This does not mean production-ready. Real-mode quality is still pending because Ollama and the real SentenceTransformer embedder were not tested in this run.
 
-**Абсолютный запрет:** система не возвращает код, если не уверена в результате.  
-**Цена ошибки:** потенциально миллионы долларов (штрафы, задержание груза, перерасчёт пошлин).
+## Real Data Used
 
----
+- Excel source: `../docs/reference_data/tnved/TWS_TNVED_2026-06-24.xlsx`
+- Excel files discovered: 1
+- Indexed TN VED code records: 13,289
+- PDF source dirs: `./data/pdf,../docs/explanations`
+- PDFs discovered in `../docs/explanations`: 100
+- Extracted PDF chunks before unique Qdrant point storage: 1,708
+- Indexed PDF chunks in Qdrant: 1,694
 
-## 2. Архитектура pipeline (14 шагов)
+`backend/data/excel/mini_tnved.xlsx` and `backend/data/pdf/chapter73_test.pdf` were not present in production `backend/data/` in this workspace. Production data was not copied into `backend/data/excel/`.
 
-```
-input → features → chapter_hint → retrieval → top10 →
-llm → evidence → rule_engine → validation → devil →
-verify → threshold → answer/refuse → journal
-```
+## Backend Checks
 
-Каждый шаг записывается в `audit_trail` с timestamp (`ts_ms`).
+Captured validation output is in `outputs/test_log.txt`.
 
----
+Commands run from `backend/`:
 
-## 3. Изменения v7 (текущая версия)
+- `python -m py_compile api/main.py build_knowledge_base.py rag/*.py store/*.py ingestion/*.py tests/*.py`
+- `python tests/unit_tests.py`
+- `pytest -q`
+- `python -c "import api.main; print('API_IMPORT_OK')"`
 
-### 3.1 Исправлен _opi3b — CONFIRMS (HEURISTIC)
+Results:
 
-**Файл:** `rag/rule_engine.py`
+- Python compile: passed
+- Custom unit tests: 101 passed, 0 failed
+- Pytest: 87 passed, 1 warning
+- API import: `API_IMPORT_OK`
 
-**До (v6):** при наличии маркеров составного товара возвращал `INSUFFICIENT`.  
-**После (v7):** возвращает `CONFIRMS` с `is_heuristic=True` и явным предупреждением.
+The compile command was run with PowerShell-expanded wildcards because Windows PowerShell does not expand `rag/*.py` for Python the same way a POSIX shell does.
 
-```python
-# HEURISTIC: предложенный код принят как код основного компонента.
-# Требует верификации таможенным декларантом.
-verdict=RuleVerdict.CONFIRMS,
-is_heuristic=True,
-confidence_delta=+0.03,
-```
+## Dev-Mode API Proof
 
-**Обоснование:** CONFIRMS означает «правило не отвергает предложенный код».
-При INSUFFICIENT система не могла дать ответ для составных товаров совсем.
-Теперь даёт ответ с явной пометкой об эвристике.
+Captured outputs:
 
-### 3.2 Аннотации HEURISTIC в validator.py
+- Full build log: `outputs/build_knowledge_base.log`
+- `/health`: `outputs/health.json`
+- `/classify/explain`: `outputs/classify_explain.json`
 
-`_check_exclusions`: помечена как эвристика (>=2 общих слова = возможное исключение).  
-`_find_competing_codes`: помечена как эвристика (порог 0.85 — эмпирический).
+Environment used:
 
-### 3.3 Документация ограничений devil_advocate.py
+- `USE_EMBEDDED_QDRANT=1`
+- `MOCK_EMBEDDER=1`
+- `MOCK_LLM=1`
+- `STRICT_BUILD=1`
+- `REQUIRE_EXCEL=1`
+- `REQUIRE_PDF=1`
+- `DATA_DIR=./data`
+- `EXCEL_DIR=../docs/reference_data/tnved`
+- `PDF_DIRS=./data/pdf,../docs/explanations`
+- `EVIDENCE_MIN_SCORE=0.0`
+- `REBUILD_TOKEN=test-token`
+- `APP_ENV=dev`
 
-Добавлен явный docstring: без Ollama модуль выполняет **только статические проверки**.
+API proof result:
 
-### 3.4 Production Artifacts
+- `/health` returned `codes_count=13289`
+- `/health` returned `pdf_chunks_count=1694`
+- `/health` returned `docs_explanations_detected=true`
+- `/health` returned `docs_explanations_included=true`
+- `/classify/explain` returned non-empty `evidence.excel_records`
+- `/classify/explain` returned non-empty `evidence.pdf_chunks`
+- `/classify/explain` returned non-empty `sources_used` with real files from `docs/explanations`
+- `/classify/explain` returned `retrieval_stats.pdf_chunks_found > 0`
+- `/classify/explain` returned `audit_trail`
+- `/classify/explain` returned `rule_engine`
 
-Добавлены: `requirements.txt`, `.env.example`, `start.sh`, `Dockerfile`, `docker-compose.yml`
+## Mock vs Real
 
-### 3.5 Стресс-тест benchmark_stress.py
+Real in this run:
 
-**Файл:** `tests/benchmark_stress.py`
+- Full Excel discovery and parsing
+- Real TN VED records from `TWS_TNVED_2026-06-24.xlsx`
+- Real PDFs from `docs/explanations`
+- PDF text extraction
+- Qdrant embedded storage
+- FastAPI endpoint wiring
+- Evidence assembly from Excel and PDF records
 
-Результаты (150,000 товаров, 27 категорий ТН ВЭД):
+Mock in this run:
 
-| Метрика | Результат |
-|---------|-----------|
-| Товаров прогнано | 150,000 |
-| Ошибок runtime | **0** |
-| Throughput | **3,894 товаров/сек** |
-| Среднее время/товар | 0.20 ms |
-| P99 время/товар | 0.51 ms |
-| Refusal rate | 11.6% |
-| ОПИ 3б CONFIRMS на составных | **100%** |
+- Embeddings (`MOCK_EMBEDDER=1`)
+- LLM classification (`MOCK_LLM=1`)
 
----
+Because mock embeddings and mock LLM are enabled, classification quality is not proven. The dev-mode proof validates ingestion, indexing, retrieval shape, evidence shape, and API wiring only.
 
-## 4. Тестовое покрытие
+## Frontend Integration
 
-| Файл | Тип | Результат |
-|------|-----|-----------|
-| `tests/unit_tests.py` | Кастомный фреймворк | **101/101 PASS** |
-| `tests/test_refusals.py` | pytest | **19/19 PASS** |
-| `tests/test_rule_engine_v2.py` | pytest | **68/68 PASS** |
-| `tests/benchmark_stress.py` | Стресс-тест | **150,000 товаров, 0 ошибок** |
-| **Итого unit** | | **188/188 PASS** |
+Python AI/RAG TN VED backend is not connected to frontend yet. Frontend currently uses Vercel TF-IDF API under `/api/*`.
 
-### Покрытые сценарии отказа (test_refusals.py)
+Inspected files:
 
-- **(а) Галлюцинация LLM:** код не в базе кандидатов → `passed=False`
-- **(б) Низкая уверенность:** `confidence < MIN_CONFIDENCE_TO_ANSWER` → отказ
-- **(в) Недостаточно доказательств:** нет Excel-записей → `is_sufficient=False`
+- `src/utils/tnvedAI.js`
+- `api/classify.js`
+- `api/explain.js`
+- `api/search.js`
+- `api/_lib/engine.js`
+- `vercel.json`
+- `package.json`
 
----
+The current Vercel behavior remains the default. No frontend or Vercel API integration was changed in this stabilization pass.
 
-## 5. Задокументированные ограничения и эвристики
+## Security Notes
 
-### 5.1 Jaccard similarity (ОПИ 1, ОПИ 6)
+- No `.env` file should be committed.
+- Generated Qdrant storage should not be committed.
+- `REBUILD_TOKEN` is environment-driven. An unset or mismatched token rejects rebuild and benchmark endpoints.
+- `.gitignore` includes Python caches, virtualenvs, and Qdrant storage.
 
-```python
-# HEURISTIC: Jaccard similarity не учитывает синонимы и морфологию.
-# "компьютер" ≠ "компьютеры", "болт" ≠ "болтовое соединение".
-# Порог подтверждения: OPI1_JACCARD_CONFIRM_THRESHOLD = 0.30
-```
+## Honest Status
 
-**Риск:** схожие по смыслу, но разные по форме описания могут дать INSUFFICIENT.
-
-### 5.2 Specificity score (ОПИ 3а)
-
-```python
-# HEURISTIC: длина описания и наличие стандартов (ГОСТ, DIN) используются
-# как прокси для "специфичности". Реальная специфичность юридически определяется
-# текстом позиции ТН ВЭД, а не длиной строки.
-```
-
-### 5.3 Материальный приоритет (PFE)
-
-```python
-# HEURISTIC: список MATERIAL_DOMINANT_FUNCTIONS содержит слова (труба, лист,
-# пруток), при которых материал считается определяющим признаком.
-# Список неполный — реальный выбор требует анализа всей позиции ТН ВЭД.
-```
-
-### 5.4 ОПИ 3б — существенный характер (HEURISTIC, v7)
-
-```python
-# HEURISTIC: при наличии маркеров составного товара ("в сборе", "комплект" и др.)
-# предложенный код принимается как код основного компонента.
-# Требует верификации таможенным декларантом.
-# confidence_delta = +0.03 (минимальный)
-```
-
-### 5.5 _check_exclusions (validator.py) — HEURISTIC
-
-```python
-# HEURISTIC: >=2 общих слова (≥4 букв) между описанием и текстом исключения
-# считается "попаданием". Не учитывает синонимы и морфологию.
-```
-
-### 5.6 _find_competing_codes (validator.py) — HEURISTIC
-
-```python
-# HEURISTIC: конкурирующим считается любой код с score >= 0.85 * proposed_score
-# Порог 0.85 эмпирический (COMPETITION_SCORE_RATIO в config.py).
-```
-
-### 5.7 ОПИ 4 и ОПИ 5 — не реализованы
-
-ОПИ 4 требует доступа к решениям ФТС/ВТО по аналогичным товарам (внешняя база).  
-ОПИ 5 требует анализа упаковки, которая не представлена в текущей базе данных.
-
-Оба правила возвращают `RuleVerdict.SKIPPED` с явной документацией причины.
-
-### 5.8 Морфология
-
-Токенайзер не использует стемминг или лемматизацию. Планируется интеграция  
-с pymorphy2 в v8.
-
----
-
-## 6. Константы конфигурации (config.py)
-
-| Константа | Значение | Тип | Описание |
-|-----------|----------|-----|---------|
-| `MIN_CONFIDENCE_TO_ANSWER` | 0.45 | HEURISTIC | Порог уверенности для ответа |
-| `MIN_EVIDENCE_SCORE` | 0.30 | HEURISTIC | Минимальный score доказательств |
-| `MIN_EXCEL_RECORDS` | 1 | Fixed | Минимум Excel-записей |
-| `OPI1_JACCARD_CONFIRM_THRESHOLD` | 0.30 | HEURISTIC | Порог Jaccard для ОПИ 1 |
-| `COMPETITION_SCORE_RATIO` | 0.85 | HEURISTIC | Порог конкурирующих кодов |
-| `EVIDENCE_WEIGHTS["excel"]` | 0.40 | HEURISTIC | Вес Excel-доказательств |
-| `EVIDENCE_WEIGHTS["pdf"]` | 0.30 | HEURISTIC | Вес PDF-доказательств |
-| `EVIDENCE_WEIGHTS["notes"]` | 0.15 | HEURISTIC | Вес примечаний |
-| `EVIDENCE_WEIGHTS["rank"]` | 0.15 | HEURISTIC | Вес позиции в рейтинге |
-
----
-
-## 7. Запрещённые практики (архитектурные инварианты)
-
-1. **Нет if/else/regex/keyword как основного метода** классификации  
-2. **Нет обращения к OpenAI API или Claude API** — только локальная модель Ollama  
-3. **Нет ответа при недостаточных данных** — система отказывает, а не угадывает  
-4. **Нет кода вне базы кандидатов** — validator блокирует галлюцинации LLM  
-5. **Нет хардкодированных весов** — все константы только в config.py
-
----
-
-## 8. Production Checklist
-
-- [ ] Qdrant запущен и доступен (проверить через `/healthz`)
-- [ ] Ollama запущен с моделью `qwen2.5:7b-instruct-q4_K_M`
-- [ ] Excel-база загружена (≥13,000 кодов)
-- [ ] PDF-нормативы проиндексированы (≥100 документов)
-- [ ] `.env` заполнен (скопировать из `.env.example`)
-- [ ] Прогнан `benchmark_stress.py 1000` → 0 ошибок
-- [ ] Запущены `pytest tests/test_refusals.py tests/test_rule_engine_v2.py` → 87/87 PASS
-- [ ] Первый Human-in-the-Loop прогон на 50 реальных товарах
-- [ ] Настроен мониторинг refusal_rate (алерт при > 30%)
-
----
-
-## 9. Стресс-тест результаты (v7)
-
-```
-Тест: 150,000 синтетических товаров × 27 категорий ТН ВЭД
-Окружение: CPython 3.11, без Ollama (mock LLM), без Qdrant
-
-Throughput:    3,894 товаров/сек
-Avg latency:   0.20 ms/товар
-P99 latency:   0.51 ms/товар
-Runtime errors: 0 / 150,000
-
-Refusal rate:  11.6%  (нет Excel/PDF в mock → ожидаемо)
-ОПИ 3б:
-  - Составных товаров: 200 из 150,000 (0.13%)
-  - CONFIRMS (heuristic): 200/200 (100%)  ← v7 fix
-
-В продакшне с реальными данными:
-  - Refusal rate ожидается 5–15%
-  - Throughput: ~100–300 товаров/сек (ограничен Ollama)
-```
-
----
-
-## 10. Версионная история
-
-| Версия | Ключевые изменения |
-|--------|-------------------|
-| v1-v2 | Базовая RAG-классификация |
-| v3 | evidence_builder, devil_advocate, opi_checker |
-| v4 | rule_engine.py с явными вердиктами ОПИ 1-6 |
-| v5 | 14-шаговый pipeline, Refusal Policy, validator |
-| v6 | EVIDENCE_WEIGHTS в config, opi_checker→stub, timestamps, новые тесты |
-| **v7** | **_opi3b CONFIRMS, HEURISTIC annotations, стресс-тест 150k, production artifacts** |
+TN VED backend is ready for external audit in dev-mode with full Excel and real PDFs. Real-mode quality remains pending.

@@ -18,6 +18,27 @@ Changelog v6:
 """
 
 from __future__ import annotations
+import os
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 1. ПОРОГИ УВЕРЕННОСТИ
@@ -25,14 +46,14 @@ from __future__ import annotations
 
 # Минимальная уверенность для возврата кода пользователю.
 # Ниже — всегда ОТКАЗ + уточняющие вопросы.
-MIN_CONFIDENCE_TO_ANSWER: float = 0.45
+MIN_CONFIDENCE_TO_ANSWER: float = _env_float("MIN_CONFIDENCE_TO_ANSWER", 0.45)
 
 # Минимальный evidence score (0..1) для продолжения классификации.
 # Ниже — ОТКАЗ с указанием недостающих доказательств.
-MIN_EVIDENCE_SCORE: float = 0.30
+MIN_EVIDENCE_SCORE: float = _env_float("EVIDENCE_MIN_SCORE", 0.30)
 
 # Минимальное кол-во Excel-записей для предложенного кода.
-MIN_EXCEL_RECORDS: int = 1
+MIN_EXCEL_RECORDS: int = _env_int("MIN_EXCEL_RECORDS", 1)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
