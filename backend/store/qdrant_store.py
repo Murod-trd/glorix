@@ -3,7 +3,7 @@ Qdrant Store — векторная база знаний.
 
 Две коллекции:
   tnved_codes  — коды ТН ВЭД из Excel (13 289 записей)
-  pdf_chunks   — смысловые блоки из PDF-пояснений (~100 000–300 000 записей)
+  pdf_chunks   — смысловые блоки из PDF-пояснений (actual count depends on PDF extraction settings and source files.)
 
 Режим: embedded (файлы в папке qdrant_storage, без Docker).
 """

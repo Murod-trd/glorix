@@ -55,12 +55,4 @@ Do not remove the Vercel API. Any future Python backend integration should be op
 
 ## Publish Status
 
-This environment has no local `git` or `gh` command available. Earlier GitHub connector branch creation for `codex/tnved-stabilization` returned 403 `Resource not accessible by integration`.
-
-If publishing is retried, use:
-
-- branch: `codex/tnved-stabilization`
-- commit message: `chore: stabilize TN VED backend with full reference data`
-- base branch: `main`
-
-Do not push directly to `main`.
+PR #1 exists, branch `codex/tnved-stabilization`, commit `e22ec87826fea8d2a8154c507f447423accb8f4c`, base `main`, mergeable `true`, ready for review, changed files 15, main not touched.
