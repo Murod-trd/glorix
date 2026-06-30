@@ -1,0 +1,87 @@
+// Glorix — Backend Auth & Database Foundation (PR #2)
+// Dev: SQLite (zero-config). Production: switch `provider` to "postgresql"
+// and set DATABASE_URL to an external Postgres. See docs/BACKEND_AUTH_FOUNDATION.md.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  // Default/primary role for the user (membership roles are per-company).
+  role         String   @default("owner")
+  status       String   @default("active") // active | disabled | pending
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships  Membership[]
+  auditLogs    AuditLog[]
+  createdTenders Tender[] @relation("TenderCreatedBy")
+}
+
+model Company {
+  id                 String   @id @default(cuid())
+  name               String
+  country            String?
+  // Stored as taxId; registrationNumber is an accepted alias at the API layer.
+  taxId              String?
+  companyType        String   @default("buyer")       // buyer | supplier | both
+  verificationStatus String   @default("unverified")  // unverified | pending | verified | rejected
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  memberships        Membership[]
+  tenders            Tender[] @relation("TenderOwnerCompany")
+}
+
+model Membership {
+  id        String   @id @default(cuid())
+  userId    String
+  companyId String
+  role      String   @default("owner") // owner | admin | procurement_manager | sales_manager | viewer
+  createdAt DateTime @default(now())
+
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([companyId])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  action      String
+  entityType  String
+  entityId    String?
+  metadata    String?  // JSON-encoded string
+  createdAt   DateTime @default(now())
+
+  actor       User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+}
+
+// Placeholder ONLY. Full tender system is NOT implemented in this PR.
+model Tender {
+  id              String   @id @default(cuid())
+  ownerCompanyId  String
+  createdByUserId String
+  title           String
+  status          String   @default("draft")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  ownerCompany    Company  @relation("TenderOwnerCompany", fields: [ownerCompanyId], references: [id], onDelete: Cascade)
+  createdBy       User     @relation("TenderCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([ownerCompanyId])
+}
