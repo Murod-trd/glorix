@@ -141,6 +141,9 @@ class ExplainResponse(BaseModel):
     evidence_excel_count: int = 0
     evidence_pdf_count: int = 0
     evidence_notes: list[str] = Field(default_factory=list)
+    evidence_threshold_used: float = 0.3
+    evidence_threshold_source: str = "config"
+    evidence_warnings: list[str] = Field(default_factory=list)
 
     # Шаг 8: Rule Engine
     rule_engine: Optional[RuleEngineInfo] = None
@@ -204,6 +207,8 @@ class PDFChunkInfo(BaseModel):
     chapter: str
     text_excerpt: str
     relevance_score: float
+    text_quality_score: Optional[float] = None
+    text_quality_warning: Optional[str] = None
 
 
 class NoteInfo(BaseModel):
@@ -394,6 +399,62 @@ async def health():
     except Exception as e:
         status["qdrant"] = {"status": "error", "error": str(e)}
         status["warnings"].append(f"Qdrant: {e}")
+
+    # ── data_sources: покажи реальные источники данных ───────────────
+    from pathlib import Path as _Path
+    _data_dir   = _Path(os.getenv("DATA_DIR", _Path(__file__).parent.parent / "data")).resolve()
+    _excel_dir  = _Path(os.getenv("EXCEL_DIR", _data_dir / "excel")).resolve()
+    _pdf_dirs_env = os.getenv("PDF_DIRS", "").strip()
+    _pdf_dir_env  = os.getenv("PDF_DIR", "").strip()
+    if _pdf_dirs_env:
+        _pdf_dirs = [_Path(d.strip()) for d in _pdf_dirs_env.split(",") if d.strip()]
+    elif _pdf_dir_env:
+        _pdf_dirs = [_Path(_pdf_dir_env)]
+    else:
+        _pdf_dirs = [_data_dir / "pdf"]
+
+    _docs_expl = _Path(__file__).parent.parent.parent / "docs" / "explanations"
+    _docs_expl_detected = _docs_expl.exists()
+    _docs_expl_included = _docs_expl_detected and (
+        _docs_expl.resolve() in [d.resolve() for d in _pdf_dirs]
+    )
+
+    _excel_files = sorted(_excel_dir.glob("*.xlsx")) + sorted(_excel_dir.glob("*.xls")) if _excel_dir.exists() else []
+    _pdf_files: list = []
+    for _d in _pdf_dirs:
+        if _d.exists():
+            _pdf_files.extend(sorted(_d.glob("**/*.pdf")))
+
+    status["data_sources"] = {
+        "excel_dirs": [str(_excel_dir)],
+        "pdf_dirs": [str(d) for d in _pdf_dirs],
+        "excel_files_found": len(_excel_files),
+        "pdf_files_found": len(_pdf_files),
+        "docs_explanations_detected": _docs_expl_detected,
+        "docs_explanations_included": _docs_expl_included,
+    }
+
+    if _docs_expl_detected and not _docs_expl_included:
+        status["warnings"].append(
+            f"docs/explanations обнаружен ({len(list(_docs_expl.glob('**/*.pdf')))} PDF), "
+            "но НЕ включён в PDF_DIRS. Запустите build с PDF_DIRS=...,docs/explanations"
+        )
+
+    # ── evidence_threshold ────────────────────────────────────────────
+    try:
+        from rag.evidence_builder import MIN_EVIDENCE_SCORE as _et
+        _threshold_overridden = os.getenv("EVIDENCE_MIN_SCORE") is not None
+        status["evidence"] = {
+            "threshold_used": round(_et, 3),
+            "threshold_source": "env:EVIDENCE_MIN_SCORE" if _threshold_overridden else "config",
+        }
+        if _threshold_overridden:
+            status["warnings"].append(
+                f"Evidence threshold снижен через env EVIDENCE_MIN_SCORE={_et:.2f}. "
+                "Это dev/test режим, не production."
+            )
+    except Exception:
+        pass
 
     return status
 
@@ -695,6 +756,15 @@ def _result_to_explain_response(result: ClassificationResult) -> ExplainResponse
         evidence_excel_count=ev_excel,
         evidence_pdf_count=ev_pdf,
         evidence_notes=ev_notes[:4],
+        evidence_threshold_used=round(__import__("rag.evidence_builder", fromlist=["MIN_EVIDENCE_SCORE"]).MIN_EVIDENCE_SCORE, 3),
+        evidence_threshold_source="env:EVIDENCE_MIN_SCORE" if os.getenv("EVIDENCE_MIN_SCORE") else "config",
+        evidence_warnings=(
+            [f"pdf_chunks_found=0 — документальная проверка по PDF отсутствует. "
+             "Классификация основана только на Excel-данных."] if ev_pdf == 0 else []
+        ) + (
+            [f"Evidence threshold снижен через env EVIDENCE_MIN_SCORE={os.getenv('EVIDENCE_MIN_SCORE')}. "
+             "Dev/test режим."] if os.getenv("EVIDENCE_MIN_SCORE") else []
+        ),
 
         # Шаг 8
         rule_engine=re_info,

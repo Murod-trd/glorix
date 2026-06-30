@@ -35,6 +35,12 @@ except ImportError:
     MIN_EVIDENCE_SCORE = 0.30
     EVIDENCE_WEIGHTS = {"excel": 0.40, "pdf": 0.30, "notes": 0.15, "rank": 0.15}  # MUST match config.py
 
+# Env var EVIDENCE_MIN_SCORE overrides config (for dev-mode with small KB)
+# Same variable must be used in classifier.py so both agree on the threshold.
+_ENV_MIN_SCORE = os.getenv("EVIDENCE_MIN_SCORE")
+if _ENV_MIN_SCORE is not None:
+    MIN_EVIDENCE_SCORE = float(_ENV_MIN_SCORE)
+
 # PDF не обязательны (база может быть пустой) — только предупреждение
 MIN_PDF_CHUNKS = 0
 WARN_PDF_CHUNKS = 1
@@ -68,14 +74,21 @@ class PDFChunk:
     text_excerpt: str       # первые 200 символов
     relevance_score: float
 
+    text_quality_score: float = 1.0     # 0.0..1.0 из pdf_extractor
+    text_quality_warning: str = ""
+
     def to_dict(self) -> dict:
-        return {
+        d = {
             "source_file": self.source_file,
             "page": self.page,
             "chapter": self.chapter,
             "text_excerpt": self.text_excerpt[:200],
             "relevance_score": round(self.relevance_score, 4),
+            "text_quality_score": round(self.text_quality_score, 3),
         }
+        if self.text_quality_warning:
+            d["text_quality_warning"] = self.text_quality_warning
+        return d
 
 
 @dataclass
@@ -287,6 +300,8 @@ def _collect_pdf_chunks(chapter: str, retrieved_pdf_chunks: list[dict]) -> list[
                 chapter=item_chapter,
                 text_excerpt=text[:200],
                 relevance_score=item.get("rrf_score", item.get("score", 0.0)),
+                text_quality_score=item.get("text_quality_score", 1.0),
+                text_quality_warning=item.get("text_quality_warning", ""),
             ))
     # Сортировать по релевантности
     chunks.sort(key=lambda c: -c.relevance_score)

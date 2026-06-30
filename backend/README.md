@@ -1,197 +1,170 @@
-# Glorix v7 — Классификатор ТН ВЭД ЕАЭС (локальный, без внешних API)
+# Glorix — Классификатор ТН ВЭД ЕАЭС v7
 
-Инструмент для классификации товаров по ТН ВЭД ЕАЭС на основе локальной LLM и векторного поиска.
-
-**Важно:** Система является инструментом помощи декларанту, а не заменой сертифицированного таможенного брокера. Финальное решение о классификации принимает человек. Цена ошибки — штрафы и задержание груза.
-
----
-
-## Что система делает
-
-- Принимает текстовое описание товара
-- Находит релевантные коды ТН ВЭД в вашей Excel-базе (векторный + BM25 поиск)
-- Проверяет соответствие по PDF-пояснениям к ТН ВЭД (если загружены)
-- Применяет правила ОПИ 1–6 (программно, с явной маркировкой эвристик)
-- Запускает независимую проверку (Devil Advocate)
-- Возвращает код с уверенностью, обоснованием и audit trail
-
-## Что система НЕ делает
-
-Читайте `LIMITATIONS_AND_RISKS.md` полностью перед production-использованием.
+**Локальная AI-система** классификации товаров по кодам ТН ВЭД ЕАЭС.
+Работает полностью офлайн — без OpenAI API, без Claude API, без внешних сервисов.
 
 ---
 
-## Системные требования
+## Архитектура
 
-| Компонент | Минимум |
-|-----------|---------|
-| Python | 3.10+ |
-| RAM | 8 ГБ (для sentence-transformers) |
-| Диск | 10+ ГБ (модели + Qdrant) |
-| Ollama | запущен локально |
-| Модель | qwen2.5:7b-instruct-q4_K_M (~4.7 ГБ) |
+```
+Описание товара
+     ↓
+[1] Извлечение признаков (LLM)
+[2] Hint главы ТН ВЭД
+[3] Retrieval из Qdrant (Excel + PDF)
+[4] TOP-10 кандидатов (RRF)
+[5] LLM-классификация с OPI
+[6] Сборка доказательств (Evidence First)
+[7] Rule Engine (ОПИ 1–6)
+[8] Validator (OPI/GRI)
+[9] Devil Advocate
+[10] Независимая верификация
+[11] Порог уверенности → ответ / отказ
+[12] Журнал аудита
+```
+
+**Evidence First:** система ЗАПРЕЩЕНА возвращать код если `evidence.evidence_score < threshold`.
 
 ---
 
-## Быстрый старт
+## Требования
 
-### 1. Установить зависимости
+- Python 3.10+
+- [Ollama](https://ollama.com/) + модель `qwen2.5:7b-instruct-q4_K_M`
+- ~8 GB RAM (для Ollama)
 
 ```bash
-cd backend
 pip install -r requirements.txt
-```
-
-### 2. Скопировать и настроить .env
-
-```bash
-cp .env.example .env
-# Отредактировать .env: задать REBUILD_TOKEN, пути к данным
-```
-
-### 3. Установить Ollama и скачать модель
-
-```bash
-# Установка Ollama: https://ollama.com/download
 ollama pull qwen2.5:7b-instruct-q4_K_M
 ```
 
-### 4. Положить данные в папку data/
+---
 
+## Данные (ВАЖНО)
+
+**`data/` — пустая директория по умолчанию.** Тестовые файлы хранятся только в `tests/fixtures/`.
+
+Вам нужно добавить реальные данные:
+
+### Excel с кодами ТН ВЭД
 ```
-data/
-  excel/   ← Excel-файлы выгрузки ТН ВЭД (одна колонка кодов + описание)
-  pdf/     ← PDF-пояснения к ТН ВЭД (опционально)
+data/excel/tnved_full.xlsx   ← реальный Excel (13 289+ записей)
 ```
+Источник: ФТС России или ЕЭК ЕАЭС (официальный Excel ТН ВЭД).
 
-### 5. Проиндексировать базу знаний
-
-```bash
-python build_knowledge_base.py
+### PDF-пояснения ЕЭК
 ```
-
-### 6. Запустить API
-
-```bash
-USE_EMBEDDED_QDRANT=1 uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+docs/explanations/ru.01_2022.pdf   ← Глава 01
+docs/explanations/ru.02_2022.pdf   ← Глава 02
+...
+docs/explanations/ru.97_2022.pdf   ← Глава 97
 ```
-
-### 7. Проверить
-
-```bash
-curl http://localhost:8000/health
-
-curl -X POST http://localhost:8000/classify/explain \
-  -H "Content-Type: application/json" \
-  -d '{"description": "Болт М10x40 ГОСТ 7798 стальной оцинкованный", "include_audit": true}'
-```
+100 файлов от ЕЭК ЕАЭС (пояснения к ТН ВЭД ЕАЭС, 2022).
 
 ---
 
-## Dev-mode (без Ollama и sentence-transformers)
-
-Для проверки pipeline без тяжёлых ML-зависимостей:
+## Построение базы знаний
 
 ```bash
-export MOCK_EMBEDDER=1   # mock-эмбеддинги (SHA-256 хэш)
-export MOCK_LLM=1        # top-1 candidate без вызова Ollama
-export USE_EMBEDDED_QDRANT=1
-
+# Без PDF (только Excel):
 python build_knowledge_base.py
-uvicorn api.main:app --port 8000
 
-curl -X POST http://localhost:8000/classify \
-  -H "Content-Type: application/json" \
-  -d '{"description": "ноутбук портативный 15 дюймов"}'
+# С PDF-пояснениями (рекомендуется):
+export PDF_DIRS=./data/pdf,./docs/explanations
+python build_knowledge_base.py
 ```
 
-**MOCK-режим НЕ проверяет качество классификации.** В ответе будет код, но он не является таможенным решением.
+Что делает:
+- Парсит все `.xlsx` из `EXCEL_DIR` (default: `data/excel/`)
+- Читает все `.pdf` из `PDF_DIRS` рекурсивно
+- Строит multilingual-e5-base embeddings
+- Сохраняет в Qdrant embedded (`qdrant_storage/`)
+
+**Время выполнения (CPU):** ~1 час (Excel + 100 PDF).
+
+---
+
+## Запуск API
+
+```bash
+uvicorn api.main:app --host 0.0.0.0 --port 8000
+```
+
+Эндпоинты:
+- `POST /classify` — классификация товара
+- `POST /classify/explain` — с полным audit trail
+- `GET /health` — статус системы
+- `POST /rebuild` — переиндексация
 
 ---
 
 ## Переменные окружения
 
-| Переменная | По умолчанию | Описание |
-|-----------|-------------|---------|
-| `USE_EMBEDDED_QDRANT` | `0` | `1` = встроенный Qdrant (без Docker) |
-| `QDRANT_STORAGE_PATH` | `./qdrant_storage` | Путь к embedded Qdrant |
+| Переменная | Значение по умолчанию | Описание |
+|---|---|---|
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Адрес Ollama |
+| `OLLAMA_MODEL` | `qwen2.5:7b-instruct-q4_K_M` | Модель Ollama |
+| `DATA_DIR` | `./data` | Корневая папка данных |
+| `EXCEL_DIR` | `$DATA_DIR/excel` | Папка с Excel |
+| `PDF_DIRS` | `$DATA_DIR/pdf` | PDF-директории (через запятую) |
+| `USE_EMBEDDED_QDRANT` | `0` | `1` = встроенный Qdrant |
 | `QDRANT_HOST` | `localhost` | Хост внешнего Qdrant |
 | `QDRANT_PORT` | `6333` | Порт внешнего Qdrant |
-| `OLLAMA_MODEL` | `qwen2.5:7b-instruct-q4_K_M` | LLM модель |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Адрес Ollama |
-| `DATA_DIR` | `./data` | Корневая папка данных |
-| `EXCEL_DIR` | `./data/excel` | Excel-файлы ТН ВЭД |
-| `PDF_DIR` | `./data/pdf` | PDF-пояснения |
-| `REBUILD_TOKEN` | ⚠️ **задать обязательно** | Токен для POST /rebuild |
-| `MOCK_EMBEDDER` | `0` | `1` = mock-эмбеддинги (dev only) |
-| `MOCK_LLM` | `0` | `1` = mock LLM без Ollama (dev only) |
-| `CORS_ALLOW_ORIGINS` | `http://localhost:5173,...` | Разрешённые origins |
+| `EVIDENCE_MIN_SCORE` | `0.3` | Порог достаточности доказательств |
+
+### Для разработки (без Ollama/реальных данных)
+```bash
+export MOCK_LLM=1
+export MOCK_EMBEDDER=1
+export USE_EMBEDDED_QDRANT=1
+export EVIDENCE_MIN_SCORE=0.1
+```
 
 ---
 
-## API Endpoints
-
-| Метод | URL | Описание |
-|-------|-----|---------|
-| `GET` | `/health` | Статус Qdrant, Ollama, коллекций |
-| `POST` | `/classify` | Классификация (краткий ответ) |
-| `POST` | `/classify/audit` | То же + полный audit_trail |
-| `POST` | `/classify/explain` | Полный журнал всех шагов pipeline |
-| `POST` | `/rebuild` | Пересобрать базу знаний (требует X-Rebuild-Token) |
-
----
-
-## Запуск тестов
+## Тесты
 
 ```bash
-# Все тесты в dev-mode (не требуют Ollama)
-MOCK_LLM=1 MOCK_EMBEDDER=1 USE_EMBEDDED_QDRANT=1 \
-  python -m pytest tests/test_refusals.py tests/test_rule_engine_v2.py tests/test_e2e_fixture.py -v
+# Dev-mode (без Ollama, с тестовыми данными):
+MOCK_LLM=1 MOCK_EMBEDDER=1 USE_EMBEDDED_QDRANT=1 EVIDENCE_MIN_SCORE=0.1 \
+  pytest tests/ -x -q
 
-# Unit-тесты (чистые, без ML)
-python tests/unit_tests.py
-
-# Контрактные тесты API (требуют fastapi[testclient] + httpx)
-MOCK_LLM=1 MOCK_EMBEDDER=1 \
-  python -m pytest tests/test_api_contract.py -v
+# Бенчмарк с реальными кейсами:
+python tests/benchmark.py --cases tests/real_cases_template.xlsx
 ```
 
 ---
 
-## Структура проекта
+## Статус
 
-```
-backend/
-  api/main.py              — FastAPI endpoints
-  rag/
-    classifier.py          — 14-шаговый pipeline
-    llm_client.py          — Ollama client + MOCK_LLM
-    retriever.py           — Hybrid retriever (dense + BM25)
-    evidence_builder.py    — Сборка доказательной базы
-    devil_advocate.py      — Независимая проверка
-    validator.py           — Валидация кода кандидата
-    rule_engine.py         — Программные правила ОПИ 1–6
-  ingestion/
-    excel_parser.py        — Парсер Excel ТН ВЭД
-    pdf_extractor.py       — Извлечение чанков из PDF
-    embedder.py            — sentence-transformers + MOCK_EMBEDDER
-  store/qdrant_store.py    — Qdrant client (embedded/external)
-  config.py                — Константы и веса
-  build_knowledge_base.py  — Индексация данных
-  tests/
-    test_e2e_fixture.py    — E2E тесты на mock-данных
-    test_api_contract.py   — Контракт API
-    test_refusals.py       — Тесты политики отказа
-    test_rule_engine_v2.py — Тесты Rule Engine
-```
+| Режим | Статус |
+|---|---|
+| Dev-mode (MOCK_LLM=1, MOCK_EMBEDDER=1) | ✅ Пройден, 127/127 тестов |
+| Real-mode (Ollama + реальный Excel + PDF) | ⏳ Pending (требует Ollama + данные) |
 
 ---
 
-## Честный ответ на вопрос о PDF
+## Ограничения
 
-**Да**, система читает PDF пользователя в `/classify/explain` — если:
-1. PDF файлы помещены в `data/pdf/`
-2. Запущен `python build_knowledge_base.py` после добавления PDF
-3. В ответе `/health` поле `qdrant.pdf_chunks_count > 0`
+Подробно: [LIMITATIONS_AND_RISKS.md](LIMITATIONS_AND_RISKS.md)
 
-**Нет (только Excel)**, если `pdf_chunks_count = 0` в `/health`. В этом случае поле `evidence.pdf_chunks` в ответе будет пустым, а `audit_trail[step=retrieval].pdf_chunks_found = 0`.
+Ключевые ограничения:
+- Real-mode не верифицирован без Ollama и реального Excel
+- `text_quality_score < 0.40` — PDF-чанки с нечитаемым текстом отбраковываются
+- Evidence threshold по умолчанию `0.30` — не откалиброван на реальных данных
+- LLM (qwen2.5:7b) может галлюцинировать; система блокирует вывод без доказательств
+
+---
+
+## Docker
+
+```bash
+# Требует Ollama на хосте
+docker build -t glorix-backend .
+docker run -p 8000:8000 \
+  -e OLLAMA_BASE_URL=http://host.docker.internal:11434 \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/qdrant_storage:/app/qdrant_storage \
+  glorix-backend
+```

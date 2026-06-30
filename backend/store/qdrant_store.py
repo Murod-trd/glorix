@@ -126,6 +126,8 @@ def upsert_pdf_chunks(client: QdrantClient, chunks: list, embeddings: np.ndarray
                     "chapter": chunk.chapter,
                     "section": chunk.section,
                     "heading": chunk.heading,
+                    "text_quality_score": getattr(chunk, "text_quality_score", 1.0),
+                    "text_quality_warning": getattr(chunk, "text_quality_warning", ""),
                 },
             ))
         client.upsert(collection_name=COLLECTION_PDF, points=points)

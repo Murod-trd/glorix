@@ -65,9 +65,8 @@ except ImportError:
 # Флаги поведения (не меняются без пересмотра архитектуры)
 DEVIL_BLOCK_OVERRIDE = True   # devil BLOCK всегда = отказ
 EVIDENCE_REQUIRED    = True   # недостаточные доказательства = отказ
-# В dev-режиме (MOCK_LLM=1) можно снизить порог через EVIDENCE_MIN_SCORE (default 0.3)
-import os as _os
-_EVIDENCE_MIN_SCORE  = float(_os.getenv("EVIDENCE_MIN_SCORE", "0.3"))
+# Единый источник truth для evidence threshold — из evidence_builder (читает env EVIDENCE_MIN_SCORE)
+from .evidence_builder import MIN_EVIDENCE_SCORE as _EVIDENCE_MIN_SCORE
 
 
 # ── Типы данных ──────────────────────────────────────────────────────────
