@@ -7,3 +7,4 @@ data/
 *.pyc_new
 .pytest_cache/
 stress_results.json
+qdrant_storage/

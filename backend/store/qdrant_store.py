@@ -27,20 +27,36 @@ COLLECTION_CODES = "tnved_codes"
 COLLECTION_PDF = "pdf_chunks"
 VECTOR_DIM = 768  # multilingual-e5-base
 
+_CLIENT: QdrantClient | None = None
+_CLIENT_KEY: tuple | None = None
+
 
 def get_client() -> QdrantClient:
-    """Получить Qdrant-клиент.
+    """Получить Qdrant-клиент (singleton для embedded-режима).
 
-    USE_EMBEDDED_QDRANT=1 — локальное файловое хранилище.
-    Иначе используется внешний Qdrant по QDRANT_HOST/QDRANT_PORT.
+    В embedded-режиме Qdrant local storage не допускает несколько клиентов
+    к одной папке внутри одного процесса. Поэтому клиент кэшируется как
+    singleton. Для concurrent/multi-process deployment используйте внешний
+    Qdrant server (USE_EMBEDDED_QDRANT=0).
     """
-    if os.getenv("USE_EMBEDDED_QDRANT", "0") == "1":
+    global _CLIENT, _CLIENT_KEY
+
+    mode = "embedded" if os.getenv("USE_EMBEDDED_QDRANT", "0") == "1" else "external"
+    if mode == "embedded":
         STORAGE_PATH.mkdir(parents=True, exist_ok=True)
-        return QdrantClient(path=str(STORAGE_PATH))
-    return QdrantClient(
-        host=os.getenv("QDRANT_HOST", "localhost"),
-        port=int(os.getenv("QDRANT_PORT", "6333")),
-    )
+        key = (mode, str(STORAGE_PATH.resolve()))
+        if _CLIENT is None or _CLIENT_KEY != key:
+            _CLIENT = QdrantClient(path=str(STORAGE_PATH))
+            _CLIENT_KEY = key
+        return _CLIENT
+
+    host = os.getenv("QDRANT_HOST", "localhost")
+    port = int(os.getenv("QDRANT_PORT", "6333"))
+    key = (mode, host, port)
+    if _CLIENT is None or _CLIENT_KEY != key:
+        _CLIENT = QdrantClient(host=host, port=port)
+        _CLIENT_KEY = key
+    return _CLIENT
 
 
 def init_collections(client: QdrantClient, recreate: bool = False):
@@ -132,13 +148,13 @@ def search_codes(
             must=[FieldCondition(key="chapter", match=MatchValue(value=chapter_filter))]
         )
 
-    results = client.search(
+    results = client.query_points(
         collection_name=COLLECTION_CODES,
-        query_vector=query_vector.tolist(),
+        query=query_vector.tolist(),
         limit=top_k,
         query_filter=search_filter,
         with_payload=True,
-    )
+    ).points
     return [{"score": r.score, **r.payload} for r in results]
 
 
@@ -165,13 +181,13 @@ def search_pdf_chunks(
 
     search_filter = Filter(must=must_conditions) if must_conditions else None
 
-    results = client.search(
+    results = client.query_points(
         collection_name=COLLECTION_PDF,
-        query_vector=query_vector.tolist(),
+        query=query_vector.tolist(),
         limit=top_k,
         query_filter=search_filter,
         with_payload=True,
-    )
+    ).points
     return [{"score": r.score, **r.payload} for r in results]
 
 

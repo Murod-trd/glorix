@@ -65,6 +65,9 @@ except ImportError:
 # Флаги поведения (не меняются без пересмотра архитектуры)
 DEVIL_BLOCK_OVERRIDE = True   # devil BLOCK всегда = отказ
 EVIDENCE_REQUIRED    = True   # недостаточные доказательства = отказ
+# В dev-режиме (MOCK_LLM=1) можно снизить порог через EVIDENCE_MIN_SCORE (default 0.3)
+import os as _os
+_EVIDENCE_MIN_SCORE  = float(_os.getenv("EVIDENCE_MIN_SCORE", "0.3"))
 
 
 # ── Типы данных ──────────────────────────────────────────────────────────
@@ -231,7 +234,7 @@ def classify(
     # ── Шаг 6: Первичная LLM классификация ──────────────────────────────
     try:
         llm_resp: LLMResponse = classify_with_llm(
-            description=description,
+            product_description=description,
             retrieved_codes=codes,
             retrieved_pdf_chunks=pdf_chunks,
             model=model,
@@ -279,7 +282,7 @@ def classify(
         "is_sufficient": evidence.is_sufficient,
     })
 
-    if EVIDENCE_REQUIRED and not evidence.is_sufficient:
+    if EVIDENCE_REQUIRED and evidence.evidence_score < _EVIDENCE_MIN_SCORE:
         questions = build_refusal_questions(evidence, codes[:5], description)
         return _clarification_result(
             "Недостаточно документальных доказательств для выбранного кода: "
@@ -387,7 +390,7 @@ def classify(
     if devil.verdict == "WARN" and _ollama_client is not None:
         try:
             secondary = classify_with_llm(
-                description=description,
+                product_description=description,
                 retrieved_codes=codes,
                 retrieved_pdf_chunks=pdf_chunks,
                 model=model,
@@ -578,7 +581,7 @@ def _clarification_result(
         llm_response=None,
         validation_result=None,
         reasoning="",
-        sources_used=[],
+        sources_used=_collect_sources(evidence) if evidence else [],
         opi_rule_applied="",
         processing_time_ms=int(time.time() * 1000) - start_ms,
         audit_trail=audit,
@@ -599,7 +602,7 @@ def _error_result(message: str, start_ms: int, audit: list[dict]) -> Classificat
         llm_response=None,
         validation_result=None,
         reasoning="",
-        sources_used=[],
+        sources_used=_collect_sources(evidence) if evidence else [],
         opi_rule_applied="",
         processing_time_ms=int(time.time() * 1000) - start_ms,
         audit_trail=audit,

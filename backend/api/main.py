@@ -134,6 +134,8 @@ class ExplainResponse(BaseModel):
     llm_opi_rule: Optional[str] = None
 
     # Шаг 7: Evidence
+    evidence: Optional[EvidenceInfo] = None
+    sources_used: list[str] = Field(default_factory=list)
     evidence_score: float = 0.0
     evidence_sufficient: bool = False
     evidence_excel_count: int = 0
@@ -560,7 +562,7 @@ def _result_to_explain_response(result: ClassificationResult) -> ExplainResponse
     retrieval_step = get_step("retrieval")
     llm_step = get_step("llm_primary")
     evidence_step = get_step("evidence")
-    opi_step = get_step("opi_rule_engine")
+    opi_step = get_step("rule_engine")
     validation_step = get_step("validation")
     devil_step = get_step("devil_advocate")
     feature_step = get_step("feature_extraction")
@@ -618,6 +620,19 @@ def _result_to_explain_response(result: ClassificationResult) -> ExplainResponse
     ev_excel = len(ev.excel_records) if ev else 0
     ev_pdf = len(ev.pdf_chunks) if ev else 0
     ev_notes = [n.text[:150] for n in (ev.notes_found or [])] if ev else []
+    evidence_info = None
+    if ev:
+        evidence_info = EvidenceInfo(
+            proposed_code=ev.proposed_code,
+            is_sufficient=ev.is_sufficient,
+            evidence_score=round(ev.evidence_score, 3),
+            excel_records=[ExcelRecordInfo(**r.to_dict()) for r in ev.excel_records[:10]],
+            pdf_chunks=[PDFChunkInfo(**c.to_dict()) for c in ev.pdf_chunks[:10]],
+            notes_found=[NoteInfo(**n.to_dict()) for n in ev.notes_found[:10]],
+            rules_applied=ev.rules_applied,
+            insufficiency_reasons=ev.insufficiency_reasons,
+            missing_information=ev.missing_information,
+        )
 
     # Validation
     vr = result.validation_result
@@ -673,6 +688,8 @@ def _result_to_explain_response(result: ClassificationResult) -> ExplainResponse
         llm_opi_rule=llm_opi,
 
         # Шаг 7
+        evidence=evidence_info,
+        sources_used=result.sources_used,
         evidence_score=round(ev_score, 3),
         evidence_sufficient=ev_sufficient,
         evidence_excel_count=ev_excel,

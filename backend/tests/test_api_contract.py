@@ -153,7 +153,7 @@ class TestClassifyResponseContract(unittest.TestCase):
     def setUpClass(cls):
         cls.client = _make_client()
         # Заглушка для classify — не требует реального Qdrant/Ollama
-        with mock.patch("rag.classifier.classify") as m:
+        with mock.patch("api.main.classify") as m:
             from rag.classifier import ClassificationResult
             from rag.evidence_builder import Evidence
             m.return_value = ClassificationResult(
@@ -207,7 +207,7 @@ class TestAuditEndpointContract(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.client = _make_client()
-        with mock.patch("rag.classifier.classify") as m:
+        with mock.patch("api.main.classify") as m:
             from rag.classifier import ClassificationResult
             m.return_value = ClassificationResult(
                 code="8471300000",
@@ -234,6 +234,113 @@ class TestAuditEndpointContract(unittest.TestCase):
 
     def test_audit_trail_not_empty(self):
         self.assertGreater(len(self.body.get("audit_trail", [])), 0)
+
+
+
+@unittest.skipUnless(HAS_FASTAPI_TESTCLIENT, "fastapi[testclient] + httpx not installed")
+class TestExplainContractFields(unittest.TestCase):
+    """
+    /classify/explain должен возвращать evidence, sources_used, retrieval_stats,
+    audit_trail с шагами rule_engine.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from rag.evidence_builder import Evidence, ExcelRecord, PDFChunk, NoteFound
+        cls.client = _make_client()
+
+        ev = Evidence(
+            proposed_code="7318151001",
+            excel_records=[
+                ExcelRecord(
+                    code="7318151001",
+                    description="Болты из чёрных металлов",
+                    level="leaf",
+                    chapter="73",
+                    rrf_score=0.88,
+                )
+            ],
+            pdf_chunks=[],
+            notes_found=[],
+            evidence_score=0.75,
+            is_sufficient=True,
+            rules_applied=["excel_exact_match"],
+            insufficiency_reasons=[],
+            missing_information=[],
+        )
+        # NoteFound is called NoteFound (not Note) in evidence_builder
+
+        with mock.patch("api.main.classify") as m:
+            from rag.classifier import ClassificationResult
+            m.return_value = ClassificationResult(
+                code="7318151001",
+                confidence=0.82,
+                requires_clarification=False,
+                reasoning="Болт ГОСТ 7798",
+                sources_used=["excel:tnved_codes"],
+                evidence=ev,
+                audit_trail=[
+                    {"step": "retrieval", "codes_found": 5, "pdf_chunks_found": 0,
+                     "ts": "2026-06-30T00:00:00"},
+                    {"step": "llm_primary", "proposed_code": "7318151001",
+                     "ts": "2026-06-30T00:00:01"},
+                    {"step": "evidence", "evidence_score": 0.75, "is_sufficient": True,
+                     "ts": "2026-06-30T00:00:02"},
+                    {"step": "rule_engine", "opi1": "CONFIRMS",
+                     "ts": "2026-06-30T00:00:03"},
+                    {"step": "validation", "passed": True,
+                     "ts": "2026-06-30T00:00:04"},
+                    {"step": "devil_advocate", "verdict": "APPROVE",
+                     "ts": "2026-06-30T00:00:05"},
+                ],
+            )
+            r = cls.client.post(
+                "/classify/explain",
+                json={"description": "Болт М10x40 ГОСТ 7798 стальной оцинкованный",
+                      "include_audit": True},
+            )
+            cls.status = r.status_code
+            cls.body = r.json() if r.status_code == 200 else {}
+
+    def test_status_200(self):
+        self.assertEqual(self.status, 200, f"body={self.body}")
+
+    def test_has_evidence_field(self):
+        self.assertIn("evidence", self.body, "/classify/explain должен возвращать evidence")
+
+    def test_evidence_has_excel_records(self):
+        ev = self.body.get("evidence") or {}
+        self.assertIn("excel_records", ev,
+                      "evidence должен содержать excel_records")
+
+    def test_evidence_has_pdf_chunks(self):
+        ev = self.body.get("evidence") or {}
+        self.assertIn("pdf_chunks", ev,
+                      "evidence должен содержать pdf_chunks (может быть пустым)")
+
+    def test_has_sources_used(self):
+        self.assertIn("sources_used", self.body,
+                      "/classify/explain должен возвращать sources_used")
+
+    def test_has_retrieval_stats(self):
+        self.assertIn("retrieval_stats", self.body,
+                      "/classify/explain должен возвращать retrieval_stats")
+
+    def test_retrieval_stats_has_pdf_chunks_found(self):
+        rs = self.body.get("retrieval_stats") or {}
+        self.assertIn("pdf_chunks_found", rs,
+                      "retrieval_stats должен содержать pdf_chunks_found")
+
+    def test_has_audit_trail(self):
+        self.assertIn("audit_trail", self.body)
+        self.assertIsInstance(self.body.get("audit_trail"), list)
+        self.assertGreater(len(self.body.get("audit_trail", [])), 0)
+
+    def test_audit_has_rule_engine_step(self):
+        trail = self.body.get("audit_trail", [])
+        steps = {s.get("step") for s in trail}
+        self.assertIn("rule_engine", steps,
+                      f"audit_trail должен содержать шаг rule_engine. Найдены: {steps}")
 
 
 if __name__ == "__main__":
