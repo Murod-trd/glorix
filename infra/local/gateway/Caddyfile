@@ -1,0 +1,41 @@
+# GLORIX Local Server Hub — gateway (Caddy).
+# ONLY this gateway is meant to be public (via Cloudflare Tunnel / ngrok).
+# Internal services (Qdrant :6333, Ollama :11434, Docker) are NEVER routed here.
+
+{
+	admin off
+}
+
+# Gateway listens on :8787 inside the container (published to 127.0.0.1 only).
+:8787 {
+	# Public hub health — static, does not touch internal services.
+	handle /health {
+		header Content-Type application/json
+		respond `{"ok":true,"hub":"glorix-local","status":"up"}` 200
+	}
+
+	# TN VED AI backend. The /tnved prefix is STRIPPED before forwarding so the
+	# FastAPI backend (which serves /health, /classify, /classify/explain at root)
+	# receives the correct path:
+	#   /tnved/health           -> tnved:8000/health
+	#   /tnved/classify         -> tnved:8000/classify
+	#   /tnved/classify/explain -> tnved:8000/classify/explain
+	handle_path /tnved/* {
+		reverse_proxy tnved:8000
+	}
+
+	# ── Future service route placeholders (enable when those services exist) ──
+	# Each maps to an internal container; keep them commented until ready.
+	# handle_path /ai/procurement/* { reverse_proxy ai-procurement:8101 }
+	# handle_path /ai/legal/*       { reverse_proxy ai-legal:8102 }
+	# handle_path /ai/contract/*    { reverse_proxy ai-contract:8103 }
+	# handle_path /core/*           { reverse_proxy core-api:8200 }
+	# handle_path /auth/*           { reverse_proxy auth-api:8300 }
+
+	# Internal-only services are intentionally NOT exposed:
+	#   Qdrant (6333), Ollama (11434), Docker daemon, Postgres/Redis.
+	# Anything not explicitly handled above returns 404.
+	handle {
+		respond "GLORIX local hub: route not found" 404
+	}
+}

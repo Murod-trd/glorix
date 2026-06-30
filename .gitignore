@@ -47,3 +47,11 @@ prisma/*.db
 
 # Prisma generated client (regenerated via `prisma generate`)
 node_modules/.prisma/
+
+# GLORIX local server hub (never commit local env / generated logs / live registry)
+infra/local/.env.local
+infra/local/.env.local.*
+!infra/local/.env.local.example
+infra/local/services.json
+logs/
+logs/local-server/

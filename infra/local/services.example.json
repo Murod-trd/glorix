@@ -1,0 +1,48 @@
+{
+  "_comment": "GLORIX local service registry (EXAMPLE). No secrets. Copy to services.json to customize.",
+  "hub": {
+    "gatewayPort": 8787,
+    "publicTunnelUrl": "",
+    "mode": "development-temporary"
+  },
+  "services": {
+    "tnved": {
+      "type": "ai-backend",
+      "internalHost": "tnved",
+      "internalPort": 8000,
+      "publicRoute": "/tnved",
+      "stripPrefix": true,
+      "exposesRoutes": ["/health", "/classify", "/classify/explain"],
+      "profile": "core"
+    },
+    "qdrant": {
+      "type": "vector-db",
+      "internalHost": "qdrant",
+      "internalPort": 6333,
+      "public": false,
+      "profile": "core",
+      "note": "INTERNAL ONLY — never exposed through the gateway/tunnel"
+    },
+    "ollama": {
+      "type": "llm-runtime",
+      "host": "http://host.docker.internal:11434",
+      "model": "qwen2.5:7b-instruct-q4_K_M",
+      "public": false,
+      "note": "Runs on the Windows host. INTERNAL ONLY — never exposed"
+    },
+    "gateway": {
+      "type": "reverse-proxy",
+      "internalPort": 8787,
+      "public": true,
+      "profile": "core"
+    }
+  },
+  "futureServices": {
+    "ai-procurement": { "publicRoute": "/ai/procurement", "internalPort": 8101, "profile": "future-ai", "enabled": false },
+    "ai-legal":       { "publicRoute": "/ai/legal",       "internalPort": 8102, "profile": "future-ai", "enabled": false },
+    "ai-contract":    { "publicRoute": "/ai/contract",    "internalPort": 8103, "profile": "future-ai", "enabled": false },
+    "core-api":       { "publicRoute": "/core",           "internalPort": 8200, "profile": "future-core", "enabled": false },
+    "auth-api":       { "publicRoute": "/auth",           "internalPort": 8300, "profile": "future-core", "enabled": false },
+    "database":       { "public": false, "internalPort": 5432, "profile": "database", "enabled": false }
+  }
+}

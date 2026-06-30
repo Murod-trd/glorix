@@ -1,0 +1,94 @@
+# GLORIX Local Server Hub — temporary development backend stack.
+#
+# Public exposure is ONLY through the gateway (+ Cloudflare Tunnel/ngrok).
+# Internal services bind to 127.0.0.1 and are never published to the internet.
+# Ollama runs on the Windows HOST (not here) and is reached via host.docker.internal.
+#
+# Run from infra/local/:
+#   docker compose --env-file .env.local -f docker-compose.local.yml --profile core up -d
+#
+# Profiles let ONE workflow bring up a selected stack (no per-AI buttons):
+#   core        -> gateway + qdrant + tnved   (default)
+#   future-ai   -> future AI assistant services
+#   future-core -> future core backend API
+#   database    -> local Postgres/Redis (localhost only)
+
+name: glorix-local
+
+services:
+  gateway:
+    image: caddy:2
+    container_name: glorix_gateway
+    profiles: ["core"]
+    ports:
+      # Localhost only — the Cloudflare Tunnel publishes THIS port, nothing else.
+      - "127.0.0.1:${GLORIX_LOCAL_GATEWAY_PORT:-8787}:8787"
+    volumes:
+      - ./gateway/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - tnved
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.11.3
+    container_name: glorix_qdrant
+    profiles: ["core"]
+    ports:
+      # Localhost only — NEVER public.
+      - "127.0.0.1:${QDRANT_PORT:-6333}:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -qO- http://localhost:6333/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  tnved:
+    build: ../../backend
+    container_name: glorix_tnved
+    profiles: ["core"]
+    # NOT published to the host — only the gateway reaches it on the compose network.
+    environment:
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b-instruct-q4_K_M}
+      - MOCK_EMBEDDER=${MOCK_EMBEDDER:-0}
+      - MOCK_LLM=${MOCK_LLM:-0}
+    volumes:
+      - ../../backend/data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Future services (disabled until they exist). Uncomment + add a Dockerfile.
+  #    Each has its own profile so START_GLORIX_SERVER can opt in. ──
+  # future-ai:
+  #   build: ../../services/ai
+  #   container_name: glorix_future_ai
+  #   profiles: ["future-ai"]
+  #   extra_hosts: ["host.docker.internal:host-gateway"]
+  #
+  # future-core:
+  #   build: ../../services/core
+  #   container_name: glorix_future_core
+  #   profiles: ["future-core"]
+  #
+  # database:
+  #   image: postgres:16
+  #   container_name: glorix_db
+  #   profiles: ["database"]
+  #   ports: ["127.0.0.1:5432:5432"]   # localhost only — NEVER public
+  #   environment:
+  #     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-change-me-locally}
+  #   volumes:
+  #     - pg_data:/var/lib/postgresql/data
+
+volumes:
+  qdrant_data:
+  # pg_data:
