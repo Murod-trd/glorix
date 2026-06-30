@@ -1,0 +1,20 @@
+# Glorix v7 — ТН ВЭД Classifier
+# Проверено: Python 3.11+
+# Все версии зафиксированы для воспроизводимости.
+
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+python-multipart==0.0.12
+pymupdf==1.24.10
+openpyxl==3.1.5
+pandas==2.2.3
+sentence-transformers==3.1.1
+qdrant-client==1.11.3
+rank-bm25==0.2.2
+ollama==0.3.3
+pydantic==2.9.2
+python-dotenv==1.0.1
+tqdm==4.66.5
+numpy==1.26.4
+pytest==8.3.2
+httpx==0.27.2
