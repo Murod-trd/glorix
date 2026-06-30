@@ -56,6 +56,7 @@ def parse_excel(filepath: str | Path) -> list[dict]:
             continue
 
         code_clean = re.sub(r"[\s\-]", "", raw_code)
+        raw_digits = re.sub(r"\D", "", code_clean)
 
         # Определить уровень иерархии по коду
         level = _classify_level(code_clean, description)
@@ -81,6 +82,8 @@ def parse_excel(filepath: str | Path) -> list[dict]:
         record = {
             "code": normalized,
             "raw_code": raw_code,
+            "raw_digits_len": len(raw_digits),
+            "is_leaf_10digit": len(raw_digits) == 10,
             "level": level,
             "section": current_section,
             "chapter": chapter_num,

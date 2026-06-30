@@ -374,7 +374,8 @@ def _build_adversarial_prompt(
     pdf_context = ""
     for chunk in pdf_chunks[:4]:
         text = chunk.get("text", "")[:200]
-        pdf_context += f"\n[PDF глава {chunk.get('chapter','?')} стр.{chunk.get('page','?')}]: {text}"
+        page = chunk.get("page_num", chunk.get("page", "?"))
+        pdf_context += f"\n[PDF глава {chunk.get('chapter','?')} стр.{page}]: {text}"
 
     return f"""ТОВАР ДЛЯ ПРОВЕРКИ:
 {product_description}

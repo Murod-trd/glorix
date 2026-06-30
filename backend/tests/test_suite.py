@@ -29,6 +29,30 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from rag.classifier import classify
 
+
+# ── Адаптер совместимости classify() → dict ──────────────────────────────────
+# classify() возвращает ClassificationResult (dataclass), а не dict.
+# Этот адаптер нормализует оба варианта на случай будущих изменений.
+def _normalize_classify_result(result):
+    if isinstance(result, dict):
+        return {
+            "code": result.get("recommended_code") or result.get("code"),
+            "confidence": float(result.get("confidence", 0.0)),
+            "requires_clarification": bool(result.get("requires_clarification", False)),
+            "warnings": (result.get("validation") or {}).get("warnings", []),
+            "questions": result.get("clarification_questions", []) or [],
+            "reasoning": result.get("reasoning", "") or "",
+        }
+    validation = getattr(result, "validation_result", None)
+    return {
+        "code": getattr(result, "code", None),
+        "confidence": float(getattr(result, "confidence", 0.0)),
+        "requires_clarification": bool(getattr(result, "requires_clarification", False)),
+        "warnings": getattr(validation, "warnings", []) if validation else [],
+        "questions": getattr(result, "clarification_questions", []) or [],
+        "reasoning": getattr(result, "reasoning", "") or "",
+    }
+
 # ── Тест-набор ────────────────────────────────────────────────────────
 # (описание, ожидаемый_префикс_кода, комментарий)
 TEST_CASES: list[tuple[str, str, str]] = [
@@ -158,11 +182,12 @@ def run_tests(
             result = classify(description, model=model)
             elapsed = round(time.time() - t0, 1)
 
-            code       = result.get("recommended_code")
-            confidence = float(result.get("confidence", 0.0))
-            requires   = result.get("requires_clarification", False)
-            warnings   = (result.get("validation") or {}).get("warnings", [])
-            questions  = result.get("clarification_questions", [])
+            normalized = _normalize_classify_result(result)
+            code       = normalized["code"]
+            confidence = normalized["confidence"]
+            requires   = normalized["requires_clarification"]
+            warnings   = normalized["warnings"]
+            questions  = normalized["questions"]
 
             if requires or code is None:
                 status = "CLARIFICATION"
@@ -182,7 +207,7 @@ def run_tests(
                 got_code=code,
                 confidence=confidence,
                 elapsed_sec=elapsed,
-                reasoning_preview=result.get("reasoning", "")[:200],
+                reasoning_preview=normalized["reasoning"][:200],
                 clarification_questions=questions[:2],
                 validation_warnings=warnings[:2],
             )

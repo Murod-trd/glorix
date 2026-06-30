@@ -53,17 +53,17 @@ REBUILD_TOKEN = os.getenv("REBUILD_TOKEN", "change-this-token")
 
 class ProductFeaturesInfo(BaseModel):
     """Структурированные признаки товара (Step 2 pipeline)."""
-    materials: list[str] = []
-    material_chapters: list[str] = []
-    functions: list[str] = []
-    function_chapters: list[str] = []
+    materials: list[str] = Field(default_factory=list)
+    material_chapters: list[str] = Field(default_factory=list)
+    functions: list[str] = Field(default_factory=list)
+    function_chapters: list[str] = Field(default_factory=list)
     dominant_chapter: Optional[str] = None
-    standards: list[str] = []
-    dimensions: list[dict] = []
+    standards: list[str] = Field(default_factory=list)
+    dimensions: list[dict] = Field(default_factory=list)
     processing_level: Optional[str] = None
     is_compound: bool = False
     is_set: bool = False
-    missing_for_classification: list[str] = []
+    missing_for_classification: list[str] = Field(default_factory=list)
 
 
 class RuleResultInfo(BaseModel):
@@ -72,23 +72,23 @@ class RuleResultInfo(BaseModel):
     rule_name: str
     verdict: str
     confidence_delta: float
-    checks_performed: list[str] = []
+    checks_performed: list[str] = Field(default_factory=list)
     reason: str
-    evidence: list[str] = []
+    evidence: list[str] = Field(default_factory=list)
     alternative_code: Optional[str] = None
     is_blocking: bool = False
 
 
 class RuleEngineInfo(BaseModel):
     """Полный отчёт Rule Engine."""
-    rules_considered: list[str] = []
-    rules_applied: list[str] = []
-    rules_skipped: list[str] = []
+    rules_considered: list[str] = Field(default_factory=list)
+    rules_applied: list[str] = Field(default_factory=list)
+    rules_skipped: list[str] = Field(default_factory=list)
     primary_rule: str
     overall_verdict: str
     total_confidence_delta: float
-    blocking_issues: list[str] = []
-    results: list[RuleResultInfo] = []
+    blocking_issues: list[str] = Field(default_factory=list)
+    results: list[RuleResultInfo] = Field(default_factory=list)
 
 
 class ExplainResponse(BaseModel):
@@ -101,17 +101,17 @@ class ExplainResponse(BaseModel):
     confidence: float
     requires_clarification: bool
     clarification_message: Optional[str] = None
-    clarification_questions: list[str] = []
+    clarification_questions: list[str] = Field(default_factory=list)
 
     # Шаг 1-3: признаки товара
     product_features: Optional[ProductFeaturesInfo] = None
     chapter_hint_source: Optional[str] = None   # "user" | "features" | "none"
 
     # Шаг 4-5: retrieval
-    retrieval_stats: dict = {}                   # кол-во кандидатов
+    retrieval_stats: dict = Field(default_factory=dict)                   # кол-во кандидатов
 
     # Шаг 5: TOP-10
-    top10_candidates: list[dict] = []
+    top10_candidates: list[dict] = Field(default_factory=list)
 
     # Шаг 6: LLM
     llm_proposed_code: Optional[str] = None
@@ -124,20 +124,20 @@ class ExplainResponse(BaseModel):
     evidence_sufficient: bool = False
     evidence_excel_count: int = 0
     evidence_pdf_count: int = 0
-    evidence_notes: list[str] = []
+    evidence_notes: list[str] = Field(default_factory=list)
 
     # Шаг 8: Rule Engine
     rule_engine: Optional[RuleEngineInfo] = None
 
     # Шаг 9: Validator
     validation_passed: bool = False
-    validation_issues: list[str] = []
-    validation_warnings: list[str] = []
-    competing_codes: list[dict] = []
+    validation_issues: list[str] = Field(default_factory=list)
+    validation_warnings: list[str] = Field(default_factory=list)
+    competing_codes: list[dict] = Field(default_factory=list)
 
     # Шаг 10: Devil Advocate
     devil_verdict: Optional[str] = None
-    devil_reasons_against: list[str] = []
+    devil_reasons_against: list[str] = Field(default_factory=list)
     devil_confidence_delta: float = 0.0
     devil_alternative: Optional[str] = None
 
@@ -146,7 +146,7 @@ class ExplainResponse(BaseModel):
     independent_verification_agrees: Optional[bool] = None
 
     # Шаг 14: Полный audit trail
-    audit_trail: list[dict] = []
+    audit_trail: list[dict] = Field(default_factory=list)
     pipeline_steps_completed: int = 0
     processing_time_ms: int = 0
 

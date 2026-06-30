@@ -28,7 +28,10 @@ from store.qdrant_store import (
 )
 
 RRF_K = 60
-CHAPTER_BOOST_FACTOR = 1.15   # мягкий буст — не фильтр
+try:
+    from config import CHAPTER_BOOST_FACTOR
+except ImportError:
+    CHAPTER_BOOST_FACTOR = 1.15  # fallback only for isolated tests without config
 
 
 class HybridRetriever:

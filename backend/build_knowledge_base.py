@@ -92,7 +92,14 @@ def main():
         print(f"\n[4/5] Построение embeddings для {len(all_codes)} кодов...")
         print("      (это займёт 5–15 минут на CPU)")
         t0 = time.time()
-        leaf_codes = [r for r in all_codes if r.get("level") == "code" and len(r.get("code", "")) == 10]
+        # Use is_leaf_10digit flag set by excel_parser to avoid padding artifacts.
+        # Codes shorter than 10 digits that were zero-padded must NOT be indexed as leaf codes.
+        leaf_codes = [
+            r for r in all_codes
+            if r.get("is_leaf_10digit") is True
+            or (r.get("is_leaf_10digit") is None  # legacy records without the flag
+                and r.get("level") == "code" and len(r.get("code", "")) == 10)
+        ]
         skipped = len(all_codes) - len(leaf_codes)
         if skipped:
             print(f"      Пропущено не конечных/структурных записей: {skipped}")
