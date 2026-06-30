@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { getCurrentUser } from '../data/mock';
 import { useAccountType } from '../context/AccountContext';
 import { searchHsCodes, translateProductNameToRu } from '../data/hsCodes';
 import { PRODUCT_UNITS } from '../data/marketplace';
-import { resolveTnved } from '../utils/tnvedAI.js';
+import { classifyBatchTnved, healthTnvedAi } from '../services/tnvedAiClient';
 
 // Нормализация числового поля из Excel:
 // Убирает валютный суффикс (UZS, USD, руб, $...), пробелы как разделитель тысяч,
@@ -341,6 +341,7 @@ const PRODUCT_TNVED_MAP = [
   { re: /^(растительное.*масло|масло.*подсолнечн)/i,           code: '1512110000' }, // подсолнечное масло
 ];
 
+// eslint-disable-next-line no-unused-vars -- legacy regex map retained for reference but intentionally NOT used (AI-only autofill)
 function guessProductCode(name) {
   for (const { re, code } of PRODUCT_TNVED_MAP) {
     if (re.test(name.trim())) {
@@ -366,13 +367,19 @@ export default function DocumentCenter() {
   const [payTerms, setPayTerms] = useState('30% предоплата, 70% по факту отгрузки');
   const [payCustom, setPayCustom] = useState('');
   const [vatRate, setVatRate] = useState(0);
-  const [openAiKey, setOpenAiKey] = useState(() => {
-    try { return localStorage.getItem('glorix_openai_key') || ''; } catch { return ''; }
-  });
-  const saveApiKey = (key) => {
-    setOpenAiKey(key);
-    try { localStorage.setItem('glorix_openai_key', key); } catch {}
-  };
+  // GLORIX AI ТН ВЭД backend status (replaces the former, misleading OpenAI key field).
+  const [aiStatus, setAiStatus] = useState('checking'); // checking | configured | unavailable | error
+  const [autofillMsg, setAutofillMsg] = useState(null);  // UI-only status; NEVER written into generated documents
+  useEffect(() => {
+    let alive = true;
+    healthTnvedAi().then(h => {
+      if (!alive) return;
+      if (h?.ok && h?.status === 'configured') setAiStatus('configured');
+      else if (h?.unavailable || h?.status === 'unavailable') setAiStatus('unavailable');
+      else setAiStatus('error');
+    }).catch(() => { if (alive) setAiStatus('error'); });
+    return () => { alive = false; };
+  }, []);
   const [companyLogo, setCompanyLogo] = useState(() => {
     try { return localStorage.getItem('glorix_company_logo') || null; } catch { return null; }
   });
@@ -394,50 +401,52 @@ export default function DocumentCenter() {
     setShowPaste(false);
     setPasteText('');
 
-    // ── Трёхуровневый поиск ТН ВЭД ──────────────────────────────────────────
-    // 1. regex-словарь (мгновенно, 80+ паттернов)
-    // 2. Fuse.js по базе ТН ВЭД ЕАЭС (~150 позиций, русский язык)
-    // 3. OpenAI API (если ключ задан в настройках и уверенность базы низкая)
-    const itemsWithRegex = parsed.map(item => {
-      if (item.tnved) return { ...item, _src: 'manual' };
-      const guessed = guessProductCode(item.name);
-      return guessed ? { ...item, tnved: guessed, _src: 'regex' } : { ...item, _src: '' };
-    });
+    setAutofillMsg(null);
 
-    const needsAI = itemsWithRegex.some(i => !i.tnved);
-    if (!needsAI) {
-      setItems(itemsWithRegex.map(({ _src, ...rest }) => rest));
-      return;
-    }
+    // ── AI-ONLY TN VED autofill ─────────────────────────────────────────────
+    // Legacy regex (guessProductCode) and legacy TF-IDF (/api/classify-batch)
+    // autofill are DISABLED. Codes are filled ONLY by the GLORIX AI backend via
+    // the /api/tnved-ai/* proxy. Manually supplied codes are preserved. If the
+    // AI backend is unavailable or not confident, the code is left EMPTY — it is
+    // NEVER guessed (a wrong TN VED code can cost millions).
+    const needAi = parsed.filter(it => !it.tnved);
+    if (!needAi.length) return;
 
     setTnvedSearching(true);
     setBatchProgress(0);
-    setBatchTotal(itemsWithRegex.filter(i => !i.tnved).length);
+    setBatchTotal(needAi.length);
     try {
-      const enriched = [...itemsWithRegex];
+      const enriched = [...parsed];
       const unresolved = enriched.map((item, idx) => (!item.tnved ? idx : null)).filter(i => i !== null);
       const BATCH = 25;
       let done = 0;
+      let filled = 0;
+      let aiUnavailable = false;
 
       for (let b = 0; b < unresolved.length; b += BATCH) {
         const chunk = unresolved.slice(b, b + BATCH);
         const names = chunk.map(idx => enriched[idx].name);
-        const data = await fetch('/api/classify-batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: names }),
-        }).then(r => r.json());
-
-        (data.results || []).forEach((res, i) => {
-          enriched[chunk[i]].tnved = res.code || '';
-          enriched[chunk[i]]._src = res.code ? 'tfidf' : 'none';
+        const data = await classifyBatchTnved(names);
+        if (data?.unavailable) aiUnavailable = true;
+        (data?.results || []).forEach((res, i) => {
+          if (res && res.code) { enriched[chunk[i]].tnved = res.code; filled++; }
+          // No confident AI code → leave blank. NEVER fall back to legacy guess.
         });
         done += chunk.length;
         setBatchProgress(done);
-        setItems(enriched.map(({ _src, ...rest }) => rest));
+        setItems([...enriched]);
       }
-    } catch(e) {
-      console.error('TNVED batch error:', e);
+
+      if (aiUnavailable) {
+        setAutofillMsg({ type: 'warn', text: 'AI ТН ВЭД недоступен — введите код вручную или проверьте с декларантом' });
+      } else if (filled === 0) {
+        setAutofillMsg({ type: 'warn', text: 'AI ТН ВЭД не вернул уверенных кодов — введите коды вручную или проверьте с декларантом' });
+      } else {
+        setAutofillMsg({ type: 'ok', text: `AI ТН ВЭД: код подобран для ${filled} из ${needAi.length} позиций. Остальные оставлены пустыми — проверьте с декларантом.` });
+      }
+    } catch (e) {
+      console.error('TNVED AI batch error:', e);
+      setAutofillMsg({ type: 'warn', text: 'AI ТН ВЭД недоступен — введите код вручную или проверьте с декларантом' });
     } finally {
       setTnvedSearching(false);
       setBatchProgress(0);
@@ -766,28 +775,17 @@ export default function DocumentCenter() {
               </div>
             </div>
 
-            {/* OpenAI API key for TN VED auto-detection */}
+            {/* GLORIX AI ТН ВЭД — honest backend status (replaces former OpenAI key field). No user key. */}
             <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 8, background: 'var(--bg-2)', border: '1px solid var(--border-2)' }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                🤖 OpenAI API — автоматический подбор ТН ВЭД
-                <span style={{ fontWeight: 400, opacity: 0.7 }}>(необязательно)</span>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-2)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                🧠 GLORIX AI ТН ВЭД
+                {aiStatus === 'configured' && <span style={{ color: '#1a7a4a', fontWeight: 500 }}>· подключён</span>}
+                {aiStatus === 'unavailable' && <span style={{ color: 'var(--gold)', fontWeight: 500 }}>· не настроен</span>}
+                {aiStatus === 'error' && <span style={{ color: '#c0392b', fontWeight: 500 }}>· ошибка соединения</span>}
+                {aiStatus === 'checking' && <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>· проверка…</span>}
               </div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <input
-                  type="password"
-                  placeholder="sk-... (ключ хранится только в браузере)"
-                  value={openAiKey}
-                  onChange={e => saveApiKey(e.target.value)}
-                  style={{ ...inputStyle, flex: 1, margin: 0, fontFamily: 'monospace', fontSize: 11 }}
-                />
-                {openAiKey && (
-                  <button onClick={() => saveApiKey('')}
-                    style={{ padding: '0 10px', background: 'transparent', border: '1px solid var(--border-2)', borderRadius: 6, cursor: 'pointer', color: '#c0392b', fontSize: 14 }}>✕</button>
-                )}
-              </div>
-              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 4 }}>
-                При вставке из Excel: regex-словарь → база ЕАЭС (Fuse.js) → OpenAI gpt-4o-mini.
-                {openAiKey ? ' ✅ Ключ задан — все три уровня активны.' : ' ⚠ Без ключа работают только уровни 1–2.'}
+              <div style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.5 }}>
+                Коды ТН ВЭД подбираются только AI-сервисом GLORIX. Если сервис недоступен, код остаётся пустым — старый автоподбор отключён. Финальный код проверяйте с декларантом или таможенным брокером.
               </div>
             </div>
 
@@ -839,6 +837,14 @@ export default function DocumentCenter() {
               </div>
             )}
 
+            {autofillMsg && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '8px 12px', marginBottom: 12, borderRadius: 8,
+                background: autofillMsg.type === 'ok' ? 'rgba(0,212,170,0.08)' : 'rgba(245,166,35,0.10)',
+                border: autofillMsg.type === 'ok' ? '1px solid rgba(0,212,170,0.3)' : '1px solid rgba(245,166,35,0.32)' }}>
+                <span style={{ fontSize: 13, flexShrink: 0 }}>{autofillMsg.type === 'ok' ? '✓' : '⚠'}</span>
+                <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-2)' }}>{autofillMsg.text}</div>
+              </div>
+            )}
             {/* Items table */}
             <div className="card" style={{ padding: '14px 16px' }}>
               <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 14 }}>

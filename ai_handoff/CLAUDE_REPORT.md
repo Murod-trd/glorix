@@ -7,85 +7,81 @@
 Claude
 
 ## Current branch
-claude/add-tnved-ui-warning
+claude/disable-legacy-tnved-autofill
 
 ## Last commit hash
-8619c8c
+9ab7a7f
 
 ## Git status before work
-Clean. Synced to `origin/main` (includes merged PR #1 TN VED + PR #2 auth foundation).
+Clean, synced to origin/main (d97cf33 — TN VED UI warning).
 
 ## Git status after work
-Clean after commit. One file changed: `src/pages/DocumentCenter.jsx` (+11 lines) and this report.
+Clean after commit; merged to main via fast-forward (see below).
 
 ## What I read from the other agent report
-Checked for `ai_handoff/CODEX_REPORT.md`; not editing it. No competing branch/PR for this UI task.
+No CODEX_REPORT.md present. Not edited.
 
 ## Main objective
-Add a small, non-blocking, user-facing TN VED verification warning in the platform UI only.
+Disable legacy automatic TN VED autofill; route autofill exclusively through the AI/RAG backend.
 
 ## Project direction
-- Glorix remains React/Vite + Vercel. No architecture change.
-- UI-only change. No TN VED codes, classification, import, VAT, auth/DB/Prisma, or Python backend touched.
-- Warning must NOT appear in generated documents (KP HTML, DOCX, PDF).
+Glorix stays React/Vite + Vercel. Legacy TF-IDF files remain in repo (historical/internal) but
+are no longer used by Document Center autofill. No architecture rewrite.
 
 ## Files changed by this agent
-- `src/pages/DocumentCenter.jsx` — added a small informational notice (RU + short EN) inside the
-  live "Спецификация товаров" items-table card, directly above the products table where the
-  ТН ВЭД column is shown and auto-filled. This is React render markup only.
-- `ai_handoff/CLAUDE_REPORT.md` — this report.
+- `api/tnved-ai/_client.js` (new) — shared AI-backend client; confidence gate; never calls legacy engine.
+- `api/tnved-ai/health.js` (new) — proxy GET /health; unavailable response if URL missing.
+- `api/tnved-ai/classify.js` (new) — proxy POST /classify; blank code unless confident.
+- `api/tnved-ai/classify-batch.js` (new) — loops backend /classify (no batch route); blank codes if unavailable.
+- `api/tnved-ai/explain.js` (new) — proxy POST /classify/explain.
+- `src/services/tnvedAiClient.js` (new) — frontend client; calls ONLY /api/tnved-ai/*.
+- `src/pages/DocumentCenter.jsx` (mod) — AI-only autofill; removed regex+TF-IDF autofill; removed
+  OpenAI key field → GLORIX AI status; added autofill status message. generateKP/exports untouched.
+- `.env.example` (mod) — TNVED_AI_API_URL, TNVED_AI_TIMEOUT_MS, VITE_TNVED_AI_ONLY (placeholders).
+- `docs/TNVED_AI_ONLY_MIGRATION.md` (new) — full migration doc.
 
 ## Code changes made
-Inserted an 11-line JSX block: a small amber informational box (⚠) with the required Russian
-text and the optional short English line. Uses existing theme variables (`--text-2`, `--text-3`)
-and the existing gold accent color. It is non-blocking, does not gate any action, and holds no
-logic/state. A code comment marks it "platform UI only — intentionally NOT included in generated
-KP HTML, DOCX export, or PDF export."
+handlePaste now: keep manual codes; send code-less items to `classifyBatchTnved` (→ /api/tnved-ai/
+classify-batch → backend /classify). Fill code only when backend confident; else blank. No
+guessProductCode call, no /api/classify-batch call. Health checked on mount → aiStatus indicator.
 
 ## Why these changes were made
-To warn users that auto-suggested TN VED codes may be wrong and should be verified with a customs
-declarant/broker before official customs use — without altering any codes, logic, or documents.
+Legacy regex/TF-IDF assigned wrong codes. Wrong TN VED → customs fines worth millions. Better blank
+than wrong; AI backend already refuses to answer when evidence insufficient.
 
 ## Commands run
-- git fetch/reset to origin/main; `git checkout -b claude/add-tnved-ui-warning`
-- `npm install --ignore-scripts --no-audit --no-fund`
-- `npm run build`
-- `npx eslint src/pages/DocumentCenter.jsx` (before and after change)
+- npm install --ignore-scripts; npm run build
+- node /tmp/smoke.mjs (safety smoke test)
+- npx eslint on changed files
 
 ## Results
-- `npm install --ignore-scripts` → `added 211 packages in 7s` (RC 0).
-- `npm run build` → `✓ built in 1.20s` (RC 0). Only the pre-existing chunk-size warning.
-- `git diff --stat` → `src/pages/DocumentCenter.jsx | 11 +++++++++++` (1 file, +11, -0).
-- eslint `DocumentCenter.jsx` → 7 errors, ALL pre-existing (lines 7,134,374,409,437,753,760) and
-  identical when linting the original file (verified via git stash). My added lines (847–856)
-  introduce ZERO new lint errors. Per instructions, pre-existing unrelated issues left untouched.
+- Build: `✓ built in 4.21s` (RC 0; only pre-existing chunk-size warning).
+- Smoke test: PASSED — unavailable→blank; confidence gate (requires_clarification / evidence.is_sufficient) enforced; classify/batch/health all return empty/unavailable with no AI URL; no legacy calls.
+- eslint DocumentCenter.jsx: 3 errors, ALL pre-existing (line 134 qty, 762/769 companyLogo empty catches). My change introduced 0 new errors and removed 4 pre-existing ones. Proxy + service files lint-clean.
 
 ## Tests passed
-- Frontend production build: PASS.
+Frontend build; node safety smoke test.
 
 ## Tests failed
-- None. (Pre-existing lint errors are unrelated and were not introduced by this change.)
+None.
 
 ## Build status
-`npm run build` PASS (1.20s).
+PASS.
 
 ## Frontend/demo compatibility
-Fully preserved. Notice is static, non-blocking, does not change account/demo behavior.
+Demo preserved. Import still works. Manual codes preserved. Missing AI URL → blank codes + warning, UI not broken.
 
 ## Auth/database status
-Unchanged. No auth/DB/Prisma files touched.
+Unchanged.
 
 ## Current blockers
-- Opening the PR may require the GitHub UI: the integration previously lacked pull-request write
-  permission and direct API egress is sandbox-blocked. Branch is pushed; PR link provided.
+None for merge. AI backend not yet deployed/configured (TNVED_AI_API_URL empty) → intended safe behavior.
 
 ## Next exact step
-Review/merge the PR. Optional future cleanup (separate PR): the 7 pre-existing lint errors in
-DocumentCenter.jsx.
+Deploy backend/ (FastAPI) with full Excel + PDFs; set TNVED_AI_API_URL in Vercel; redeploy; verify /api/tnved-ai/health = configured.
 
 ## Handoff prompt for the other agent
-> You are Codex. Claude added a small UI-only TN VED verification notice in
-> `src/pages/DocumentCenter.jsx` (branch `claude/add-tnved-ui-warning`), inside the live
-> "Спецификация товаров" items table, above the products table. It is NOT in generated KP HTML,
-> DOCX, or PDF output. Build passes; the only lint errors in that file are pre-existing. Do not
-> create a competing branch. If reviewing, just confirm scope. Update only CODEX_REPORT.md.
+> You are Codex. Claude disabled legacy TN VED autofill in DocumentCenter and added an AI-only proxy
+> (api/tnved-ai/*) + src/services/tnvedAiClient.js. With TNVED_AI_API_URL unset, autofill returns
+> blank codes (safe). To activate: deploy the Python backend/, set TNVED_AI_API_URL in Vercel.
+> Do not re-enable legacy regex/TF-IDF autofill. Update only CODEX_REPORT.md.
