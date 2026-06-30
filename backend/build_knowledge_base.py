@@ -18,6 +18,9 @@ build_knowledge_base.py — Одноразовый скрипт построен
   MOCK_EMBEDDER=1   — использовать детерминированный hash-embedder (dev/test)
   MOCK_LLM=1        — для тестирования без Ollama
   USE_EMBEDDED_QDRANT=1 — встроенный Qdrant (default для dev)
+  STRICT_BUILD=1    — завершить с ошибкой если нет данных (prod)
+  REQUIRE_EXCEL=1   — обязать наличие Excel (используется со STRICT_BUILD)
+  REQUIRE_PDF=1     — обязать наличие PDF (используется со STRICT_BUILD)
 
 Время выполнения (CPU, реальные данные):
   Excel (13 289 записей): ~5–10 мин
@@ -115,6 +118,11 @@ def main():
     print(f"\n[2/5] Обработка Excel из {EXCEL_DIR} ...")
     excel_files = sorted(EXCEL_DIR.glob("*.xlsx")) + sorted(EXCEL_DIR.glob("*.xls"))
     if not excel_files:
+        strict   = os.getenv("STRICT_BUILD",  "0") == "1"
+        req_xlsx = os.getenv("REQUIRE_EXCEL", "0") == "1"
+        if strict and req_xlsx:
+            print(f"ERROR: Excel files not found. Put TN VED Excel into EXCEL_DIR ({EXCEL_DIR}).")
+            sys.exit(1)
         print(f"  ВНИМАНИЕ: Excel не найден в {EXCEL_DIR}")
         print("  Добавьте полный Excel с кодами ТН ВЭД в data/excel/")
         all_codes = []
@@ -155,6 +163,11 @@ def main():
     print(f"  Chunks с низким качеством  : {low_quality}  (text_quality_score < 0.40)")
 
     if total_chunks == 0:
+        strict  = os.getenv("STRICT_BUILD", "0") == "1"
+        req_pdf = os.getenv("REQUIRE_PDF",  "0") == "1"
+        if strict and req_pdf:
+            print("ERROR: PDF files not found. Set PDF_DIRS to include docs/explanations.")
+            sys.exit(1)
         print("  ВНИМАНИЕ: PDF не найдены. Классификатор будет работать только на Excel.")
         print(f"  Для подключения пояснений: export PDF_DIRS=./data/pdf,<путь к docs/explanations>")
 

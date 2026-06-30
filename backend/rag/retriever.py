@@ -66,7 +66,11 @@ class HybridRetriever:
         self._initialized = False
 
     def initialize(self):
-        """Загрузить все документы из Qdrant и построить BM25-индексы."""
+        """Загрузить все документы из Qdrant и построить BM25-индексы.
+
+        Если коллекции не найдены (база не построена) — не падает, возвращает
+        пустые индексы. Используйте build_knowledge_base.py для заполнения.
+        """
         self._client = get_client()
         print("[Retriever] Загрузка данных из Qdrant для BM25...")
 
@@ -74,7 +78,8 @@ class HybridRetriever:
 
         # Коды ТН ВЭД
         offset, all_codes = None, []
-        while True:
+        try:
+         while True:
             result, offset = self._client.scroll(
                 collection_name=COLLECTION_CODES,
                 limit=batch_size, offset=offset,
@@ -83,6 +88,9 @@ class HybridRetriever:
             all_codes.extend([r.payload for r in result])
             if offset is None:
                 break
+        except Exception as _e:
+            print(f"[Retriever] Коллекция кодов не найдена или пуста: {_e}")
+            all_codes = []
         self._bm25_codes_meta = all_codes
         if _BM25_AVAILABLE and all_codes:
             self._bm25_codes = BM25Okapi([
@@ -95,7 +103,8 @@ class HybridRetriever:
 
         # PDF-чанки
         offset, all_pdf = None, []
-        while True:
+        try:
+         while True:
             result, offset = self._client.scroll(
                 collection_name=COLLECTION_PDF,
                 limit=batch_size, offset=offset,
@@ -104,6 +113,9 @@ class HybridRetriever:
             all_pdf.extend([r.payload for r in result])
             if offset is None:
                 break
+        except Exception as _e:
+            print(f"[Retriever] Коллекция PDF не найдена или пуста: {_e}")
+            all_pdf = []
         self._bm25_pdf_meta = all_pdf
         if _BM25_AVAILABLE and all_pdf:
             self._bm25_pdf = BM25Okapi([

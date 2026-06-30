@@ -168,3 +168,20 @@ docker run -p 8000:8000 \
   -v $(pwd)/qdrant_storage:/app/qdrant_storage \
   glorix-backend
 ```
+
+
+## Статус разработки
+
+| Компонент | Статус |
+|-----------|--------|
+| API (`/health`, `/classify/explain`) | ✅ dev-mode passed |
+| Build с 100 PDF из `docs/explanations` | ✅ 3260 чанков |
+| `/rebuild` → 409 в embedded режиме | ✅ |
+| `STRICT_BUILD=1` при отсутствии данных | ✅ |
+| `text_quality_score` в pdf_chunks | ✅ |
+| 121 pytest → passed, 4 skipped | ✅ |
+| Production Ollama LLM | ⏳ pending (нет GPU в sandbox) |
+| Полная база ТН ВЭД (>10 000 кодов) | ⏳ pending (нужна выгрузка ФТС) |
+
+**Итог:** `dev-mode passed` — реальные PDF индексированы, API возвращает доказательства.  
+`real-mode pending` — требуется Ollama + полная база ТН ВЭД для production.

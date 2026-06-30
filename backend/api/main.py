@@ -44,6 +44,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Путь к docs/explanations — module-level переменная для testability (монкей-патч в тестах)
+_DOCS_EXPL_PATH = Path(__file__).parent.parent.parent / "docs" / "explanations"
+
 
 def _get_default_model() -> str:
     """Взять модель из env OLLAMA_MODEL или из config.DEFAULT_LLM_MODEL."""
@@ -413,7 +416,7 @@ async def health():
     else:
         _pdf_dirs = [_data_dir / "pdf"]
 
-    _docs_expl = _Path(__file__).parent.parent.parent / "docs" / "explanations"
+    _docs_expl = _DOCS_EXPL_PATH  # модульная переменная (можно патчить в тестах)
     _docs_expl_detected = _docs_expl.exists()
     _docs_expl_included = _docs_expl_detected and (
         _docs_expl.resolve() in [d.resolve() for d in _pdf_dirs]
@@ -425,6 +428,11 @@ async def health():
         if _d.exists():
             _pdf_files.extend(sorted(_d.glob("**/*.pdf")))
 
+    _ds_warnings: list[str] = []
+    if _docs_expl_detected and not _docs_expl_included:
+        _ds_warnings.append(
+            "docs/explanations exists but is not included in PDF_DIRS. These PDFs will not be used."
+        )
     status["data_sources"] = {
         "excel_dirs": [str(_excel_dir)],
         "pdf_dirs": [str(d) for d in _pdf_dirs],
@@ -432,13 +440,10 @@ async def health():
         "pdf_files_found": len(_pdf_files),
         "docs_explanations_detected": _docs_expl_detected,
         "docs_explanations_included": _docs_expl_included,
+        "warnings": _ds_warnings,
     }
 
-    if _docs_expl_detected and not _docs_expl_included:
-        status["warnings"].append(
-            f"docs/explanations обнаружен ({len(list(_docs_expl.glob('**/*.pdf')))} PDF), "
-            "но НЕ включён в PDF_DIRS. Запустите build с PDF_DIRS=...,docs/explanations"
-        )
+    # docs/explanations warning теперь в data_sources.warnings
 
     # ── evidence_threshold ────────────────────────────────────────────
     try:
@@ -461,9 +466,31 @@ async def health():
 
 @app.post("/rebuild")
 async def rebuild_knowledge_base(x_rebuild_token: str = Header(..., alias="X-Rebuild-Token")):
-    """Перестроить базу знаний из Excel и PDF-файлов."""
+    """Перестроить базу знаний из Excel и PDF-файлов.
+
+    ВАЖНО: В режиме USE_EMBEDDED_QDRANT=1 этот endpoint всегда возвращает 409.
+    Embedded Qdrant держит storage lock пока API запущен.
+    Для rebuild: остановить API → python build_knowledge_base.py → запустить API.
+    """
     if x_rebuild_token != REBUILD_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid rebuild token")
+
+    # Embedded Qdrant: rebuild через subprocess ЗАПРЕЩЁН.
+    # Embedded Qdrant держит эксклюзивный lock на папку qdrant_storage/.
+    # Попытка запустить второй процесс с тем же storage приведёт к ошибке.
+    if os.getenv("USE_EMBEDDED_QDRANT", "0") == "1":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "status": "blocked",
+                "reason": (
+                    "Embedded Qdrant does not support rebuild while API process holds "
+                    "the local storage lock. Stop API and run "
+                    "python build_knowledge_base.py manually before starting API, "
+                    "or use external Qdrant."
+                ),
+            },
+        )
 
     build_script = Path(__file__).parent.parent / "build_knowledge_base.py"
     if not build_script.exists():

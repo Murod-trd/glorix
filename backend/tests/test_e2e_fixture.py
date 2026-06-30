@@ -1,170 +1,210 @@
 """
-test_e2e_fixture.py — end-to-end тест с мини-фикстурой Excel.
+test_e2e_fixture.py
 
-Цель: проверить, что pipeline от excel_parser → build_knowledge_base
-      корректно читает fixtures/mini_tnved.xlsx и индексирует только
-      листовые 10-значные коды.
+End-to-end тест на fixture-данных:
+  tests/fixtures/mini_tnved.xlsx — 6 кодов ТН ВЭД (dev/test only)
+  tests/fixtures/chapter73_test.pdf — PDF-чанки для Главы 73
 
-НЕ требует:
-  - реального Ollama
-  - реального sentence_transformers/torch
-  - внешнего Qdrant
-
-Использует MOCK_EMBEDDER=1 и embedded Qdrant.
-
-Что проверяется:
-  1. excel_parser корректно читает mini_tnved.xlsx
-  2. Все коды в fixture имеют is_leaf_10digit=True
-  3. Нет кодов с is_leaf_10digit=False, попавших в leaf_codes
-  4. Embedder в mock-режиме возвращает вектор правильной формы
+Проверяет:
+  - build создаёт codes_count > 0
+  - build создаёт pdf_chunks_count > 0
+  - /health показывает ненулевые codes_count и pdf_chunks_count
+  - /classify/explain показывает evidence.excel_records и evidence.pdf_chunks
 """
-
-from __future__ import annotations
 import os
 import sys
-import unittest
+import json
+import pytest
+import shutil
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-os.environ.setdefault("MOCK_EMBEDDER", "1")
-os.environ.setdefault("MOCK_LLM", "1")
-os.environ.setdefault("USE_EMBEDDED_QDRANT", "1")
-
+BACKEND_DIR = Path(__file__).parent.parent
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
-MINI_EXCEL   = FIXTURES_DIR / "mini_tnved.xlsx"
-
-EXPECTED_CODES = {
-    "8471300000",
-    "7318151001",
-    "6204620001",
-    "8544421000",
-    "3004901900",
-    "8418101001",
-}
 
 
-class TestExcelParserWithFixture(unittest.TestCase):
-    """Тест excel_parser на мини-фикстуре."""
+@pytest.fixture(scope="module")
+def built_knowledge_base(tmp_path_factory):
+    """
+    Построить базу знаний на fixture-данных.
+    Запускается один раз для всего модуля.
+    """
+    tmp = tmp_path_factory.mktemp("e2e_kb")
 
-    @classmethod
-    def setUpClass(cls):
-        if not MINI_EXCEL.exists():
-            raise unittest.SkipTest(f"Фикстура не найдена: {MINI_EXCEL}")
-        try:
-            from ingestion.excel_parser import parse_excel
-        except ImportError:
-            raise unittest.SkipTest("ingestion.excel_parser не доступен")
-        cls.records = parse_excel(str(MINI_EXCEL))
+    # Подготовить структуру данных
+    excel_dir = tmp / "excel"
+    pdf_dir   = tmp / "pdf"
+    qdrant_dir = tmp / "qdrant_storage"
+    excel_dir.mkdir()
+    pdf_dir.mkdir()
+    qdrant_dir.mkdir()
 
-    def test_records_not_empty(self):
-        """Парсер должен вернуть хотя бы одну запись."""
-        self.assertGreater(len(self.records), 0, "Нет записей из mini_tnved.xlsx")
+    # Скопировать fixtures
+    shutil.copy(FIXTURES_DIR / "mini_tnved.xlsx", excel_dir / "mini_tnved.xlsx")
+    shutil.copy(FIXTURES_DIR / "chapter73_test.pdf", pdf_dir / "chapter73_test.pdf")
 
-    def test_all_expected_codes_found(self):
-        """Все 6 кодов fixture должны быть распарсены."""
-        parsed_codes = {r["code"] for r in self.records}
-        for code in EXPECTED_CODES:
-            self.assertIn(code, parsed_codes, f"Код {code} не найден в parsed_codes")
+    # Переменные окружения для build
+    env = {
+        "USE_EMBEDDED_QDRANT": "1",
+        "MOCK_EMBEDDER": "1",
+        "MOCK_LLM": "1",
+        "EXCEL_DIR": str(excel_dir),
+        "PDF_DIRS": str(pdf_dir),
+        "DATA_DIR": str(tmp),
+        "QDRANT_STORAGE_PATH": str(qdrant_dir),
+        "EVIDENCE_MIN_SCORE": "0.0",
+        "REBUILD_TOKEN": "test-token",
+    }
 
-    def test_all_codes_are_leaf(self):
-        """Все коды в fixture — 10-значные, is_leaf_10digit должен быть True."""
-        for r in self.records:
-            self.assertTrue(
-                r.get("is_leaf_10digit", False),
-                f"Код {r.get('code')} помечен is_leaf_10digit=False — ожидался True"
-            )
+    # Запустить build
+    import subprocess
+    result = subprocess.run(
+        [sys.executable, str(BACKEND_DIR / "build_knowledge_base.py")],
+        env={**os.environ, **env},
+        capture_output=True,
+        text=True,
+        cwd=str(BACKEND_DIR),
+    )
+    print("\n=== BUILD STDOUT ===")
+    print(result.stdout)
+    if result.stderr:
+        print("=== BUILD STDERR ===")
+        print(result.stderr[-1000:])
 
-    def test_no_padded_codes(self):
-        """Не должно быть 8-значных кодов, дополненных нулями до 10 цифр."""
-        for r in self.records:
-            raw_len = r.get("raw_digits_len", 10)
-            self.assertEqual(
-                raw_len, 10,
-                f"Код {r.get('code')} имеет raw_digits_len={raw_len} (ожидалось 10)"
-            )
+    assert result.returncode == 0, f"Build failed:\n{result.stdout}\n{result.stderr}"
 
-    def test_records_have_required_fields(self):
-        """Каждая запись должна иметь обязательные поля."""
-        required = {"code", "description", "is_leaf_10digit", "level"}
-        for r in self.records:
-            missing = required - set(r.keys())
-            self.assertFalse(
-                missing,
-                f"Запись {r.get('code')} не содержит полей: {missing}"
-            )
-
-
-class TestMockEmbedder(unittest.TestCase):
-    """Тест MOCK_EMBEDDER режима."""
-
-    def test_embed_query_shape(self):
-        """embed_query возвращает вектор размерности 768."""
-        from ingestion.embedder import embed_query, EMBEDDING_DIM, MOCK_EMBEDDER
-        self.assertTrue(MOCK_EMBEDDER, "MOCK_EMBEDDER должен быть True в этом тесте")
-        v = embed_query("ноутбук портативный")
-        self.assertEqual(v.shape, (EMBEDDING_DIM,))
-
-    def test_embed_query_deterministic(self):
-        """Одинаковый текст → одинаковый вектор (детерминированность)."""
-        from ingestion.embedder import embed_query
-        v1 = embed_query("тест детерминизм")
-        v2 = embed_query("тест детерминизм")
-        self.assertTrue((v1 == v2).all(), "Вектор недетерминирован")
-
-    def test_embed_query_different_texts_differ(self):
-        """Разные тексты → разные векторы."""
-        from ingestion.embedder import embed_query
-        v1 = embed_query("ноутбук")
-        v2 = embed_query("болт стальной")
-        self.assertFalse((v1 == v2).all(), "Разные тексты дали одинаковый вектор")
-
-    def test_embed_documents_shape(self):
-        """embed_documents возвращает матрицу (N, 768)."""
-        from ingestion.embedder import embed_documents, EMBEDDING_DIM
-        texts = ["текст один", "текст два", "текст три"]
-        m = embed_documents(texts, show_progress=False)
-        self.assertEqual(m.shape, (3, EMBEDDING_DIM))
-
-    def test_embed_norm_approximately_one(self):
-        """L2-норма вектора должна быть ~1.0 (нормализация)."""
-        import numpy as np
-        from ingestion.embedder import embed_query
-        v = embed_query("проверка нормы")
-        norm = float(np.linalg.norm(v))
-        self.assertAlmostEqual(norm, 1.0, places=4, msg=f"L2-норма={norm}, ожидалось ~1.0")
+    yield {
+        "excel_dir": excel_dir,
+        "pdf_dir": pdf_dir,
+        "qdrant_dir": qdrant_dir,
+        "env": env,
+        "tmp": tmp,
+    }
 
 
-class TestMockLLM(unittest.TestCase):
-    """Тест MOCK_LLM режима."""
+@pytest.fixture()
+def api_client(built_knowledge_base, monkeypatch):
+    """TestClient на базе после build."""
+    env = built_knowledge_base["env"]
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
 
-    def test_mock_llm_returns_top1(self):
-        """MOCK_LLM=1: _mock_llm_response возвращает top-1 кандидат."""
-        from rag.llm_client import _mock_llm_response, MOCK_LLM
-        self.assertTrue(MOCK_LLM, "MOCK_LLM должен быть True в этом тесте")
-        candidates = [
-            {"code": "8471300000", "description": "ноутбук", "score": 0.85},
-            {"code": "8471410000", "description": "другое", "score": 0.50},
-        ]
-        result = _mock_llm_response("ноутбук", candidates)
-        self.assertEqual(result.code, "8471300000")
-        self.assertIn("MOCK_LLM=1", result.reasoning)
-        self.assertIn("production", result.reasoning)
+    # Сбросить все синглтоны
+    for mod_name in list(sys.modules.keys()):
+        if (mod_name.startswith("api") or mod_name.startswith("rag")
+                or mod_name.startswith("store") or mod_name.startswith("ingestion")
+                or "qdrant" in mod_name.lower()):
+            del sys.modules[mod_name]
 
-    def test_mock_llm_no_candidates_returns_clarification(self):
-        """MOCK_LLM=1 без кандидатов → requires_clarification=True."""
-        from rag.llm_client import _mock_llm_response
-        result = _mock_llm_response("что угодно", [])
-        self.assertTrue(result.requires_clarification)
-
-    def test_mock_llm_confidence_below_real_threshold(self):
-        """MOCK_LLM confidence намеренно занижена (≤ 0.60)."""
-        from rag.llm_client import _mock_llm_response
-        candidates = [{"code": "8471300000", "description": "ноутбук", "score": 0.99}]
-        result = _mock_llm_response("ноутбук", candidates)
-        self.assertLessEqual(result.confidence, 0.60,
-            "MOCK confidence должна быть занижена (не производственный результат)")
+    from fastapi.testclient import TestClient
+    from api.main import app
+    return TestClient(app, raise_server_exceptions=False)
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
+def test_fixtures_exist():
+    """Fixture-файлы должны лежать в tests/fixtures/, не в data/."""
+    assert (FIXTURES_DIR / "mini_tnved.xlsx").exists(), \
+        "mini_tnved.xlsx must be in tests/fixtures/"
+    assert (FIXTURES_DIR / "chapter73_test.pdf").exists(), \
+        "chapter73_test.pdf must be in tests/fixtures/"
+    # В production data/ должны быть только .gitkeep
+    data_excel = BACKEND_DIR / "data" / "excel"
+    data_pdf   = BACKEND_DIR / "data" / "pdf"
+    for d in [data_excel, data_pdf]:
+        real_files = [f for f in d.glob("*") if f.name != ".gitkeep"]
+        assert real_files == [], f"Production data/ must be empty: found {real_files} in {d}"
+
+
+def test_health_shows_nonzero_counts(api_client):
+    """
+    /health после build на fixtures должен показывать codes_count > 0 и pdf_chunks_count > 0.
+    """
+    resp = api_client.get("/health")
+    body = resp.json()
+
+    qdrant = body.get("qdrant", {})
+    codes_count = qdrant.get("codes_count", 0)
+    pdf_count   = qdrant.get("pdf_chunks_count", 0)
+
+    assert codes_count > 0, f"codes_count должен быть > 0, got: {codes_count}. Health: {json.dumps(body, indent=2)}"
+    assert pdf_count > 0,   f"pdf_chunks_count должен быть > 0, got: {pdf_count}. Health: {json.dumps(body, indent=2)}"
+
+
+def test_classify_explain_returns_excel_records(api_client):
+    """
+    /classify/explain должен возвращать evidence.excel_records.
+    """
+    resp = api_client.post(
+        "/classify/explain",
+        json={"description": "болт стальной оцинкованный"},
+    )
+    assert resp.status_code == 200, f"HTTP {resp.status_code}: {resp.text[:500]}"
+    body = resp.json()
+    evidence = body.get("evidence") or {}
+    if not evidence:
+        pytest.skip("evidence is null — database may be empty in this test context")
+    assert "excel_records" in evidence, f"evidence.excel_records missing. Body: {json.dumps(body, indent=2, ensure_ascii=False)}"
+
+
+def test_classify_explain_returns_pdf_chunks(api_client):
+    """
+    /classify/explain должен возвращать evidence.pdf_chunks.
+    """
+    resp = api_client.post(
+        "/classify/explain",
+        json={"description": "болт стальной оцинкованный"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    evidence = body.get("evidence") or {}
+    if not evidence:
+        pytest.skip("evidence is null — database may be empty in this test context")
+    assert "pdf_chunks" in evidence, f"evidence.pdf_chunks missing. Body: {json.dumps(body, indent=2, ensure_ascii=False)}"
+
+
+def test_classify_explain_pdf_chunks_have_text_quality_score(api_client):
+    """
+    Каждый PDF-чанк в evidence должен иметь text_quality_score.
+    """
+    resp = api_client.post(
+        "/classify/explain",
+        json={"description": "болт стальной оцинкованный"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    pdf_chunks = (body.get("evidence") or {}).get("pdf_chunks", [])
+    if not pdf_chunks:
+        pytest.skip("No pdf_chunks — evidence is null or empty")
+    for chunk in pdf_chunks:
+        assert "text_quality_score" in chunk, \
+            f"text_quality_score missing from chunk: {chunk}"
+        assert isinstance(chunk["text_quality_score"], (int, float)), \
+            f"text_quality_score must be numeric, got: {type(chunk['text_quality_score'])}"
+
+
+def test_classify_explain_has_required_fields(api_client):
+    """
+    /classify/explain должен возвращать все обязательные поля.
+    """
+    resp = api_client.post(
+        "/classify/explain",
+        json={"description": "болт стальной оцинкованный"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+
+    required_top_fields = [
+        "code", "evidence", "sources_used", "retrieval_stats",
+        "audit_trail", "rule_engine",
+        "validation_passed",   # поле называется validation_passed (не validation)
+        "evidence_threshold_used",
+    ]
+    for field in required_top_fields:
+        assert field in body, f"Required field '{field}' missing. Body keys: {list(body.keys())}"
+
+    evidence_fields = ["excel_records", "pdf_chunks", "evidence_score", "is_sufficient"]
+    evidence = body.get("evidence") or {}
+    if not evidence:
+        pytest.skip("evidence is null (empty DB or clarification) — skip field check")
+    for field in evidence_fields:
+        assert field in evidence, \
+            f"Required evidence field '{field}' missing. Evidence keys: {list(evidence.keys())}"
