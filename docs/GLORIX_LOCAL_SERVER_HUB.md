@@ -8,6 +8,73 @@ When the platform is ready to launch, this is replaced by real cloud infra.
 > future AI assistants, core backend, and databases later — behind ONE gateway
 > and ONE START/STOP workflow. It is NOT TN-VED-only.
 
+## Disk space and G: drive setup (do this FIRST)
+
+This laptop has a small **C:** drive (~39 GB free) and a larger **G:** drive
+(~120 GB free). Heavy local-server data MUST live on **G:**, never on C:.
+
+### What goes on G: vs C:
+
+| Lives on **G:** `G:\GLORIX_SERVER\...` | Stays on **C:** |
+|---|---|
+| `docker-data` (Docker images/containers/volumes, incl. Qdrant) | Windows + apps |
+| `ollama-models` (the ~4.7 GB LLM) | Docker Desktop / Ollama program files |
+| `qdrant-data`, `hf-cache` (embedder cache), `logs`, `backups`, `repo` | keep **>= 20-30 GB free** for stability |
+
+Run `scripts\windows\first-time-setup-glorix-server.ps1` first — it creates
+`G:\GLORIX_SERVER\{repo,docker-data,ollama-models,qdrant-data,hf-cache,logs,backups}`
+and writes the paths into `infra\local\.env.local`.
+
+### Docker Desktop — move its disk image to G:
+
+By default Docker Desktop stores everything in a single virtual disk on C:.
+Move it so images/containers/volumes land on G:
+
+1. Docker Desktop → **Settings → Resources → Advanced**.
+2. **Disk image location** → `G:\GLORIX_SERVER\docker-data`.
+3. Set the **disk usage limit** to a sane value (e.g. **80-100 GB** if free).
+4. Apply & Restart. Keep at least **20-30 GB free on C:** for Windows.
+
+Because the Qdrant container uses a Docker named volume, moving the disk image is
+what puts Qdrant data on G: (no fragile Windows bind-mount needed). Advanced users
+can instead bind Qdrant to `QDRANT_STORAGE` — see the comments in
+`infra/local/docker-compose.local.yml` (the `G:` drive colon needs compose long syntax).
+
+### Ollama — store models on G:
+
+The model is ~4.7 GB. **Set the path BEFORE pulling**, or it lands on C:
+
+1. Set a Windows **user environment variable**:
+   `OLLAMA_MODELS = G:\GLORIX_SERVER\ollama-models`
+   (Start → "Edit environment variables for your account").
+2. **Restart Ollama** (quit from the tray, start again) so it picks up the var.
+3. Then pull the model:
+   ```
+   ollama pull qwen2.5:7b-instruct-q4_K_M
+   ```
+
+> WARNING: Do NOT run `ollama pull` before setting `OLLAMA_MODELS` and restarting
+> Ollama — otherwise the model files are written to C: and fill the small drive.
+
+`START_GLORIX_SERVER` also exports `OLLAMA_MODELS`, `HF_HOME`, and
+`TRANSFORMERS_CACHE` (from `.env.local`) for the session before any model/KB work,
+but the **persistent** Windows env var above is what fixes Ollama for good.
+
+### Troubleshooting
+
+- **C: still losing space:** Docker disk image not moved (re-check Settings →
+  Resources → Advanced), or `OLLAMA_MODELS` was set after a pull. Move the Docker
+  image, delete the C: copy of the model, re-pull after setting `OLLAMA_MODELS`.
+- **Docker still using C:** the disk image relocation needs an Apply & Restart;
+  existing data may need to be re-pulled after the move.
+- **Ollama still using C:** the env var wasn't applied before restart — set
+  `OLLAMA_MODELS`, fully quit Ollama from the tray, start again, verify with
+  `ollama list` after re-pull.
+- **G: low on space:** raise/lower the Docker disk limit, remove unused images
+  (`docker image prune`), or move `hf-cache`/`backups` elsewhere on G:.
+- **Model download failed (storage):** free space on G:, confirm `OLLAMA_MODELS`
+  points to an existing G: folder, then re-run `ollama pull`.
+
 ## Architecture
 
 | Layer | What | Exposure |

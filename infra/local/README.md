@@ -12,6 +12,16 @@ infra/local/
   .env.local.example         # copy to .env.local (git-ignored)
 ```
 
+## Disk prep FIRST (small C:, large G:)
+
+Heavy data must live on **G:**, not C:. Create/use `G:\GLORIX_SERVER` with
+subfolders `repo, docker-data, ollama-models, qdrant-data, hf-cache, logs, backups`.
+`first-time-setup-glorix-server.ps1` creates these and fills `.env.local`.
+Then move **Docker Desktop's disk image** to `G:\GLORIX_SERVER\docker-data` and set
+**`OLLAMA_MODELS=G:\GLORIX_SERVER\ollama-models`** before pulling the model.
+Full details + troubleshooting: `docs/GLORIX_LOCAL_SERVER_HUB.md` →
+"Disk space and G: drive setup". Keep >= 20-30 GB free on C:.
+
 ## Topology
 
 ```

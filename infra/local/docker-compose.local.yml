@@ -37,7 +37,17 @@ services:
       # Localhost only — NEVER public.
       - "127.0.0.1:${QDRANT_PORT:-6333}:6333"
     volumes:
+      # DEFAULT (beginner-safe): named volume. It physically lives wherever Docker
+      # Desktop's disk image is located. Move that to G: so this data is OFF C:
+      #   Docker Desktop > Settings > Resources > Advanced > Disk image location
+      #   = G:\GLORIX_SERVER\docker-data   (see docs/GLORIX_LOCAL_SERVER_HUB.md)
       - qdrant_data:/qdrant/storage
+      # ADVANCED (explicit G: bind mount): comment the line above, uncomment below,
+      # and set QDRANT_STORAGE=G:\GLORIX_SERVER\qdrant-data in .env.local.
+      # The Windows drive-letter colon (G:) needs the LONG syntax shown here:
+      # - type: bind
+      #   source: ${QDRANT_STORAGE}
+      #   target: /qdrant/storage
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "sh", "-c", "wget -qO- http://localhost:6333/healthz || exit 1"]
@@ -89,6 +99,8 @@ services:
   #   volumes:
   #     - pg_data:/var/lib/postgresql/data
 
+# Named volumes live inside Docker Desktop's disk image. Relocate that disk image
+# to G:\GLORIX_SERVER\docker-data so NO heavy data lands on the small C: drive.
 volumes:
   qdrant_data:
   # pg_data:
