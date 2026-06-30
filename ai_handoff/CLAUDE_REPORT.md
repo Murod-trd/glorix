@@ -7,132 +7,85 @@
 Claude
 
 ## Current branch
-claude/backend-auth-foundation
+claude/add-tnved-ui-warning
 
 ## Last commit hash
-6d18efd
+8619c8c
 
 ## Git status before work
-Clean. Synced to `origin/main` at `9043c98` (Merge pull request #1 — TN VED stabilization).
+Clean. Synced to `origin/main` (includes merged PR #1 TN VED + PR #2 auth foundation).
 
 ## Git status after work
-Working tree clean after commit. Changed/added (no secrets, no node_modules, no dist, no *.db):
-- M .gitignore, package.json, package-lock.json, src/App.jsx
-- A prisma/schema.prisma
-- A api/_lib/{db,auth,password,roles,http}.js
-- A api/auth/{register,login,me,logout}.js
-- A api/companies/me.js
-- A src/services/authApi.js
-- A src/context/AuthContext.jsx
-- A .env.example, docs/BACKEND_AUTH_FOUNDATION.md, docs/ENVIRONMENT.md
-- A ai_handoff/CLAUDE_REPORT.md
+Clean after commit. One file changed: `src/pages/DocumentCenter.jsx` (+11 lines) and this report.
 
 ## What I read from the other agent report
-`ai_handoff/CODEX_REPORT.md` does not exist on `origin/main` or this branch. No competing
-`claude/*` or `codex/*` backend-auth branch exists. `list_pull_requests` (open) returned `[]`.
-So there is no competing PR for this task. PR #1 (Codex, TN VED) is already merged into main.
+Checked for `ai_handoff/CODEX_REPORT.md`; not editing it. No competing branch/PR for this UI task.
 
 ## Main objective
-Backend + Database + Real Auth Foundation
+Add a small, non-blocking, user-facing TN VED verification warning in the platform UI only.
 
 ## Project direction
-- Glorix remains React/Vite + Vercel. No architecture rewrite.
-- Existing Vercel `/api/*` TN VED endpoints (classify, search, explain, classify-batch,
-  _lib/engine.js, _data/**) are untouched.
-- TN VED PR #1 is already merged; not touched here.
-- Python TN VED backend under `backend/` is NOT connected to the frontend (still true).
-- This PR adds an auth/database foundation only, behind a default-off feature flag.
+- Glorix remains React/Vite + Vercel. No architecture change.
+- UI-only change. No TN VED codes, classification, import, VAT, auth/DB/Prisma, or Python backend touched.
+- Warning must NOT appear in generated documents (KP HTML, DOCX, PDF).
 
 ## Files changed by this agent
-- `prisma/schema.prisma` — new — User/Company/Membership/AuditLog + placeholder Tender models.
-- `api/_lib/db.js` — new — Prisma client singleton for serverless.
-- `api/_lib/password.js` — new — bcryptjs hash/verify.
-- `api/_lib/auth.js` — new — JWT sign/verify, bearer extraction, getAuthUser, safeUser (strips passwordHash).
-- `api/_lib/roles.js` — new — role/type/status enums + validators.
-- `api/_lib/http.js` — new — CORS/OPTIONS + body/email helpers.
-- `api/auth/register.js` — new — POST register (user+company+membership+audit, returns token).
-- `api/auth/login.js` — new — POST login (verify, returns token + safe user/company).
-- `api/auth/me.js` — new — GET current user/company/membership (Bearer).
-- `api/auth/logout.js` — new — POST stateless logout.
-- `api/companies/me.js` — new — GET/PATCH current company (no KYC).
-- `src/services/authApi.js` — new — fetch client (register/login/getMe/logout/getMyCompany/updateMyCompany).
-- `src/context/AuthContext.jsx` — new — additive, inert-by-default auth provider.
-- `src/App.jsx` — modified — mount `AuthProvider` as outermost provider (inert when flag off).
-- `package.json` — modified — add @prisma/client, bcryptjs, jsonwebtoken, prisma + scripts (postinstall: prisma generate).
-- `package-lock.json` — modified — lockfile for new deps.
-- `.gitignore` — modified — ignore `.env*`, `*.db`, prisma dev db (keeps `.env.example`).
-- `.env.example`, `docs/BACKEND_AUTH_FOUNDATION.md`, `docs/ENVIRONMENT.md` — new — config + docs.
+- `src/pages/DocumentCenter.jsx` — added a small informational notice (RU + short EN) inside the
+  live "Спецификация товаров" items-table card, directly above the products table where the
+  ТН ВЭД column is shown and auto-filled. This is React render markup only.
+- `ai_handoff/CLAUDE_REPORT.md` — this report.
 
 ## Code changes made
-Added a Prisma data model and a JWT auth layer exposed through new Vercel serverless
-functions following the existing `export default function handler(req,res)` convention
-(CORS header + OPTIONS short-circuit, `req.body`/`req.query`, `res.status().json()`).
-Passwords are bcrypt-hashed; `passwordHash` is never returned. Frontend gets a thin fetch
-client and an opt-in context, both gated by `VITE_USE_REAL_AUTH` (default `false`).
+Inserted an 11-line JSX block: a small amber informational box (⚠) with the required Russian
+text and the optional short English line. Uses existing theme variables (`--text-2`, `--text-3`)
+and the existing gold accent color. It is non-blocking, does not gate any action, and holds no
+logic/state. A code comment marks it "platform UI only — intentionally NOT included in generated
+KP HTML, DOCX export, or PDF export."
 
 ## Why these changes were made
-To create the first real backend/DB/auth foundation (PR #2) without disturbing the working
-demo or the deployed TF-IDF TN VED API. Default-off flag guarantees current behavior.
+To warn users that auto-suggested TN VED codes may be wrong and should be verified with a customs
+declarant/broker before official customs use — without altering any codes, logic, or documents.
 
 ## Commands run
-- `git fetch origin --prune && git checkout main && git reset --hard origin/main && git clean -fd`
-- `git checkout -b claude/backend-auth-foundation`
+- git fetch/reset to origin/main; `git checkout -b claude/add-tnved-ui-warning`
 - `npm install --ignore-scripts --no-audit --no-fund`
-- `DATABASE_URL=file:./dev.db npx prisma validate` (and `prisma generate`)
 - `npm run build`
-- `node --check` on every new `.js`; `npx eslint` on new files
+- `npx eslint src/pages/DocumentCenter.jsx` (before and after change)
 
 ## Results
-- `npm install --ignore-scripts` → `added 211 packages in 26s` (RC 0).
-- `npm run build` → `✓ built in 2.19s` (RC 0). Only pre-existing chunk-size warning.
-- `node --check` → OK for all 11 new JS files.
-- `npx prisma validate` / `generate` → FAILED with `403 Forbidden` fetching
-  `binaries.prisma.sh/.../libquery_engine...` and `schema-engine.gz`. This is a sandbox
-  network block of Prisma's engine CDN, not a schema error. Must be run locally/Vercel.
-- eslint on new files → no new error types beyond the repo's pre-existing
-  `react-refresh/only-export-components` convention (same as existing `AccountContext.jsx`).
-  (`api/_lib/engine.js` has a pre-existing `process` no-undef on main — not modified.)
+- `npm install --ignore-scripts` → `added 211 packages in 7s` (RC 0).
+- `npm run build` → `✓ built in 1.20s` (RC 0). Only the pre-existing chunk-size warning.
+- `git diff --stat` → `src/pages/DocumentCenter.jsx | 11 +++++++++++` (1 file, +11, -0).
+- eslint `DocumentCenter.jsx` → 7 errors, ALL pre-existing (lines 7,134,374,409,437,753,760) and
+  identical when linting the original file (verified via git stash). My added lines (847–856)
+  introduce ZERO new lint errors. Per instructions, pre-existing unrelated issues left untouched.
 
 ## Tests passed
-- Frontend production build (`npm run build`): PASS.
-- `node --check` syntax validation of all new serverless + service files: PASS.
+- Frontend production build: PASS.
 
 ## Tests failed
-- None of mine. Prisma engine-dependent commands could not execute in the sandbox
-  (CDN 403). No Python files were touched, so Python tests were not rerun.
+- None. (Pre-existing lint errors are unrelated and were not introduced by this change.)
 
 ## Build status
-`npm run build` PASS (vite, 2.19s). Frontend build is independent of Prisma (vite bundles
-`src/` only; `@prisma/client` is imported solely by backend `api/_lib/db.js`).
+`npm run build` PASS (1.20s).
 
 ## Frontend/demo compatibility
-Demo/localStorage behavior remains the DEFAULT. `VITE_USE_REAL_AUTH` defaults to `false`;
-`AuthProvider` is inert (no network) when off. `AccountContext` and all existing screens
-are unchanged.
+Fully preserved. Notice is static, non-blocking, does not change account/demo behavior.
 
 ## Auth/database status
-Real now: schema (User/Company/Membership/AuditLog/Tender placeholder), bcrypt hashing, JWT
-sign/verify, and register/login/me/logout + companies/me endpoints (code complete, lint/syntax
-clean). NOT yet executed against a live DB here because Prisma engines can't download in the
-sandbox — migration must run locally/Vercel.
+Unchanged. No auth/DB/Prisma files touched.
 
 ## Current blockers
-- Prisma engine CDN blocked in sandbox → could not run `prisma validate/generate/migrate`.
-  Provide exact local commands (see docs/BACKEND_AUTH_FOUNDATION.md). On Vercel this works.
+- Opening the PR may require the GitHub UI: the integration previously lacked pull-request write
+  permission and direct API egress is sandbox-blocked. Branch is pushed; PR link provided.
 
 ## Next exact step
-Locally or on Vercel: set `DATABASE_URL` + `JWT_SECRET`, run
-`npx prisma generate && npx prisma migrate dev --name init_auth_foundation`, then smoke-test
-`/api/auth/register`, `/api/auth/login`, `/api/auth/me`. For production, switch the Prisma
-`provider` to `postgresql`.
+Review/merge the PR. Optional future cleanup (separate PR): the 7 pre-existing lint errors in
+DocumentCenter.jsx.
 
 ## Handoff prompt for the other agent
-> You are Codex. PR #2 (Claude branch `claude/backend-auth-foundation`) adds the backend
-> auth/DB foundation: Prisma schema (User/Company/Membership/AuditLog/Tender placeholder),
-> bcryptjs + JWT, and `/api/auth/{register,login,me,logout}` + `/api/companies/me`, plus
-> `src/services/authApi.js` and an opt-in `AuthContext` gated by `VITE_USE_REAL_AUTH=false`.
-> The frontend build passes; Prisma engine commands could NOT run in the sandbox (CDN 403),
-> so migrations are pending local/Vercel execution. Do NOT create a competing branch.
-> Review the PR; if you extend it, run `prisma migrate dev` locally and add real endpoint
-> smoke tests, and keep `VITE_USE_REAL_AUTH` default `false`. Do not connect the Python TN
-> VED backend to the frontend in this PR. Update only `ai_handoff/CODEX_REPORT.md`.
+> You are Codex. Claude added a small UI-only TN VED verification notice in
+> `src/pages/DocumentCenter.jsx` (branch `claude/add-tnved-ui-warning`), inside the live
+> "Спецификация товаров" items table, above the products table. It is NOT in generated KP HTML,
+> DOCX, or PDF output. Build passes; the only lint errors in that file are pre-existing. Do not
+> create a competing branch. If reviewing, just confirm scope. Update only CODEX_REPORT.md.

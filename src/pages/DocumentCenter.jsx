@@ -844,6 +844,17 @@ export default function DocumentCenter() {
               <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 14 }}>
                 Спецификация товаров ({items.length} позиций)
               </div>
+              {/* TN VED verification notice — platform UI only. Intentionally NOT included in
+                  generated KP HTML, DOCX export, or PDF export. */}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '8px 12px', marginBottom: 12, background: 'rgba(245,166,35,0.08)', border: '1px solid rgba(245,166,35,0.28)', borderRadius: 8 }}>
+                <span style={{ fontSize: 13, lineHeight: 1.4, flexShrink: 0 }}>⚠</span>
+                <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-2)' }}>
+                  Коды ТН ВЭД подбираются автоматически и могут содержать ошибки. Перед использованием кодов для таможенного оформления рекомендуем проверить их с декларантом или таможенным брокером.
+                  <span style={{ display: 'block', marginTop: 3, color: 'var(--text-3)' }}>
+                    HS/TN VED codes are auto-suggested and should be verified with a customs declarant or broker before official customs use.
+                  </span>
+                </div>
+              </div>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 600 }}>
                   <thead>
