@@ -7,81 +7,90 @@
 Claude
 
 ## Current branch
-claude/disable-legacy-tnved-autofill
+claude/activate-tnved-ai-backend
 
 ## Last commit hash
-9ab7a7f
-
-## Git status before work
-Clean, synced to origin/main (d97cf33 — TN VED UI warning).
-
-## Git status after work
-Clean after commit; merged to main via fast-forward (see below).
-
-## What I read from the other agent report
-No CODEX_REPORT.md present. Not edited.
+d3f2d60
 
 ## Main objective
-Disable legacy automatic TN VED autofill; route autofill exclusively through the AI/RAG backend.
+Activate the Python AI/RAG TN VED backend for the prepared /api/tnved-ai/* proxy.
 
-## Project direction
-Glorix stays React/Vite + Vercel. Legacy TF-IDF files remain in repo (historical/internal) but
-are no longer used by Document Center autofill. No architecture rewrite.
+## Honest outcome
+PREPARED, NOT ACTIVATED. The backend could not be deployed/run from this environment.
+TNVED_AI_API_URL remains empty → platform safely leaves codes blank. No fabricated URL set.
 
-## Files changed by this agent
-- `api/tnved-ai/_client.js` (new) — shared AI-backend client; confidence gate; never calls legacy engine.
-- `api/tnved-ai/health.js` (new) — proxy GET /health; unavailable response if URL missing.
-- `api/tnved-ai/classify.js` (new) — proxy POST /classify; blank code unless confident.
-- `api/tnved-ai/classify-batch.js` (new) — loops backend /classify (no batch route); blank codes if unavailable.
-- `api/tnved-ai/explain.js` (new) — proxy POST /classify/explain.
-- `src/services/tnvedAiClient.js` (new) — frontend client; calls ONLY /api/tnved-ai/*.
-- `src/pages/DocumentCenter.jsx` (mod) — AI-only autofill; removed regex+TF-IDF autofill; removed
-  OpenAI key field → GLORIX AI status; added autofill status message. generateKP/exports untouched.
-- `.env.example` (mod) — TNVED_AI_API_URL, TNVED_AI_TIMEOUT_MS, VITE_TNVED_AI_ONLY (placeholders).
-- `docs/TNVED_AI_ONLY_MIGRATION.md` (new) — full migration doc.
+## 1. Code changes made
+Docs only: added docs/TNVED_AI_DEPLOYMENT.md (+ this report). No app code/config changed.
 
-## Code changes made
-handlePaste now: keep manual codes; send code-less items to `classifyBatchTnved` (→ /api/tnved-ai/
-classify-batch → backend /classify). Fill code only when backend confident; else blank. No
-guessProductCode call, no /api/classify-batch call. Health checked on mount → aiStatus indicator.
+## 2. Merged to main
+Yes — fast-forward (docs-only, safe). See hash above.
 
-## Why these changes were made
-Legacy regex/TF-IDF assigned wrong codes. Wrong TN VED → customs fines worth millions. Better blank
-than wrong; AI backend already refuses to answer when evidence insufficient.
+## 3. Backend files found
+backend/api/main.py, build_knowledge_base.py, config.py, Dockerfile, docker-compose.yml,
+start.sh, rag/*, ingestion/*, store/qdrant_store.py, requirements.txt, .env.example.
 
-## Commands run
-- npm install --ignore-scripts; npm run build
-- node /tmp/smoke.mjs (safety smoke test)
-- npx eslint on changed files
+## 4. Backend entrypoint
+`uvicorn api.main:app` (port 8000). Routes: GET /health, POST /classify, POST /classify/audit,
+POST /classify/explain, POST /rebuild, POST /benchmark/run.
 
-## Results
-- Build: `✓ built in 4.21s` (RC 0; only pre-existing chunk-size warning).
-- Smoke test: PASSED — unavailable→blank; confidence gate (requires_clarification / evidence.is_sufficient) enforced; classify/batch/health all return empty/unavailable with no AI URL; no legacy calls.
-- eslint DocumentCenter.jsx: 3 errors, ALL pre-existing (line 134 qty, 762/769 companyLogo empty catches). My change introduced 0 new errors and removed 4 pre-existing ones. Proxy + service files lint-clean.
+## 5. Real-mode requirements (verified)
+- Ollama running qwen2.5:7b-instruct-q4_K_M (OLLAMA_BASE_URL).
+- Real embedder intfloat/multilingual-e5-base (sentence-transformers + torch). MOCK_EMBEDDER OFF.
+- Qdrant vector DB (USE_EMBEDDED_QDRANT=0 + QDRANT_URL, or embedded).
+- Knowledge base built from docs/reference_data/tnved/TWS_TNVED_2026-06-24.xlsx (13,289 codes)
+  + docs/explanations (100 PDFs). Repo docs estimate ~1 hour build.
+- MOCK_LLM/MOCK_EMBEDDER must be OFF for production.
 
-## Tests passed
-Frontend build; node safety smoke test.
+## 6. Why not activated (sandbox evidence)
+- ollama: NOT installed. nvidia-smi: absent (no GPU). RAM: 3.8 GiB total (model needs ~4.7 GB+).
+- start.sh hard-requires reachable Qdrant. Real-mode KB build exceeds the 45s/process limit and
+  processes do not persist between calls. → real backend cannot run here.
+- No render.yaml/railway/fly.toml/Procfile in repo; no connected container-host deploy tooling.
+- Backend is a long-running container service → Vercel serverless cannot host it.
+- Therefore: no real backend URL obtainable; setting TNVED_AI_API_URL would be fabrication (forbidden).
 
-## Tests failed
-None.
+## 7. Deployment target checked
+Vercel (frontend/proxy only — cannot host the Python RAG service). No Render/Railway/Fly config or
+tooling available. Backend is Docker/compose (Qdrant + host Ollama).
 
-## Build status
-PASS.
+## 8. Deployed backend URL
+None (not deployed).
 
-## Frontend/demo compatibility
-Demo preserved. Import still works. Manual codes preserved. Missing AI URL → blank codes + warning, UI not broken.
+## 9. Vercel env variables
+NOT set (no real backend URL). TNVED_AI_API_URL intentionally left empty (safe state preserved).
 
-## Auth/database status
-Unchanged.
+## 10. /api/tnved-ai/health result (local, no URL)
+status: "unavailable" (ok:false). Correct safe behavior.
 
-## Current blockers
-None for merge. AI backend not yet deployed/configured (TNVED_AI_API_URL empty) → intended safe behavior.
+## 11. Sample classification results (5 real products, no backend)
+All returned code="" confident=false; batch reason "TNVED_AI_API_URL is not configured".
+Products: Листовые ножница по металлу JS3201J; WD-40 универсальный спрей; Отвод металлический Ду-25;
+Бита торцевая 8мм; Отбивочный шнур. → No fabrication; blank as designed.
 
-## Next exact step
-Deploy backend/ (FastAPI) with full Excel + PDFs; set TNVED_AI_API_URL in Vercel; redeploy; verify /api/tnved-ai/health = configured.
+## 12. Legacy fallback
+Still DISABLED. DocumentCenter has no live /api/classify-batch, /api/classify, /api/search,
+engine.js, or guessProductCode() call. Confirmed by grep.
+
+## 13. Generated documents
+Untouched (no src changes in this task — docs only).
+
+## 14. Validation logs
+- npm run build → ✓ built (RC 0; only pre-existing chunk-size warning).
+- Proxy smoke test (no URL) → unavailable + all 5 sample codes blank; health=unavailable. PASS.
+
+## 15. Blockers
+Cannot deploy the AI/RAG backend (no GPU/Ollama/RAM/host tooling) → no real URL → cannot set Vercel
+env → cannot activate. Activation requires a real container host operated by the founder.
+
+## 16. Next exact step (manual)
+Follow docs/TNVED_AI_DEPLOYMENT.md: deploy backend (Docker + Qdrant + Ollama qwen2.5:7b) on a host
+with >=8 GB RAM, build the KB in real mode, verify {URL}/health (codes_count>10000, mock_*=false)
+and {URL}/classify, then set Vercel env TNVED_AI_API_URL/TNVED_AI_TIMEOUT_MS/VITE_TNVED_AI_ONLY and
+redeploy; verify /api/tnved-ai/health = configured.
 
 ## Handoff prompt for the other agent
-> You are Codex. Claude disabled legacy TN VED autofill in DocumentCenter and added an AI-only proxy
-> (api/tnved-ai/*) + src/services/tnvedAiClient.js. With TNVED_AI_API_URL unset, autofill returns
-> blank codes (safe). To activate: deploy the Python backend/, set TNVED_AI_API_URL in Vercel.
-> Do not re-enable legacy regex/TF-IDF autofill. Update only CODEX_REPORT.md.
+> You are Codex. Activation of the TN VED AI backend is PREPARED, NOT DONE. The /api/tnved-ai/* proxy
+> + frontend are merged; TNVED_AI_API_URL is empty so codes stay blank (safe). It cannot be activated
+> from the sandbox (no GPU/Ollama/RAM, no host tooling). To activate, follow docs/TNVED_AI_DEPLOYMENT.md:
+> deploy backend/ to a real container host, verify /health + /classify, then set Vercel env + redeploy.
+> Do NOT set TNVED_AI_API_URL to localhost/fake. Do NOT re-enable legacy autofill. Update only CODEX_REPORT.md.
