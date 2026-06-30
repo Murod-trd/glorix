@@ -888,7 +888,7 @@ def run_benchmark(
     # Импортировать classify только если не dry-run (зависит от rank_bm25 и Qdrant)
     _classify = None
     if not dry_run:
-        from backend.rag.classifier import classify as _classify
+        from rag.classifier import classify as _classify
 
     print(f"Запуск benchmark: {len(cases)} тестов, модель={model}, dry_run={dry_run}")
     print("-" * 70)

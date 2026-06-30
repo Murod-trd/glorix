@@ -68,6 +68,7 @@ def extract_pdf(filepath: str | Path) -> list[PdfChunk]:
     filepath = Path(filepath)
     doc = fitz.open(str(filepath))
     source_name = filepath.name
+    page_count = len(doc)
 
     # Извлечь весь текст со структурой шрифтов
     raw_pages = []
@@ -98,7 +99,7 @@ def extract_pdf(filepath: str | Path) -> list[PdfChunk]:
     # Нарезать на смысловые чанки
     chunks = _build_chunks(paragraphs, source_name)
 
-    print(f"[PDFExtractor] {source_name}: {len(chunks)} чанков из {len(doc)} страниц")
+    print(f"[PDFExtractor] {source_name}: {len(chunks)} чанков из {page_count} страниц")
     return chunks
 
 
@@ -229,9 +230,9 @@ def _build_chunks(paragraphs: list[dict], source_file: str) -> list[PdfChunk]:
             continue
 
         # Обычный текст — буферизировать
-        buffer.append(para)
         if not buffer:
             buffer_page = para["page"]
+        buffer.append(para)
 
         # Если буфер накопил достаточно — сохранить чанк
         total_len = sum(len(p["text"]) for p in buffer)

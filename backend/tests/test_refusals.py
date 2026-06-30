@@ -71,16 +71,19 @@ class TestHallucinationGuard:
         assert "кандидат" in combined.lower() or "галлюцинац" in combined.lower() or \
                "отсутствует" in combined.lower()
 
-    def test_8digit_fallback_triggers_warning(self):
-        """Код есть на уровне 8 цифр (но не точно 10) → warning, не блокировка."""
+    def test_8digit_fallback_blocks_result(self):
+        """Код есть на уровне 8 цифр (но не точно 10) → БЛОКИРОВКА (patch v7.1).
+        До патча: только warning. После патча: passed=False + issue (опасная лазейка закрыта)."""
         result = validate_classification(
             proposed_code="8471300099",   # не в базе точно
             confidence=0.70,
             product_description="Компьютер",
             retrieved_codes=[{"code": "8471300010", "description": "ПК", "rrf_score": 0.3}],
         )
-        # 84713000 совпадает → не блокировка, но предупреждение
-        assert len(result.warnings) > 0
+        # v7.1 FIX: 8-цифровое совпадение теперь блокирует — не просто предупреждение
+        assert result.passed is False
+        assert len(result.issues) > 0
+        assert "субсубпозиция" in " ".join(result.issues) or "10-значн" in " ".join(result.issues)
 
     def test_exact_code_in_candidates_passes(self):
         """Код точно есть среди кандидатов → passed=True (при высокой confidence)."""

@@ -11,6 +11,7 @@ main.py v3 — FastAPI backend для ТН ВЭД классификатора.
 
 from __future__ import annotations
 import logging
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -21,9 +22,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 # Добавить корневой каталог в sys.path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from backend.rag.classifier import classify, ClassificationResult
+from rag.classifier import classify, ClassificationResult
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -36,17 +37,14 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "https://*.vercel.app",
-    ],
+    allow_origins=[o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",") if o.strip()],
+    allow_origin_regex=os.getenv("CORS_ALLOW_ORIGIN_REGEX", r"https://.*\.vercel\.app"),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-REBUILD_TOKEN = "tnved-rebuild-2024"
+REBUILD_TOKEN = os.getenv("REBUILD_TOKEN", "change-this-token")
 
 
 # ── Pydantic схемы ───────────────────────────────────────────────────────
@@ -341,7 +339,8 @@ async def health():
     # Проверить Ollama
     try:
         async with httpx.AsyncClient(timeout=3) as client:
-            r = await client.get("http://localhost:11434/api/tags")
+            ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+            r = await client.get(f"{ollama_url}/api/tags")
             if r.status_code == 200:
                 models = [m["name"] for m in r.json().get("models", [])]
                 status["ollama"] = {"status": "ok", "models": models}
@@ -354,10 +353,10 @@ async def health():
 
     # Проверить Qdrant
     try:
-        from backend.store.qdrant_store import get_client, CODES_COLLECTION, PDF_COLLECTION
+        from store.qdrant_store import get_client, COLLECTION_CODES, COLLECTION_PDF
         client = get_client()
-        codes_count = client.count(CODES_COLLECTION).count
-        pdf_count   = client.count(PDF_COLLECTION).count
+        codes_count = client.count(COLLECTION_CODES).count
+        pdf_count   = client.count(COLLECTION_PDF).count
         status["qdrant"] = {
             "status": "ok",
             "codes_count": codes_count,

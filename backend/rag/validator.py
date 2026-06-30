@@ -146,11 +146,14 @@ def validate_classification(
         vr.confidence_adjustment -= 0.5
         return vr
     elif proposed_code not in candidate_codes and proposed_code[:8] in candidate_8digit:
-        vr.warnings.append(
-            f"Код {proposed_code} не найден точно, но позиция {proposed_code[:8]} присутствует. "
-            f"Возможно, субпозиция определена неточно."
+        vr.passed = False
+        vr.issues.append(
+            f"Точная 10-значная субсубпозиция {proposed_code} отсутствует среди кандидатов, "
+            f"хотя 8-значная позиция {proposed_code[:8]} найдена. "
+            f"Система отказывается выдавать неподтверждённый 10-значный код."
         )
-        vr.confidence_adjustment -= 0.1
+        vr.confidence_adjustment -= 0.25
+        return vr
 
     # ── Проверка 3: Примечания и исключения из PDF ────────────────────
     vr.checks_run.append("pdf_notes_and_exclusions")

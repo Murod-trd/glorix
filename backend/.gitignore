@@ -4,3 +4,6 @@ __pycache__/
 .env
 data/
 *.zip
+*.pyc_new
+.pytest_cache/
+stress_results.json

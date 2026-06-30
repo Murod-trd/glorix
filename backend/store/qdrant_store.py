@@ -9,6 +9,7 @@ Qdrant Store — векторная база знаний.
 """
 
 from __future__ import annotations
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -20,7 +21,7 @@ from qdrant_client.models import (
 import numpy as np
 import uuid
 
-STORAGE_PATH = Path(__file__).parent.parent.parent / "qdrant_storage"
+STORAGE_PATH = Path(os.getenv("QDRANT_STORAGE_PATH", Path(__file__).parent.parent / "qdrant_storage"))
 
 COLLECTION_CODES = "tnved_codes"
 COLLECTION_PDF = "pdf_chunks"
@@ -28,9 +29,18 @@ VECTOR_DIM = 768  # multilingual-e5-base
 
 
 def get_client() -> QdrantClient:
-    """Получить embedded-клиент Qdrant."""
-    STORAGE_PATH.mkdir(exist_ok=True)
-    return QdrantClient(path=str(STORAGE_PATH))
+    """Получить Qdrant-клиент.
+
+    USE_EMBEDDED_QDRANT=1 — локальное файловое хранилище.
+    Иначе используется внешний Qdrant по QDRANT_HOST/QDRANT_PORT.
+    """
+    if os.getenv("USE_EMBEDDED_QDRANT", "0") == "1":
+        STORAGE_PATH.mkdir(parents=True, exist_ok=True)
+        return QdrantClient(path=str(STORAGE_PATH))
+    return QdrantClient(
+        host=os.getenv("QDRANT_HOST", "localhost"),
+        port=int(os.getenv("QDRANT_PORT", "6333")),
+    )
 
 
 def init_collections(client: QdrantClient, recreate: bool = False):

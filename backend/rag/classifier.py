@@ -40,7 +40,7 @@ from .validator    import validate_classification, ValidationResult
 # правила вдвое без обоснования. Теперь один источник OPI-вердиктов.
 from .evidence_builder import build_evidence, build_refusal_questions, Evidence
 from .devil_advocate         import check_classification as devil_check, DevilResult
-from .rule_engine            import run_rule_engine, RuleEngineReport, FullOPIReport
+from .rule_engine            import run_rule_engine, RuleEngineReport
 from .product_feature_extractor import extract_features, ProductFeatures
 
 import sys
@@ -98,36 +98,36 @@ class CandidateAnalysis:
 class ClassificationResult:
     """Итоговый результат классификации."""
     # Основной результат
-    code: Optional[str]
-    confidence: float
-    requires_clarification: bool
-    clarification_message: Optional[str]
-    clarification_questions: list[str]
+    code: Optional[str] = None
+    confidence: float = 0.0
+    requires_clarification: bool = True
+    clarification_message: Optional[str] = None
+    clarification_questions: list[str] = field(default_factory=list)
 
     # TOP-10 анализ
-    top10_candidates: list[CandidateAnalysis]
+    top10_candidates: list[CandidateAnalysis] = field(default_factory=list)
 
     # Доказательства
-    evidence: Optional[Evidence]
+    evidence: Optional[Evidence] = None
 
     # OPI / Rule Engine
-    opi_report: Optional[FullOPIReport]
+    opi_report: Optional[RuleEngineReport] = None
     rule_engine_report: Optional[RuleEngineReport] = None
     product_features: Optional[ProductFeatures] = None
 
     # Аудит второго мнения
-    devil_result: Optional[DevilResult]
+    devil_result: Optional[DevilResult] = None
 
     # Первичная LLM
-    llm_response: Optional[LLMResponse]
-    validation_result: Optional[ValidationResult]
+    llm_response: Optional[LLMResponse] = None
+    validation_result: Optional[ValidationResult] = None
 
     # Метаданные
-    reasoning: str
-    sources_used: list[str]
-    opi_rule_applied: str
-    processing_time_ms: int
-    audit_trail: list[dict]
+    reasoning: str = ""
+    sources_used: list[str] = field(default_factory=list)
+    opi_rule_applied: str = ""
+    processing_time_ms: int = 0
+    audit_trail: list[dict] = field(default_factory=list)
 
     def to_dict(self, include_audit: bool = False) -> dict:
         base = {
@@ -560,7 +560,7 @@ def _clarification_result(
     questions: list[str],
     top10: list[CandidateAnalysis],
     evidence: Optional[Evidence],
-    opi_report: Optional[FullOPIReport],
+    opi_report: Optional[RuleEngineReport],
     devil: Optional[DevilResult],
     start_ms: int,
     audit: list[dict],

@@ -17,6 +17,7 @@ LLM Client — взаимодействие с локальной моделью
 from __future__ import annotations
 import json
 import re
+import os
 from dataclasses import dataclass, field
 from typing import Optional
 try:
@@ -64,7 +65,7 @@ class LLMResponse:
             raw_response="",
         )
 
-OLLAMA_MODEL      = "qwen2.5:7b-instruct-q4_K_M"
+OLLAMA_MODEL      = os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct-q4_K_M")
 OLLAMA_MODEL_FAST = "phi3.5"   # запасной, быстрее но менее точный
 TEMPERATURE       = 0.1        # минимальная случайность → детерминированность
 MAX_TOKENS        = 2048       # увеличено для полных рассуждений
@@ -161,6 +162,9 @@ def classify_with_llm(
         context = extra_context + "\n\n" + context
     user_msg = _build_user_message(product_description, context)
 
+    if ollama is None:
+        raise RuntimeError("Пакет ollama не установлен. Установите зависимости: pip install -r requirements.txt; затем запустите Ollama и модель.")
+
     try:
         response = ollama.chat(
             model=model,
@@ -178,7 +182,7 @@ def classify_with_llm(
         raw = response["message"]["content"]
         return _parse_response(raw)
 
-    except ollama.ResponseError as e:
+    except getattr(ollama, "ResponseError", Exception) as e:
         if "model not found" in str(e).lower():
             raise RuntimeError(
                 f"Модель {model} не установлена. "
@@ -343,6 +347,8 @@ def _parse_error_response(raw: str, error_msg: str) -> LLMResponse:
 
 def check_ollama_available(model: str = OLLAMA_MODEL) -> dict:
     """Проверить доступность Ollama и нужной модели."""
+    if ollama is None:
+        return {"ollama_running": False, "error": "Пакет ollama не установлен", "model_available": False, "available_models": []}
     try:
         models = ollama.list()
         available = [m["name"] for m in models.get("models", [])]

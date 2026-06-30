@@ -31,14 +31,18 @@ else
 fi
 
 # Проверка Qdrant
-QDRANT_HOST=${QDRANT_HOST:-localhost}
-QDRANT_PORT=${QDRANT_PORT:-6333}
-if curl -sf "http://$QDRANT_HOST:$QDRANT_PORT/healthz" >/dev/null 2>&1; then
-    echo "  Qdrant: OK (http://$QDRANT_HOST:$QDRANT_PORT)"
+if [ "${USE_EMBEDDED_QDRANT:-0}" = "1" ]; then
+    echo "  Qdrant: embedded mode (без внешнего сервера)"
 else
-    echo "  ERROR: Qdrant недоступен по http://$QDRANT_HOST:$QDRANT_PORT"
-    echo "  Запустите: docker run -p 6333:6333 qdrant/qdrant"
-    exit 1
+    QDRANT_HOST=${QDRANT_HOST:-localhost}
+    QDRANT_PORT=${QDRANT_PORT:-6333}
+    if curl -sf "http://$QDRANT_HOST:$QDRANT_PORT/healthz" >/dev/null 2>&1; then
+        echo "  Qdrant: OK (http://$QDRANT_HOST:$QDRANT_PORT)"
+    else
+        echo "  ERROR: Qdrant недоступен по http://$QDRANT_HOST:$QDRANT_PORT"
+        echo "  Запустите: docker run -p 6333:6333 qdrant/qdrant"
+        exit 1
+    fi
 fi
 
 # Запуск API

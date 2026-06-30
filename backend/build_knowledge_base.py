@@ -16,6 +16,7 @@ build_knowledge_base.py — Одноразовый скрипт построен
   - Итого: ~1 час на CPU без GPU
 """
 
+import os
 import sys
 import time
 from pathlib import Path
@@ -32,9 +33,9 @@ from store.qdrant_store import (
     get_collection_stats,
 )
 
-DATA_DIR = Path(__file__).parent.parent / "data"
-EXCEL_DIR = DATA_DIR / "excel"
-PDF_DIR = DATA_DIR / "pdf"
+DATA_DIR = Path(os.getenv("DATA_DIR", Path(__file__).parent / "data")).resolve()
+EXCEL_DIR = Path(os.getenv("EXCEL_DIR", DATA_DIR / "excel")).resolve()
+PDF_DIR = Path(os.getenv("PDF_DIR", DATA_DIR / "pdf")).resolve()
 
 
 def main():
@@ -91,9 +92,13 @@ def main():
         print(f"\n[4/5] Построение embeddings для {len(all_codes)} кодов...")
         print("      (это займёт 5–15 минут на CPU)")
         t0 = time.time()
-        code_texts = [r["full_text"] for r in all_codes]
+        leaf_codes = [r for r in all_codes if r.get("level") == "code" and len(r.get("code", "")) == 10]
+        skipped = len(all_codes) - len(leaf_codes)
+        if skipped:
+            print(f"      Пропущено не конечных/структурных записей: {skipped}")
+        code_texts = [r["full_text"] for r in leaf_codes]
         code_embeddings = embed_documents(code_texts, show_progress=True)
-        upsert_codes(client, all_codes, code_embeddings)
+        upsert_codes(client, leaf_codes, code_embeddings)
         print(f"      Готово за {(time.time() - t0):.0f} сек")
 
     # ── Embeddings для PDF ────────────────────────────────────────
