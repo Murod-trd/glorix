@@ -21,7 +21,7 @@ def test_refusal_questions_with_dict_candidates():
         {"code": "7307930000", "chapter": "73", "description": "Отвод стальной"},
         {"code": "3917400000", "chapter": "39", "description": "Фитинг пластиковый"},
     ]
-    out = build_refusal_questions(ev, cands, "Отвод металлический Ду-250")
+    out = build_refusal_questions(ev, cands, "sample product description")
     assert isinstance(out, list)
     assert all(isinstance(q, str) for q in out)
 
@@ -37,7 +37,7 @@ def test_refusal_questions_with_object_candidates():
              Cand(code="3917400000", chapter="39")]
     ev = Evidence(proposed_code="7307930000")
     # Must NOT raise AttributeError.
-    out = build_refusal_questions(ev, cands, "Отвод металлический Ду-250")
+    out = build_refusal_questions(ev, cands, "sample product description")
     assert isinstance(out, list)
 
 

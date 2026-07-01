@@ -55,3 +55,12 @@ infra/local/.env.local.*
 infra/local/services.json
 logs/
 logs/local-server/
+
+# Local API test artifacts (accidental TN VED manual-testing output — never commit)
+request.json
+tnved-error-body.json
+tnved-error-headers.txt
+tnved-response-*.json
+tnved-test-*.json
+tnved-error-*.json
+tnved-error-*.txt

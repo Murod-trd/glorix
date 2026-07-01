@@ -59,7 +59,7 @@ requires_clarification / low confidence — that is acceptable; the fix only pre
 docker compose --env-file infra/local/.env.local -f infra/local/docker-compose.local.yml --profile core up -d --build
 curl http://localhost:8787/tnved/health   # stays ok (codes_count 13289, pdf_chunks_count 1694)
 curl -X POST http://localhost:8787/tnved/classify -H "Content-Type: application/json" \
-     -d '{"description":"Отвод металлический Ду-250","include_audit":false}'
+     -d '{"description":"<product description>","include_audit":false}'
 # expect 200 (may be requires_clarification), NOT 500
 ```
 Not run in sandbox (no Docker/Ollama here); verified via py_compile + regression + full unit suite.
@@ -72,3 +72,14 @@ Yes — fast-forward (small backend crash fix; no classification logic/threshold
 > reads candidate fields via _candidate_get() (dict.get OR getattr), so it accepts both dict and
 > CandidateAnalysis candidates. Added tests/test_build_refusal_questions.py. No thresholds/prompts/
 > scoring/classifier changes; 101 unit tests + refusal tests pass. Update only CODEX_REPORT.md.
+
+---
+## Cleanup pass (accidental test artifacts)
+- No accidental artifact files were tracked or present on disk (request.json, tnved-error-*,
+  tnved-response-*, tnved-test-*): nothing to git rm.
+- Removed the non-approved test string "Отвод металлический Ду-250": replaced with a neutral
+  placeholder in backend/tests/test_build_refusal_questions.py (test still passes) and neutralized
+  the curl example in this report to "<product description>".
+- WD-40 in src/pages/DocumentCenter.jsx (PRODUCT_TNVED_MAP regex) is PRE-EXISTING application code
+  (commit 56bda71), not a test artifact — left unchanged per "do not change classification logic".
+- Added .gitignore entries for local API test artifacts.
