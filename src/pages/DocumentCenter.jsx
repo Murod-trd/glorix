@@ -4,7 +4,8 @@ import { getCurrentUser } from '../data/mock';
 import { useAccountType } from '../context/AccountContext';
 import { searchHsCodes, translateProductNameToRu } from '../data/hsCodes';
 import { PRODUCT_UNITS } from '../data/marketplace';
-import { classifyBatchTnved, healthTnvedAi } from '../services/tnvedAiClient';
+import { classifySingleTnved, healthTnvedAi } from '../services/tnvedAiClient';
+import { SUBAI_MODULES } from '../ai/glorixAiRegistry';
 
 // Нормализация числового поля из Excel:
 // Убирает валютный суффикс (UZS, USD, руб, $...), пробелы как разделитель тысяч,
@@ -28,31 +29,111 @@ function normalizeNum(s = '') {
   return c;
 }
 
-// Parse Excel-like paste.
-// Умный разбор: находит колонку с единицей измерения по значению (м, кг, шт…),
-// определяет — единица идёт ДО или ПОСЛЕ количества — и раскладывает колонки корректно.
-// Поддерживаемые форматы (с ТН ВЭД или без, единица до или после кол-ва):
-//   Название | Кол-во | Ед. | Цена
-//   Название | Ед. | Кол-во | Цена          ← PDF/российский формат
-//   Название | ТН ВЭД | Ед. | Кол-во | Цена
-//   Название | ТН ВЭД | Кол-во | Ед. | Цена
-function parsePaste(text) {
-  // Полный список единиц (в нижнем регистре для сравнения)
-  const UNIT_SET = new Set([
-    'м', 'м²', 'м³', 'м2', 'м3', 'кв.м', 'куб.м', 'кв м', 'м кв', 'м кв.',
-    'кг', 'г', 'т', 'тонна', 'тн',
-    'шт', 'шт.', 'штука', 'штук', 'ед', 'ед.',
-    'литр', 'л', 'мл',
-    'рулон', 'пог.м', 'пм', 'погм', 'п.м',
-    'компл', 'компл.', 'комплект',
-    'упак', 'упак.', 'упаковка', 'мешок', 'паллет', 'паллета', 'пал',
-    'пар', 'набор', 'ящик', 'коробка', 'пачка', 'партия', 'лот',
-    'm', 'm2', 'm3', 'kg', 'pcs', 'pc', 'set', 'roll', 'box', 'bag', 'ton',
-  ]);
-  const isUnit = (s) => UNIT_SET.has((s || '').trim().toLowerCase()) || UNIT_SET.has((s || '').trim());
-  const isTnved = (s) => /^\d{8,10}$/.test((s || '').replace(/\s/g, ''));
+// Canonical unit synonyms → a value that EXISTS in PRODUCT_UNITS.
+// Unknown units are NEVER guessed (never silently "кг"); they return '' (review).
+const _UNIT_CANON = (() => {
+  const map = {};
+  const add = (canon, aliases) => aliases.forEach(a => { map[a] = canon; });
+  add('шт',    ['шт','штука','штуки','штук','ед','единица','единиц','pcs','pc','piece','pieces','ea','штук.']);
+  add('кг',    ['кг','kg','килограмм','килограммов']);
+  add('тонна', ['т','тн','тонна','тонн','ton','tonne']);
+  add('л',     ['л','литр','литра','литров','liter','litre','ltr']);
+  add('м',     ['м','m','метр','метра','метров']);
+  add('м²',    ['м2','м²','кв.м','квм','sqm']);
+  add('м³',    ['м3','м³','куб.м','кубм','cbm']);
+  add('пог.м', ['пог.м','пм','п.м','погм','погм.']);
+  add('рулон', ['рулон','рулона','рулонов','roll','rolls']);
+  add('мешок', ['мешок','мешка','мешков','bag','bags']);
+  add('упак',  ['упак','упаковка','упаковки','упаковок','pack','упк']);
+  add('паллет',['паллет','паллета','паллеты','пал','pallet','pallets']);
+  add('компл', ['компл','комплект','комплекта','комплектов','set','sets','kit']);
+  return map;
+})();
 
-  // Разбираем TSV с Excel-кавычками (многострочные ячейки заключены в "…")
+function canonUnit(s = '') {
+  const key = String(s || '').trim().toLowerCase().replace(/\.+$/, '');
+  if (!key) return '';
+  return _UNIT_CANON[key] || '';
+}
+
+// Percentage / VAT-like cell (e.g. "18%", "20 %", "НДС 18") — must NEVER become price.
+function looksLikePercent(s = '') {
+  const t = String(s || '').trim().toLowerCase();
+  if (/\b(ндс|vat|tax|ставка)\b/.test(t)) return true;   // explicit VAT/tax label
+  return /^\d{1,3}([.,]\d+)?\s*%$/.test(t);              // a bare "18%" / "20 %" (not free text like "≤14%")
+}
+
+// A bare 1–2 digit common VAT rate (10,12,15,18,20…) that is NOT the final money
+// value in a row is treated as VAT, never as price.
+function isBareVatRate(s = '') {
+  const t = String(s || '').trim();
+  return /^\d{1,2}$/.test(t) && [5, 10, 12, 15, 18, 20].includes(parseInt(t, 10));
+}
+
+// A cell is "money-like" (price/qty candidate) only if it is numeric — digits with
+// optional separators / currency — and contains NO other letters. This keeps spec
+// text with embedded numbers (e.g. "М400", "ГОСТ 7798", "≤14%") OUT of price/qty.
+function isMoneyLike(s = '') {
+  const t = String(s || '').trim();
+  if (!/\d/.test(t)) return false;
+  const core = t
+    .replace(/[\s]*(usd|eur|rub|uzs|kzt|uah|byn|azn|amd|gel|tjs|tmt|kgs|mdl|cny|try|gbp|jpy|сум|руб|тенге|тг|₽|\$|€|₸|₴|¥|£|֏|₾)\.?$/i, '')
+    .trim();
+  return /^-?[\d.,\u00A0 ]+$/.test(core);
+}
+
+// From the cells that follow qty, pick the unit price + trailing specs.
+// Rules: drop percent/VAT cells; if the first numeric is a bare VAT rate and a
+// later numeric exists, the price is the later (rightmost real money) value.
+function moneyAndSpecs(cells) {
+  const cleaned = (cells || []).filter(c => !looksLikePercent(c));
+  const nums = cleaned.map((c, i) => ({ c, i })).filter(x => isMoneyLike(x.c));
+  let pick = nums[0] || null;
+  if (nums.length >= 2 && isBareVatRate(nums[0].c)) pick = nums[1];
+  const price = pick ? normalizeNum(pick.c) : '';
+  const usedIdx = pick ? pick.i : -1;
+  const specs = cleaned.filter((c, i) => i > usedIdx && !isMoneyLike(c)).join(' ').trim();
+  return { price, specs };
+}
+
+const isTnvedCode = (s) => /^\d{8,10}$/.test((s || '').replace(/\s/g, ''));
+
+// ── Header detection (column mapping when a header row is present) ──────────
+const _HEADER_MAP = [
+  ['name',  ['наименование','описание товар','описание','товар','name','description','product','номенклатура']],
+  ['tnved', ['тн вэд','тнвэд','код тн вэд','hs code','hscode','tn ved','hs']],
+  ['qty',   ['кол-во','количество','qty','quantity','к-во','кол']],
+  ['unit',  ['ед.изм','ед изм','ед. изм','ед','unit','uom','единица измерения','единица']],
+  ['price', ['цена за ед','цена за единицу','цена','unit price','price']],
+  ['amount',['стоимость','сумма','amount','total','итого по строке']],
+  ['vat',   ['ставка ндс','ндс %','ндс%','% ндс','ндс','vat','tax','ставка']],
+  ['specs', ['характеристики','характеристика','примечания','примечание','notes','specs','spec']],
+];
+function classifyHeaderCell(s = '') {
+  const t = String(s || '').trim().toLowerCase();
+  if (!t) return null;
+  for (const [field, keys] of _HEADER_MAP) {
+    if (keys.some(k => t === k || t.startsWith(k))) return field;
+  }
+  return null;
+}
+function detectHeader(row) {
+  const map = {};
+  let hits = 0;
+  (row || []).forEach((cell, idx) => {
+    const f = classifyHeaderCell(cell);
+    if (f && map[f] === undefined) { map[f] = idx; hits++; }
+  });
+  return (hits >= 2 && map.name !== undefined) ? map : null;
+}
+
+// Parse Excel-like paste into { name, tnved, qty, unit, price, specs } rows.
+// Safety rules (Glorix AI, not a dumb algorithm):
+//   - unknown unit → '' (review), never silently "кг"
+//   - VAT/percent cells (18, 18%, НДС) are excluded from price/qty
+//   - decimal comma (699,48 / 13 352,69) parsed as a number
+//   - uses header row when present, otherwise safe positional heuristics
+function parsePaste(text) {
   const parseExcelTSV = (raw) => {
     const rows = [];
     let cols = [], field = '', inQ = false;
@@ -74,106 +155,130 @@ function parsePaste(text) {
     }
     return rows;
   };
-  const rawRows = parseExcelTSV(text.trim());
+  const rawRows = parseExcelTSV((text || '').trim());
+  if (!rawRows.length) return [];
 
-  // Слова-заголовки: такая строка НЕ склеивается со следующей, а просто пропускается
   const SKIP_WORDS = new Set([
-    'наименование', 'описание', 'description', 'name', 'товар', 'product',
-    '№', 'no', 'n/n', 'п/п', 'номер', 'поз', 'позиция',
-    'итого', 'итог', 'total', 'всего', 'сумма итого', 'grand total',
+    'наименование','описание','description','name','товар','product',
+    '№','no','n/n','п/п','номер','поз','позиция',
+    'итого','итог','total','всего','сумма итого','grand total',
   ]);
-  const isSkipRow = (row) => {
-    const w = (row[0] || '').trim().toLowerCase();
+  const isHeaderName = (n) => {
+    const w = (n || '').trim().toLowerCase();
     return SKIP_WORDS.has(w) || [...SKIP_WORDS].some(h => w.startsWith(h + ' ') || w.startsWith(h + '/'));
   };
+  const isNumberOnly = (n) => /^\d{1,3}$/.test((n || '').trim());
 
-  // Умное склеивание: если строка без данных (qty=0, price=0), а следующая имеет данные
-  // → это разрыв длинного названия. Объединяем имена, берём данные из следующей строки.
-  // ВАЖНО: строки-заголовки (Наименование, Итого…) НЕ склеиваются, а пропускаются.
+  const clean = (r) => {
+    if (!r || !r.name) return null;
+    if (isHeaderName(r.name) || isNumberOnly(r.name)) return null;
+    return r;
+  };
+
+  // ── Path A: header-based mapping ─────────────────────────────────────────
+  const header = detectHeader(rawRows[0]);
+  if (header) {
+    const g = (row, idx) => (idx !== undefined && idx >= 0 ? (row[idx] || '') : '');
+    const out = [];
+    for (let ri = 1; ri < rawRows.length; ri++) {
+      const row = rawRows[ri];
+      const name = g(row, header.name).trim();
+      if (!name || isHeaderName(name) || isNumberOnly(name)) continue;
+      const tnvedCell = g(row, header.tnved).trim();
+      const tnved = tnvedCell.replace(/\s/g, '');
+      const qty = normalizeNum(g(row, header.qty));
+      const unit = canonUnit(g(row, header.unit)); // '' if unknown → review
+      let price = normalizeNum(g(row, header.price));
+      if (!price && header.amount !== undefined) {
+        const amt = parseFloat(normalizeNum(g(row, header.amount)));
+        const q = parseFloat(qty);
+        if (amt > 0 && q > 0) price = String(+(amt / q).toFixed(2));
+      }
+      const specs = g(row, header.specs).trim();
+      out.push({ name, tnved: isTnvedCode(tnved) ? tnved : tnvedCell, qty, unit, price, specs });
+    }
+    return out.map(clean).filter(Boolean);
+  }
+
+  // ── Path B: header-less — merge multi-line names, then safe heuristics ────
   const mergedRows = [];
   for (let ri = 0; ri < rawRows.length; ri++) {
     const row = rawRows[ri];
-    if (isSkipRow(row)) continue;  // заголовок/итого — выбрасываем без склейки
+    if (isHeaderName(row[0])) continue;
     const hasData = row.slice(1).some(c => parseFloat((c||'').replace(/[\s,]/g,'')) > 0);
     if (!hasData && row[0] && row[0].trim()) {
       const next = rawRows[ri + 1];
-      const nextHasData = next && !isSkipRow(next) &&
+      const nextHasData = next && !isHeaderName(next[0]) &&
         next.slice(1).some(c => parseFloat((c||'').replace(/[\s,]/g,'')) > 0);
       if (nextHasData) {
-        // Склеиваем название многострочного товара, берём данные из next
         const merged = [...next];
         merged[0] = row[0].trim() + ' ' + (next[0] || '').trim();
         mergedRows.push(merged);
-        ri++; // пропускаем следующую строку
+        ri++;
         continue;
       }
-      // Строка без числовых данных и без продолжения — пропускаем
     } else {
       mergedRows.push([...row]);
     }
   }
-  return mergedRows.map(cols => {
 
+  return mergedRows.map(cols => {
     const name = cols[0] || '';
     if (!name) return null;
 
-    // Хвост колонок без имени
     let rest = cols.slice(1);
     let tnved = '';
-
-    // Определяем: есть ли колонка ТН ВЭД (8-10 цифр или пустая первая колонка)
     const col1clean = (rest[0] || '').replace(/\s/g, '');
-    if (!rest[0] || isTnved(col1clean)) {
+    if (!rest[0] || isTnvedCode(col1clean)) {
       tnved = rest[0] || '';
       rest = rest.slice(1);
     }
 
-    // Ищем колонку с единицей измерения по значению
-    const unitIdx = rest.findIndex(c => isUnit(c));
-
-    let qty = '', unit = 'кг', price = '', specs = '';
+    let qty = '', unit = '', price = '', specs = '';   // unit default '' (never "кг")
+    const unitIdx = rest.findIndex(c => canonUnit(c) !== '');
 
     if (unitIdx >= 0) {
-      unit = rest[unitIdx].trim();
-      const before = rest.slice(0, unitIdx);   // колонки ДО единицы
-      const after  = rest.slice(unitIdx + 1);  // колонки ПОСЛЕ единицы
-
-      const lastBefore = before[before.length - 1] || '';
-      const firstAfter = after[0] || '';
-      const secondAfter = after[1] || '';
-
-      if (normalizeNum(lastBefore)) {
-        // Есть число перед единицей → кол-во ДО единицы: … qty | unit | price …
-        qty   = normalizeNum(lastBefore);
-        price = normalizeNum(firstAfter);
-        specs = after.slice(1).join(' ').trim();
+      unit = canonUnit(rest[unitIdx]);
+      const before = rest.slice(0, unitIdx);
+      const after  = rest.slice(unitIdx + 1);
+      const beforeNum = [...before].reverse().find(c => isMoneyLike(c) && !looksLikePercent(c));
+      if (beforeNum) {
+        // … qty | unit | [vat] | price | [specs] …
+        qty = normalizeNum(beforeNum);
+        ({ price, specs } = moneyAndSpecs(after));
       } else {
-        // Нет числа перед единицей → единица ПЕРЕД кол-вом: … unit | qty | price …
-        qty   = normalizeNum(firstAfter);
-        price = normalizeNum(secondAfter);
-        specs = after.slice(2).join(' ').trim();
+        // unit BEFORE qty: … unit | qty | [vat] | price | [specs] …
+        const afterClean = after.filter(c => !looksLikePercent(c));
+        const qCell = afterClean.find(c => isMoneyLike(c));
+        if (qCell) {
+          qty = normalizeNum(qCell);
+          ({ price, specs } = moneyAndSpecs(afterClean.slice(afterClean.indexOf(qCell) + 1)));
+        }
       }
-    } else if (rest.length >= 2) {
-      // Единица не найдена — позиционный фолбэк: qty | price
-      qty   = normalizeNum(rest[0] || '');
-      price = normalizeNum(rest[1] || '');
-      specs = rest.slice(2).join(' ').trim();
     } else {
-      qty = normalizeNum(rest[0] || '');
+      // No unit column — positional: qty then price (percent/VAT excluded).
+      const restClean = rest.filter(c => !looksLikePercent(c));
+      const qCell = restClean.find(c => isMoneyLike(c));
+      qty = qCell ? normalizeNum(qCell) : '';
+      ({ price, specs } = moneyAndSpecs(qCell ? restClean.slice(restClean.indexOf(qCell) + 1) : restClean));
     }
 
     return { name, tnved, qty, unit, price, specs };
-  }).filter(r => {
-    if (!r || !r.name) return false;
-    // Пропускаем строки-заголовки таблиц (Наименование, №, Description и т.д.)
-    const LOW = r.name.trim().toLowerCase();
-    const HEADERS = ['наименование', 'описание', 'description', 'name', 'товар', 'product',
-                     '№', 'no', 'n/n', 'п/п', 'номер', 'поз', 'позиция'];
-    if (HEADERS.some(h => LOW === h || LOW.startsWith(h + ' '))) return false;
-    // Пропускаем строки где имя — просто порядковый номер (1, 2, 41 и т.д.)
-    if (/^\d{1,3}$/.test(r.name.trim())) return false;
-    return true;
-  });
+  }).map(clean).filter(Boolean);
+}
+
+// Summarize a parsed import for the review panel (UI only; no data mutation).
+function summarizeImport(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  let uncertainUnit = 0, missingPrice = 0, review = 0;
+  for (const r of list) {
+    const noUnit = !r.unit;
+    const noPrice = !r.price || parseFloat(r.price) <= 0;
+    if (noUnit) uncertainUnit++;
+    if (noPrice) missingPrice++;
+    if (noUnit || noPrice) review++;
+  }
+  return { total: list.length, uncertainUnit, missingPrice, review };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -352,6 +457,13 @@ function guessProductCode(name) {
   return null;
 }
 
+const COUNTRIES = [
+  ['UZ','🇺🇿 Узбекистан'], ['KZ','🇰🇿 Казахстан'], ['RU','🇷🇺 Россия'], ['KG','🇰🇬 Киргизия'],
+  ['TJ','🇹🇯 Таджикистан'], ['TM','🇹🇲 Туркменистан'], ['AZ','🇦🇿 Азербайджан'], ['AM','🇦🇲 Армения'],
+  ['GE','🇬🇪 Грузия'], ['BY','🇧🇾 Беларусь'], ['UA','🇺🇦 Украина'], ['MD','🇲🇩 Молдова'],
+  ['CN','🇨🇳 Китай'], ['TR','🇹🇷 Турция'],
+];
+
 export default function DocumentCenter() {
   const { accountType } = useAccountType();
   const [tab, setTab] = useState('kp'); // kp | tnved
@@ -367,6 +479,12 @@ export default function DocumentCenter() {
   const [payTerms, setPayTerms] = useState('30% предоплата, 70% по факту отгрузки');
   const [payCustom, setPayCustom] = useState('');
   const [vatRate, setVatRate] = useState(0);
+  // ── Glorix AI governance (TN VED SubAI toggle) + country/VAT context ──
+  const [tnvedAiOn, setTnvedAiOn] = useState(true);
+  const _me = getCurrentUser(accountType);
+  const [sellerCountry, setSellerCountry] = useState(_me?.country || 'UZ');
+  const [buyerCountry, setBuyerCountry] = useState('');
+  const [importSummary, setImportSummary] = useState(null);
   // GLORIX AI ТН ВЭД backend status (replaces the former, misleading OpenAI key field).
   const [aiStatus, setAiStatus] = useState('checking'); // checking | configured | unavailable | error
   const [autofillMsg, setAutofillMsg] = useState(null);  // UI-only status; NEVER written into generated documents
@@ -389,6 +507,12 @@ export default function DocumentCenter() {
   const [tnvedSearching, setTnvedSearching] = useState(false); // авто-поиск ТН ВЭД после вставки
   const [batchProgress, setBatchProgress] = useState(0);  // обработано позиций
   const [batchTotal, setBatchTotal]       = useState(0);  // всего позиций в батче
+  const [batchFilled, setBatchFilled] = useState(0);
+  const [batchReview, setBatchReview] = useState(0);
+  const [batchError,  setBatchError]  = useState(0);
+  const [batchCurrent, setBatchCurrent] = useState('');
+  const [batchElapsed, setBatchElapsed] = useState(0);
+  const [batchDone, setBatchDone] = useState(false);
 
   const addItem = () => setItems(prev => [...prev, { name: '', tnved: '', qty: '', unit: 'кг', price: '', specs: '' }]);
   const updateItem = (i, k, v) => { const arr = [...items]; arr[i][k] = v; setItems(arr); };
@@ -398,59 +522,66 @@ export default function DocumentCenter() {
     const parsed = parsePaste(pasteText);
     if (!parsed.length) return;
     setItems(parsed);
+    setImportSummary(summarizeImport(parsed));
     setShowPaste(false);
     setPasteText('');
-
     setAutofillMsg(null);
+    setBatchDone(false);
 
-    // ── AI-ONLY TN VED autofill ─────────────────────────────────────────────
-    // Legacy regex (guessProductCode) and legacy TF-IDF (/api/classify-batch)
-    // autofill are DISABLED. Codes are filled ONLY by the GLORIX AI backend via
-    // the /api/tnved-ai/* proxy. Manually supplied codes are preserved. If the
-    // AI backend is unavailable or not confident, the code is left EMPTY — it is
-    // NEVER guessed (a wrong TN VED code can cost millions).
-    const needAi = parsed.filter(it => !it.tnved);
-    if (!needAi.length) return;
+    // ── TN VED AI OFF → NO TN VED API calls / analysis / progress. ──
+    if (!tnvedAiOn) return;
+
+    // ── AI-ONLY autofill (row-by-row, small concurrency) via GLORIX AI. ──
+    // Manual codes preserved. Unconfident/unavailable → left BLANK (manual review).
+    // Never uses legacy regex/TF-IDF.
+    const enriched = [...parsed];
+    const unresolved = enriched.map((it, idx) => (!it.tnved ? idx : null)).filter(i => i !== null);
+    if (!unresolved.length) { setAutofillMsg({ type: 'ok', text: 'Все коды ТН ВЭД указаны вручную.' }); return; }
 
     setTnvedSearching(true);
-    setBatchProgress(0);
-    setBatchTotal(needAi.length);
-    try {
-      const enriched = [...parsed];
-      const unresolved = enriched.map((item, idx) => (!item.tnved ? idx : null)).filter(i => i !== null);
-      const BATCH = 25;
-      let done = 0;
-      let filled = 0;
-      let aiUnavailable = false;
+    setBatchTotal(unresolved.length);
+    setBatchProgress(0); setBatchFilled(0); setBatchReview(0); setBatchError(0);
+    setBatchCurrent(''); setBatchElapsed(0);
+    const t0 = Date.now();
+    const timer = setInterval(() => setBatchElapsed(Math.round((Date.now() - t0) / 1000)), 1000);
 
-      for (let b = 0; b < unresolved.length; b += BATCH) {
-        const chunk = unresolved.slice(b, b + BATCH);
-        const names = chunk.map(idx => enriched[idx].name);
-        const data = await classifyBatchTnved(names);
-        if (data?.unavailable) aiUnavailable = true;
-        (data?.results || []).forEach((res, i) => {
-          if (res && res.code) { enriched[chunk[i]].tnved = res.code; filled++; }
-          // No confident AI code → leave blank. NEVER fall back to legacy guess.
-        });
-        done += chunk.length;
-        setBatchProgress(done);
+    let done = 0, filled = 0, review = 0, errors = 0, aiUnavailable = false;
+    let cursor = 0;
+    const CONCURRENCY = 4;
+
+    const worker = async () => {
+      while (cursor < unresolved.length) {
+        const idx = unresolved[cursor++];
+        const item = enriched[idx];
+        setBatchCurrent((item.name || '').slice(0, 40));
+        try {
+          const res = await classifySingleTnved(item.name);
+          if (res?.unavailable) aiUnavailable = true;
+          if (res && res.code) { enriched[idx].tnved = res.code; filled++; }
+          else { review++; }
+          if (res && res.error) errors++;
+        } catch {
+          errors++; review++;
+        }
+        done++;
+        setBatchProgress(done); setBatchFilled(filled); setBatchReview(review); setBatchError(errors);
         setItems([...enriched]);
       }
+    };
 
-      if (aiUnavailable) {
-        setAutofillMsg({ type: 'warn', text: 'AI ТН ВЭД недоступен — введите код вручную или проверьте с декларантом' });
-      } else if (filled === 0) {
-        setAutofillMsg({ type: 'warn', text: 'AI ТН ВЭД не вернул уверенных кодов — введите коды вручную или проверьте с декларантом' });
-      } else {
-        setAutofillMsg({ type: 'ok', text: `AI ТН ВЭД: код подобран для ${filled} из ${needAi.length} позиций. Остальные оставлены пустыми — проверьте с декларантом.` });
-      }
+    try {
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, unresolved.length) }, worker));
     } catch (e) {
-      console.error('TNVED AI batch error:', e);
-      setAutofillMsg({ type: 'warn', text: 'AI ТН ВЭД недоступен — введите код вручную или проверьте с декларантом' });
+      console.error('TNVED AI error:', e);
     } finally {
+      clearInterval(timer);
+      setBatchElapsed(Math.round((Date.now() - t0) / 1000));
       setTnvedSearching(false);
-      setBatchProgress(0);
-      setBatchTotal(0);
+      setBatchCurrent('');
+      setBatchDone(true);
+      if (aiUnavailable) setAutofillMsg({ type: 'warn', text: 'AI ТН ВЭД недоступен — коды оставлены пустыми, введите вручную или проверьте с декларантом.' });
+      else if (filled === 0) setAutofillMsg({ type: 'warn', text: 'AI ТН ВЭД не вернул уверенных кодов — введите вручную или проверьте с декларантом.' });
+      else setAutofillMsg({ type: 'ok', text: `AI ТН ВЭД: подобрано ${filled} из ${unresolved.length}. На проверку: ${review}. Проверьте с декларантом.` });
     }
   };
 
@@ -484,6 +615,10 @@ export default function DocumentCenter() {
     });
   };
 
+  // Cross-border → VAT not applied in this document.
+  const crossBorder = !!(sellerCountry && buyerCountry && sellerCountry !== buyerCountry);
+  const vatApplicable = !crossBorder;
+
   const totalAmount = items.reduce((s, item) => {
     const qty = parseFloat(item.qty) || 0;
     const price = parseFloat(item.price) || 0;
@@ -501,6 +636,11 @@ export default function DocumentCenter() {
 
       const validItems = items.filter(i => i.name);
       const missingCodes = validItems.filter(i => !i.tnved).length;
+      // Glorix AI governance flags baked into the generated document:
+      const tnvedOn = tnvedAiOn;                                   // TN VED column only when SubAI is ON
+      const vatOn = !(sellerCountry && buyerCountry && sellerCountry !== buyerCountry); // no VAT cross-border
+      const effVat = vatOn ? vatRate : 0;
+      const tnColspan = tnvedOn ? 6 : 5;
 
       const CURR_SYMBOLS = { USD:'$', EUR:'€', RUB:'₽', UZS:'сум', KZT:'₸', UAH:'₴',
         BYN:'Br', AZN:'₼', AMD:'֏', GEL:'₾', TJS:'SM', TMT:'T', KGS:'с', MDL:'L',
@@ -515,7 +655,7 @@ export default function DocumentCenter() {
         return `<tr>
           ${td(idx+1, 'text-align:center;color:#888;font-size:11px')}
           ${td(`<strong>${item.name}</strong>`)}
-          ${td(tnvedText, `text-align:center;font-family:monospace;font-size:11px;color:${tnvedColor};letter-spacing:.5px`)}
+          ${tnvedOn ? td(tnvedText, `text-align:center;font-family:monospace;font-size:11px;color:${tnvedColor};letter-spacing:.5px`) : ''}
           ${td(item.unit, 'text-align:center')}
           ${td(fmt(item.qty), 'text-align:right')}
           ${td(fmt(item.price) + ' ' + currSym, 'text-align:right')}
@@ -535,11 +675,11 @@ export default function DocumentCenter() {
           </div>`).join('')}
         </div>` : '';
 
-      const vatAmount = totalAmount * (vatRate / 100);
+      const vatAmount = totalAmount * (effVat / 100);
       const grandTotal = totalAmount + vatAmount;
-      const vatHtml = vatRate > 0 ? `
+      const vatHtml = effVat > 0 ? `
         <tr style="background:#f8f9fb">
-          <td colspan="6" style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;color:#555;font-size:12px">
+          <td colspan="${tnColspan}" style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;color:#555;font-size:12px">
             Сумма без НДС / Amount excl. VAT:
           </td>
           <td style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;font-size:12px">
@@ -547,8 +687,8 @@ export default function DocumentCenter() {
           </td>
         </tr>
         <tr style="background:#f8f9fb">
-          <td colspan="6" style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;color:#e67e22;font-size:12px">
-            НДС ${vatRate}% / VAT ${vatRate}%:
+          <td colspan="${tnColspan}" style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;color:#e67e22;font-size:12px">
+            НДС ${effVat}% / VAT ${effVat}%:
           </td>
           <td style="padding:8px 10px;text-align:right;border:1px solid #dde3ea;font-size:12px;color:#e67e22">
             ${fmt(vatAmount)} ${currSym}
@@ -582,7 +722,7 @@ export default function DocumentCenter() {
           <tr><td style="padding:5px 0;color:#888">Условия оплаты / Payment:</td><td>${effectivePayTerms}</td></tr>
         </table>
 
-        ${missingCodes > 0 ? `<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:#856404">
+        ${tnvedOn && missingCodes > 0 ? `<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:#856404">
           ⚠ ${missingCodes} позиций без кода ТН ВЭД — введите коды вручную перед отправкой покупателю
         </div>` : ''}
 
@@ -595,7 +735,7 @@ export default function DocumentCenter() {
             <tr style="background:#1a2233;color:#fff">
               <th style="padding:10px 8px;text-align:center;width:34px;border:1px solid #2d3d50;font-size:11px;font-weight:600">№</th>
               <th style="padding:10px 8px;text-align:left;border:1px solid #2d3d50;font-size:11px;font-weight:600">Наименование<br><span style="font-weight:400;font-size:9px;opacity:.7">Description</span></th>
-              <th style="padding:10px 8px;text-align:center;width:118px;border:1px solid #2d3d50;font-size:11px;font-weight:600">Код ТН ВЭД<br><span style="font-weight:400;font-size:9px;opacity:.7">HS Code</span></th>
+              ${tnvedOn ? `<th style="padding:10px 8px;text-align:center;width:118px;border:1px solid #2d3d50;font-size:11px;font-weight:600">Код ТН ВЭД<br><span style="font-weight:400;font-size:9px;opacity:.7">HS Code</span></th>` : ''}
               <th style="padding:10px 8px;text-align:center;width:52px;border:1px solid #2d3d50;font-size:11px;font-weight:600">Ед.изм<br><span style="font-weight:400;font-size:9px;opacity:.7">Unit</span></th>
               <th style="padding:10px 8px;text-align:right;width:82px;border:1px solid #2d3d50;font-size:11px;font-weight:600">К-во<br><span style="font-weight:400;font-size:9px;opacity:.7">Q'ty</span></th>
               <th style="padding:10px 8px;text-align:right;width:100px;border:1px solid #2d3d50;font-size:11px;font-weight:600">Цена за ед.<br><span style="font-weight:400;font-size:9px;opacity:.7">Unit price, ${currSym}</span></th>
@@ -606,11 +746,11 @@ export default function DocumentCenter() {
           <tfoot>
             ${vatHtml}
             <tr style="background:#0f1a28;color:#fff">
-              <td colspan="6" style="padding:12px 10px;text-align:right;border:1px solid #2d3d50;font-weight:700;font-size:14px;letter-spacing:.5px">
-                ИТОГО / TOTAL &nbsp;(${incoterms} 2020, ${currency})${vatRate > 0 ? ' С НДС ' + vatRate + '%' : ''}:
+              <td colspan="${tnColspan}" style="padding:12px 10px;text-align:right;border:1px solid #2d3d50;font-weight:700;font-size:14px;letter-spacing:.5px">
+                ИТОГО / TOTAL &nbsp;(${incoterms} 2020, ${currency})${effVat > 0 ? ' С НДС ' + effVat + '%' : ''}:
               </td>
               <td style="padding:12px 10px;text-align:right;border:1px solid #2d3d50;font-weight:700;font-size:14px;color:#00d4aa">
-                ${fmt(vatRate > 0 ? grandTotal : totalAmount)} ${currSym}
+                ${fmt(effVat > 0 ? grandTotal : totalAmount)} ${currSym}
               </td>
             </tr>
           </tfoot>
@@ -629,7 +769,8 @@ export default function DocumentCenter() {
       </div>`;
 
       setKpData({ kpNum, dateStr, validStr, sellerName, buyer, incoterms,
-        payTerms: effectivePayTerms, currency, vatRate, items: validItems, totalAmount, vatAmount, grandTotal });
+        payTerms: effectivePayTerms, currency, vatRate: effVat, tnvedOn, vatApplicable: vatOn,
+        items: validItems, totalAmount, vatAmount, grandTotal });
       setGenerated(html);
       setGenerating(false);
     }, 0);
@@ -678,6 +819,26 @@ export default function DocumentCenter() {
                   <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Покупатель (кому)</label>
                   <input style={inputStyle} placeholder="Название компании покупателя" value={buyer} onChange={e => setBuyer(e.target.value)} />
                 </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Страна продавца</label>
+                    <select style={inputStyle} value={sellerCountry} onChange={e => setSellerCountry(e.target.value)}>
+                      {COUNTRIES.map(([c,l]) => <option key={c} value={c}>{l}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Страна покупателя</label>
+                    <select style={inputStyle} value={buyerCountry} onChange={e => setBuyerCountry(e.target.value)}>
+                      <option value="">— выберите —</option>
+                      {COUNTRIES.map(([c,l]) => <option key={c} value={c}>{l}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {crossBorder && (
+                  <div style={{ fontSize: 11, color: 'var(--gold)', background: 'rgba(245,166,35,0.08)', border: '1px solid rgba(245,166,35,0.28)', borderRadius: 8, padding: '7px 12px', lineHeight: 1.5 }}>
+                    ⚠ Трансграничная сделка ({sellerCountry} → {buyerCountry}): НДС не применяется в этом документе. При необходимости настройте налогообложение вручную позже.
+                  </div>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                   <div>
                     <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Инкотермс 2020</label>
@@ -735,14 +896,20 @@ export default function DocumentCenter() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <div>
                     <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>НДС / VAT</label>
-                    <select style={inputStyle} value={vatRate} onChange={e => setVatRate(Number(e.target.value))}>
-                      <option value={0}>Без НДС (0%)</option>
-                      <option value={12}>НДС 12%</option>
-                      <option value={15}>НДС 15% (Узбекистан)</option>
-                      <option value={20}>НДС 20% (Россия/ЕАЭС)</option>
-                      <option value={10}>НДС 10%</option>
-                      <option value={18}>НДС 18%</option>
-                    </select>
+                    {vatApplicable ? (
+                      <select style={inputStyle} value={vatRate} onChange={e => setVatRate(Number(e.target.value))}>
+                        <option value={0}>Без НДС (0%)</option>
+                        <option value={12}>НДС 12%</option>
+                        <option value={15}>НДС 15% (Узбекистан)</option>
+                        <option value={20}>НДС 20% (Россия/ЕАЭС)</option>
+                        <option value={10}>НДС 10%</option>
+                        <option value={18}>НДС 18%</option>
+                      </select>
+                    ) : (
+                      <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', fontSize: 11, color: 'var(--text-3)' }}>
+                        Не применяется (трансграничная сделка)
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label style={{ fontSize: 11, color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>
@@ -775,17 +942,31 @@ export default function DocumentCenter() {
               </div>
             </div>
 
-            {/* GLORIX AI ТН ВЭД — honest backend status (replaces former OpenAI key field). No user key. */}
+            {/* Glorix AI governance — TN VED SubAI status + On/Off toggle. */}
             <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 8, background: 'var(--bg-2)', border: '1px solid var(--border-2)' }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-2)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                🧠 GLORIX AI ТН ВЭД
-                {aiStatus === 'configured' && <span style={{ color: '#1a7a4a', fontWeight: 500 }}>· подключён</span>}
-                {aiStatus === 'unavailable' && <span style={{ color: 'var(--gold)', fontWeight: 500 }}>· не настроен</span>}
-                {aiStatus === 'error' && <span style={{ color: '#c0392b', fontWeight: 500 }}>· ошибка соединения</span>}
-                {aiStatus === 'checking' && <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>· проверка…</span>}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  🧠 Glorix AI · ТН ВЭД <span style={{ fontWeight: 400, color: 'var(--text-3)' }}>(под-ИИ)</span>
+                  {tnvedAiOn && aiStatus === 'configured' && <span style={{ color: '#1a7a4a', fontWeight: 500 }}>· подключён</span>}
+                  {tnvedAiOn && aiStatus === 'unavailable' && <span style={{ color: 'var(--gold)', fontWeight: 500 }}>· не настроен</span>}
+                  {tnvedAiOn && aiStatus === 'error' && <span style={{ color: '#c0392b', fontWeight: 500 }}>· ошибка соединения</span>}
+                  {tnvedAiOn && aiStatus === 'checking' && <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>· проверка…</span>}
+                </div>
+                <button type="button" onClick={() => setTnvedAiOn(v => !v)}
+                  style={{ flexShrink: 0, fontSize: 11, fontWeight: 600, cursor: 'pointer', borderRadius: 999, padding: '4px 12px',
+                    border: '1px solid ' + (tnvedAiOn ? 'rgba(0,212,170,0.5)' : 'var(--border-2)'),
+                    background: tnvedAiOn ? 'rgba(0,212,170,0.12)' : 'transparent',
+                    color: tnvedAiOn ? '#1a7a4a' : 'var(--text-3)' }}>
+                  ТН ВЭД AI: {tnvedAiOn ? 'ВКЛ' : 'ВЫКЛ'}
+                </button>
               </div>
               <div style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.5 }}>
-                Коды ТН ВЭД подбираются только AI-сервисом GLORIX. Если сервис недоступен, код остаётся пустым — старый автоподбор отключён. Финальный код проверяйте с декларантом или таможенным брокером.
+                {tnvedAiOn
+                  ? 'Коды ТН ВЭД подбираются только AI-сервисом GLORIX. Если сервис недоступен или не уверен — код остаётся пустым (на проверку). Финальный код проверяйте с декларантом или таможенным брокером.'
+                  : 'ТН ВЭД AI отключён: коды не подбираются, колонка ТН ВЭД скрыта в таблице и в документе. Подходит для внутренних сделок, где код ТН ВЭД не требуется.'}
+              </div>
+              <div style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 5 }}>
+                Под-ИИ Glorix: {SUBAI_MODULES.map(m => `${m.name} (${m.status === 'active' ? 'активен' : 'план'})`).join(' · ')}
               </div>
             </div>
 
@@ -845,13 +1026,40 @@ export default function DocumentCenter() {
                 <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-2)' }}>{autofillMsg.text}</div>
               </div>
             )}
+            {importSummary && (
+              <div style={{ padding: '8px 12px', marginBottom: 12, borderRadius: 8, background: 'var(--bg-2)', border: '1px solid var(--border-2)', fontSize: 11, color: 'var(--text-2)', lineHeight: 1.6 }}>
+                📥 Импорт: строк — <b>{importSummary.total}</b>
+                {importSummary.uncertainUnit > 0 && <> · неуверенная ед. — <b style={{ color: 'var(--gold)' }}>{importSummary.uncertainUnit}</b></>}
+                {importSummary.missingPrice > 0 && <> · без цены — <b style={{ color: 'var(--gold)' }}>{importSummary.missingPrice}</b></>}
+                {importSummary.review > 0
+                  ? <> · на проверку — <b style={{ color: 'var(--gold)' }}>{importSummary.review}</b> (заполните вручную)</>
+                  : <> · все поля распознаны ✓</>}
+              </div>
+            )}
+            {tnvedAiOn && (tnvedSearching || batchDone) && batchTotal > 0 && (
+              <div style={{ padding: '10px 12px', marginBottom: 12, borderRadius: 8, background: 'rgba(0,212,170,0.06)', border: '1px solid rgba(0,212,170,0.25)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>
+                  <span>{tnvedSearching ? '🧠 Glorix AI · ТН ВЭД — обработка…' : '✓ Glorix AI · ТН ВЭД — готово'}</span>
+                  <span>{batchProgress} / {batchTotal} · {batchElapsed}s</span>
+                </div>
+                <div style={{ height: 5, background: 'rgba(0,212,170,0.15)', borderRadius: 3, overflow: 'hidden', marginBottom: 6 }}>
+                  <div style={{ height: '100%', width: `${Math.round((batchProgress / Math.max(1, batchTotal)) * 100)}%`, background: 'var(--accent)', transition: 'width .3s ease' }} />
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-3)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <span>подобрано: <b style={{ color: '#1a7a4a' }}>{batchFilled}</b></span>
+                  <span>на проверку: <b style={{ color: 'var(--gold)' }}>{batchReview}</b></span>
+                  <span>ошибок: <b style={{ color: '#c0392b' }}>{batchError}</b></span>
+                  {tnvedSearching && batchCurrent && <span>· {batchCurrent}…</span>}
+                </div>
+              </div>
+            )}
             {/* Items table */}
             <div className="card" style={{ padding: '14px 16px' }}>
               <div style={{ fontWeight: 600, marginBottom: 12, fontSize: 14 }}>
                 Спецификация товаров ({items.length} позиций)
               </div>
-              {/* TN VED verification notice — platform UI only. Intentionally NOT included in
-                  generated KP HTML, DOCX export, or PDF export. */}
+              {/* TN VED verification notice — platform UI only. NOT in generated KP/DOCX/PDF. */}
+              {tnvedAiOn && (
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '8px 12px', marginBottom: 12, background: 'rgba(245,166,35,0.08)', border: '1px solid rgba(245,166,35,0.28)', borderRadius: 8 }}>
                 <span style={{ fontSize: 13, lineHeight: 1.4, flexShrink: 0 }}>⚠</span>
                 <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-2)' }}>
@@ -861,11 +1069,12 @@ export default function DocumentCenter() {
                   </span>
                 </div>
               </div>
+              )}
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 600 }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                      {['№','Наименование','ТН ВЭД','Кол-во','Ед.',`Цена ${({'USD':'$','EUR':'€','RUB':'₽','UZS':'сум','KZT':'₸','UAH':'₴','BYN':'Br','AZN':'₼','AMD':'֏','GEL':'₾','TJS':'SM','TMT':'T','KGS':'с','MDL':'L','CNY':'¥','TRY':'₺','GBP':'£','JPY':'¥'})[currency]||currency}`,'Характеристики',''].map(h => (
+                      {['№','Наименование', ...(tnvedAiOn ? ['ТН ВЭД'] : []), 'Кол-во','Ед.',`Цена ${({'USD':'$','EUR':'€','RUB':'₽','UZS':'сум','KZT':'₸','UAH':'₴','BYN':'Br','AZN':'₼','AMD':'֏','GEL':'₾','TJS':'SM','TMT':'T','KGS':'с','MDL':'L','CNY':'¥','TRY':'₺','GBP':'£','JPY':'¥'})[currency]||currency}`,'Характеристики',''].map(h => (
                         <th key={h} style={{ padding: '6px 8px', textAlign: 'left', fontSize: 10, color: 'var(--text-3)', fontWeight: 700, letterSpacing: 0.5, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -877,14 +1086,17 @@ export default function DocumentCenter() {
                         <td style={{ padding: '4px 6px', minWidth: 140 }}>
                           <input style={{ ...inputStyle, fontSize: 11 }} placeholder="Товар" autoComplete="off" value={item.name} onChange={e => updateItem(i,'name',e.target.value)} />
                         </td>
+                        {tnvedAiOn && (
                         <td style={{ padding: '4px 6px', width: 110 }}>
                           <input style={{ ...inputStyle, fontSize: 11, background: tnvedSearching && !item.tnved ? 'rgba(0,212,170,0.06)' : undefined }} placeholder={tnvedSearching && !item.tnved ? '⏳ поиск...' : '0000000000'} autoComplete="off" value={item.tnved} onChange={e => updateItem(i,'tnved',e.target.value)} />
                         </td>
+                        )}
                         <td style={{ padding: '4px 6px', width: 70 }}>
                           <input style={{ ...inputStyle, fontSize: 11 }} type="number" placeholder="500" value={item.qty} onChange={e => updateItem(i,'qty',e.target.value)} />
                         </td>
                         <td style={{ padding: '4px 6px', width: 60 }}>
-                          <select style={{ ...inputStyle, fontSize: 11 }} value={item.unit} onChange={e => updateItem(i,'unit',e.target.value)}>
+                          <select style={{ ...inputStyle, fontSize: 11, borderColor: item.unit ? undefined : 'var(--gold)' }} value={item.unit} onChange={e => updateItem(i,'unit',e.target.value)}>
+                            {!PRODUCT_UNITS.includes(item.unit) && <option value="">— ед. —</option>}
                             {PRODUCT_UNITS.map(u => <option key={u}>{u}</option>)}
                           </select>
                         </td>
@@ -902,7 +1114,7 @@ export default function DocumentCenter() {
                   </tbody>
                   <tfoot>
                     <tr style={{ borderTop: '1px solid var(--border)' }}>
-                      <td colSpan={5} style={{ padding: '8px', fontSize: 12, color: 'var(--text-2)', textAlign: 'right', fontWeight: 600 }}>ИТОГО:</td>
+                      <td colSpan={tnvedAiOn ? 5 : 4} style={{ padding: '8px', fontSize: 12, color: 'var(--text-2)', textAlign: 'right', fontWeight: 600 }}>ИТОГО:</td>
                       <td colSpan={3} style={{ padding: '8px', fontSize: 14, color: 'var(--accent)', fontWeight: 700, fontFamily: 'var(--font-display)' }}>
                         {({'USD':'$','EUR':'€','RUB':'₽','UZS':'сум','KZT':'₸','UAH':'₴','BYN':'Br','AZN':'₼','AMD':'֏','GEL':'₾','TJS':'SM','TMT':'T','KGS':'с','MDL':'L','CNY':'¥','TRY':'₺','GBP':'£','JPY':'¥'})[currency] || currency}{' '}{totalAmount.toLocaleString('ru-RU',{maximumFractionDigits:2})}
                       </td>

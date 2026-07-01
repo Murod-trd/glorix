@@ -10,7 +10,8 @@ import {
 //            items: [{name,tnved,unit,qty,price}], totalAmount }
 // ─────────────────────────────────────────────────────────────────────────────
 export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
-  const { kpNum, dateStr, validStr, sellerName, buyer, incoterms, payTerms, currency, items, totalAmount, vatAmount = 0, grandTotal, vatRate = 0 } = kpData;
+  const { kpNum, dateStr, validStr, sellerName, buyer, incoterms, payTerms, currency, items, totalAmount, vatAmount = 0, grandTotal, vatRate = 0, tnvedOn = true } = kpData;
+  const SPAN = tnvedOn ? 6 : 5;  // label span for VAT/total rows (excludes the value column)
   const finalTotal = vatRate > 0 ? (grandTotal || totalAmount) : totalAmount;
   const CURR_SYMBOLS = { USD:'$', EUR:'€', RUB:'₽', UZS:'сум', KZT:'₸', UAH:'₴',
     BYN:'Br', AZN:'₼', AMD:'֏', GEL:'₾', TJS:'SM', TMT:'T', KGS:'с', MDL:'L',
@@ -63,7 +64,7 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
     children: [
       mkTh('№', W.n),
       mkTh('Наименование / Description', W.name, AlignmentType.LEFT),
-      mkTh('Код ТН ВЭД / HS Code', W.tnved),
+      ...(tnvedOn ? [mkTh('Код ТН ВЭД / HS Code', W.tnved)] : []),
       mkTh('Ед.изм / Unit', W.unit),
       mkTh('К-во / Q\'ty', W.qty, AlignmentType.RIGHT),
       mkTh(`Цена за ед. / Unit price, ${currSym}`, W.price, AlignmentType.RIGHT),
@@ -81,7 +82,7 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
     return new TableRow({ children: [
       mk(idx + 1, W.n, AlignmentType.CENTER),
       mk(item.name, W.name, AlignmentType.LEFT, '1a2233', true),
-      mk(item.tnved || '—', W.tnved, AlignmentType.CENTER, item.tnved ? GREEN : RED_COL),
+      ...(tnvedOn ? [mk(item.tnved || '—', W.tnved, AlignmentType.CENTER, item.tnved ? GREEN : RED_COL)] : []),
       mk(item.unit, W.unit, AlignmentType.CENTER),
       mk(fmt(item.qty), W.qty, AlignmentType.RIGHT),
       mk(fmt(item.price) + ' ' + currSym, W.price, AlignmentType.RIGHT),
@@ -94,7 +95,7 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
   const vatRows = vatRate > 0 ? [
     new TableRow({ children: [
       new TableCell({
-        columnSpan: 6,
+        columnSpan: SPAN,
         shading: { type: ShadingType.CLEAR, fill: 'f8f9fb', color: 'auto' },
         borders: { top: lightBd(), bottom: lightBd(), left: lightBd(), right: lightBd() },
         margins: { top: 60, bottom: 60, left: 80, right: 80 },
@@ -115,7 +116,7 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
     ]}),
     new TableRow({ children: [
       new TableCell({
-        columnSpan: 6,
+        columnSpan: SPAN,
         shading: { type: ShadingType.CLEAR, fill: 'f8f9fb', color: 'auto' },
         borders: { top: lightBd(), bottom: lightBd(), left: lightBd(), right: lightBd() },
         margins: { top: 60, bottom: 60, left: 80, right: 80 },
@@ -140,7 +141,7 @@ export async function downloadKpAsDocx(kpData, filename = 'glorix-kp.docx') {
   const totalLabel = vatRate > 0 ? `ИТОГО / TOTAL  (${incoterms} 2020, ${currency}) С НДС ${vatRate}%:` : `ИТОГО / TOTAL  (${incoterms} 2020, ${currency}):`;
   const totalRow = new TableRow({ children: [
     new TableCell({
-      columnSpan: 6,
+      columnSpan: SPAN,
       shading: { type: ShadingType.CLEAR, fill: FOOTER, color: 'auto' },
       borders: { top: darkBd(), bottom: darkBd(), left: darkBd(), right: darkBd() },
       margins: { top: 100, bottom: 100, left: 80, right: 80 },
