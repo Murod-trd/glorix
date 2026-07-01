@@ -64,3 +64,10 @@ tnved-response-*.json
 tnved-test-*.json
 tnved-error-*.json
 tnved-error-*.txt
+
+# Generic local debug/curl dumps (never commit)
+*.curl
+curl-*.txt
+debug-*.json
+debug-*.txt
+response-*.json

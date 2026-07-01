@@ -69,7 +69,7 @@ curl -s https://tnved.<your-domain>/health | jq
 
 curl -s -X POST https://tnved.<your-domain>/classify \
   -H 'Content-Type: application/json' \
-  -d '{"description":"Листовые ножницы по металлу JS3201J"}' | jq
+  -d '{"description":"<product description>"}' | jq
 # Expect a structured ClassifyResponse. A code is returned ONLY when evidence is
 # sufficient; otherwise code is null/empty with requires_clarification=true.
 ```
