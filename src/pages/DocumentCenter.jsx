@@ -467,7 +467,7 @@ const COUNTRIES = [
 export default function DocumentCenter() {
   const { accountType } = useAccountType();
   const [tab, setTab] = useState('kp'); // kp | tnved
-  const [items, setItems] = useState([{ name: '', tnved: '', qty: '', unit: 'кг', price: '', specs: '' }]);
+  const [items, setItems] = useState([{ name: '', tnved: '', qty: '', unit: '', price: '', specs: '' }]);
   const [pasteText, setPasteText] = useState('');
   const [showPaste, setShowPaste] = useState(false);
   const [generated, setGenerated] = useState('');
@@ -489,7 +489,10 @@ export default function DocumentCenter() {
   const [aiStatus, setAiStatus] = useState('checking'); // checking | configured | unavailable | error
   const [autofillMsg, setAutofillMsg] = useState(null);  // UI-only status; NEVER written into generated documents
   useEffect(() => {
+    // TN VED AI OFF → do NOT call /api/tnved-ai/health; keep a safe inactive state.
+    if (!tnvedAiOn) { setAiStatus('off'); return; }
     let alive = true;
+    setAiStatus('checking');
     healthTnvedAi().then(h => {
       if (!alive) return;
       if (h?.ok && h?.status === 'configured') setAiStatus('configured');
@@ -497,7 +500,7 @@ export default function DocumentCenter() {
       else setAiStatus('error');
     }).catch(() => { if (alive) setAiStatus('error'); });
     return () => { alive = false; };
-  }, []);
+  }, [tnvedAiOn]);
   const [companyLogo, setCompanyLogo] = useState(() => {
     try { return localStorage.getItem('glorix_company_logo') || null; } catch { return null; }
   });
@@ -514,7 +517,7 @@ export default function DocumentCenter() {
   const [batchElapsed, setBatchElapsed] = useState(0);
   const [batchDone, setBatchDone] = useState(false);
 
-  const addItem = () => setItems(prev => [...prev, { name: '', tnved: '', qty: '', unit: 'кг', price: '', specs: '' }]);
+  const addItem = () => setItems(prev => [...prev, { name: '', tnved: '', qty: '', unit: '', price: '', specs: '' }]);
   const updateItem = (i, k, v) => { const arr = [...items]; arr[i][k] = v; setItems(arr); };
   const removeItem = (i) => setItems(prev => prev.filter((_, idx) => idx !== i));
 
@@ -1277,7 +1280,7 @@ export default function DocumentCenter() {
                 Технические характеристики товара (влажность, состав, прочность и т.п.) платформа не подбирает автоматически — укажите их вручную после добавления в КП, исходя из реальной спецификации вашего товара.
               </div>
               <button className="btn btn-primary" onClick={() => {
-                setItems(prev => [...prev, { name: selectedTnved.descriptionRu || selectedTnved.description, tnved: selectedTnved.code, qty: '', unit: 'кг', price: '', specs: '' }]);
+                setItems(prev => [...prev, { name: selectedTnved.descriptionRu || selectedTnved.description, tnved: selectedTnved.code, qty: '', unit: '', price: '', specs: '' }]);
                 setTab('kp');
                 setSelectedTnved(null);
               }} style={{ fontSize: 13 }}>
