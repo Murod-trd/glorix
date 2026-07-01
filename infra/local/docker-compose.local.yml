@@ -49,11 +49,11 @@ services:
       #   source: ${QDRANT_STORAGE}
       #   target: /qdrant/storage
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "sh", "-c", "wget -qO- http://localhost:6333/healthz || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    # No container healthcheck: the qdrant image ships WITHOUT wget/curl, so a CMD
+    # healthcheck always fails ("wget: not found") and marks qdrant unhealthy.
+    # Qdrant itself serves /healthz fine — verify from the host:
+    #   curl http://localhost:6333/healthz
+    # tnved connects to qdrant by service name and tolerates it still warming up.
 
   tnved:
     build: ../../backend
@@ -72,8 +72,9 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      qdrant:
-        condition: service_healthy
+      # Start-ordering only (NOT service_healthy) so a missing/adjusted qdrant
+      # healthcheck can never block tnved from starting.
+      - qdrant
     restart: unless-stopped
 
   # ── Future services (disabled until they exist). Uncomment + add a Dockerfile.

@@ -7,62 +7,73 @@
 Claude
 
 ## Current branch
-claude/local-server-storage-drive-g
+claude/fix-local-stack-qdrant-and-import
 
 ## Last commit hash
-585e24f
+48d3157
 
 ## Main objective
-Make the local server hub store all heavy data on G: (large drive), protecting the small C: drive.
+Fix two repo bugs that break the Windows local stack: (1) Qdrant healthcheck uses wget (absent in image);
+(2) tnved crashes with ModuleNotFoundError: No module named 'backend'.
 
-## Changes (docs/scripts/config only — no app logic)
-- infra/local/.env.local.example — added storage vars: GLORIX_LOCAL_ROOT, GLORIX_REPO_DIR,
-  GLORIX_DOCKER_DATA, OLLAMA_MODELS, QDRANT_STORAGE, HF_HOME, TRANSFORMERS_CACHE, GLORIX_LOG_DIR
-  (all under G:\GLORIX_SERVER). Kept existing port/tunnel/mode vars.
-- infra/local/docker-compose.local.yml — documented that the Qdrant named volume lives wherever
-  Docker Desktop's disk image is (move it to G:), plus a commented explicit-G:-bind option with the
-  Windows colon/long-syntax caveat. No data on C: when disk image relocated.
-- scripts/windows/first-time-setup-glorix-server.ps1 — detect drives, prefer G:, else prompt/abort;
-  create G:\GLORIX_SERVER\{repo,docker-data,ollama-models,qdrant-data,hf-cache,logs,backups};
-  create .env.local from example (no overwrite without confirm) and inject the chosen root; warn if
-  < 80 GB free; strong warning + YES gate if C:.
-- scripts/windows/start-glorix-server.ps1 — load .env.local; print storage root + free space; refuse
-  C: unless confirmed; export OLLAMA_MODELS/HF_HOME/TRANSFORMERS_CACHE BEFORE model/KB work; logs to
-  GLORIX_LOG_DIR; print storage root in summary.
-- scripts/windows/status-glorix-server.ps1 — show free space on root drive + Ollama model path,
-  Qdrant storage path, HF cache, log path.
-- docs/GLORIX_LOCAL_SERVER_HUB.md — new "Disk space and G: drive setup (do this FIRST)" section:
-  what lives on G: vs C:, Docker Desktop disk-image relocation, Ollama OLLAMA_MODELS-before-pull,
-  troubleshooting (C: still filling, Docker on C:, Ollama on C:, G: low, model download failed).
-- infra/local/README.md — "Disk prep FIRST" section.
+## Root cause
+1. QDRANT HEALTHCHECK: infra/local/docker-compose.local.yml used
+   `test: ["CMD","sh","-c","wget -qO- .../healthz || exit 1"]`. The qdrant/qdrant image ships
+   without wget (and without curl), so the healthcheck always failed ("wget: not found") →
+   container marked unhealthy → tnved's `depends_on: qdrant: condition: service_healthy` was gated
+   on a check that could never pass.
+2. BACKEND IMPORT: backend/api/main.py imported `from backend.rag.classifier import ...` and
+   `from backend.store.qdrant_store import ...`. The rest of the package imports top-level
+   (`from rag.x`, `from store.x`, `from ingestion.x`) — i.e. it is designed to run with the backend
+   dir as root. In the Docker image (WORKDIR /app, `COPY . .` copies backend CONTENTS to /app),
+   there is no `backend` package, so `from backend.<x>` → ModuleNotFoundError and the container
+   restart-looped. (Moving code to /app/backend would instead break the 6 top-level imports, so the
+   correct minimal fix is a dual-mode import.)
 
-## Storage root design
-G:\GLORIX_SERVER with subfolders repo, docker-data, ollama-models, qdrant-data, hf-cache, logs, backups.
+## Files changed
+- infra/local/docker-compose.local.yml — removed the wget healthcheck (replaced with an explanatory
+  comment + host-side verify command); changed tnved `depends_on` to start-ordering only (`- qdrant`)
+  instead of `condition: service_healthy`. Services still bound to 127.0.0.1; Qdrant never public.
+- backend/api/main.py — dual-mode import (no logic change):
+  add backend dir + repo root to sys.path, then `try: from backend.rag.classifier ... except
+  ModuleNotFoundError: from rag.classifier ...`; same pattern for store.qdrant_store in /health.
+  No change to classification logic, thresholds, evidence rules, LLM prompts, or frontend.
 
-## C: protection measures
-Docker disk image -> G:\GLORIX_SERVER\docker-data; OLLAMA_MODELS -> G: (set before pull); HF_HOME/
-TRANSFORMERS_CACHE -> G:; logs -> G:; scripts refuse/great-warn on C:; docs say keep >=20-30 GB free on C:.
+## Test commands
+- python3 -m py_compile backend/api/main.py                    -> OK
+- python3 -c "import yaml; yaml.safe_load(open(compose))"       -> OK
+- MODE A (Docker /app sim: rag/store/api top-level, NO backend pkg):
+    cd /tmp/appsim && python -c "import api.main"               -> APP_MODE_IMPORT_OK (no 'backend' error)
+- MODE B (backend-cwd, how start.sh/uvicorn runs):
+    cd backend && python -c "import api.main"                   -> BACKEND_CWD_IMPORT_OK
+- npm run build                                                 -> built (RC 0), frontend unaffected
 
-## Sandbox run?
-NO. No Docker/Ollama/GPU/pwsh in sandbox. Scripts/config prepared and structurally validated only
-(JSON+YAML parsed, .bat->.ps1 checked, PowerShell brace balance checked). Not runtime-tested here.
+## Whether curl health checks passed
+NOT run in this environment: the CI/agent sandbox has no Docker Desktop / Ollama / GPU, so
+`docker compose ... up --build` and the /health curls could not be executed here. The two bugs are
+fixed and verified by: import success in the exact Docker /app layout (proves the tnved crash is gone)
+and removal of the wget healthcheck (proves the qdrant-unhealthy cause is gone).
 
-## Validation logs
-- npm run build -> built (RC 0; only pre-existing chunk-size warning).
-- services.example.json JSON OK; docker-compose.local.yml YAML OK.
-- .bat invoke matching .ps1 via %~dp0; PS brace counts balanced.
-- No src/api/backend/prisma/package.json changes; generated documents untouched.
-- infra/local/.env.local git-ignored; no secrets staged (.env.local.example placeholders only).
+## Founder verification (run on the Windows laptop)
+```
+docker compose --env-file infra/local/.env.local -f infra/local/docker-compose.local.yml --profile core up -d --build
+docker ps                                   # expect glorix_gateway, glorix_qdrant, glorix_tnved running
+curl http://localhost:6333/healthz          # "healthz check passed"
+curl http://localhost:8787/health           # {"ok":true,...}
+curl http://localhost:8787/tnved/health     # TN VED backend health JSON
+```
+First tnved start may take time (builds embeddings/KB) but must NOT crash with a Python import error.
+
+## Safety
+No classification logic/thresholds/prompts changed. No frontend change. Legacy TN VED autofill stays
+disabled. Qdrant/Ollama/DB remain internal (127.0.0.1); nothing new exposed. No secrets committed.
 
 ## Merged to main
-Yes — fast-forward (docs/scripts/config only). See hash above.
-
-## Honest status
-Prepared and merged. Storage now defaults to G: with C: protections + troubleshooting. Not
-runtime-tested in sandbox; founder runs first-time-setup on the laptop. Legacy autofill stays disabled.
+Yes — fast-forward (small local infra/backend packaging fix; no classification/auth/security logic).
 
 ## Handoff prompt for the other agent
-> You are Codex. Claude made the local hub store heavy data on G:\GLORIX_SERVER (Docker disk image,
-> Ollama models, Qdrant, HF cache, logs) and protect C:. Changes are docs/scripts/config only. Not run
-> in sandbox. Do not move data to C:, do not commit .env.local, do not re-enable legacy autofill.
-> Update only CODEX_REPORT.md.
+> You are Codex. Claude fixed two local-stack bugs: qdrant healthcheck (wget not in image) removed +
+> tnved depends_on relaxed to start-ordering; and backend/api/main.py now imports dual-mode
+> (backend.<pkg> with fallback to <pkg>) so it works in the Docker /app layout. Verified by import in
+> both layouts; full docker run not possible in sandbox. Do not change classification logic. Update
+> only CODEX_REPORT.md.

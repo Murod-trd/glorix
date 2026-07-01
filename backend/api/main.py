@@ -21,10 +21,17 @@ from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-# Добавить корневой каталог в sys.path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+# Make imports resolve in BOTH run modes without changing any logic:
+#   - repo-root mode        -> `backend.<pkg>`  (repo root on sys.path)
+#   - backend-cwd/container  -> `<pkg>`          (backend dir on sys.path, e.g. Docker /app)
+_THIS_DIR = Path(__file__).resolve().parent               # .../backend/api
+sys.path.insert(0, str(_THIS_DIR.parent.parent))          # repo root -> enables `backend.<pkg>`
+sys.path.insert(0, str(_THIS_DIR.parent))                 # backend/  -> enables `rag`, `store`, ...
 
-from backend.rag.classifier import classify, ClassificationResult
+try:
+    from backend.rag.classifier import classify, ClassificationResult
+except ModuleNotFoundError:
+    from rag.classifier import classify, ClassificationResult
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -378,7 +385,10 @@ async def health():
 
     # Проверить Qdrant
     try:
-        from backend.store.qdrant_store import get_client, CODES_COLLECTION, PDF_COLLECTION
+        try:
+            from backend.store.qdrant_store import get_client, CODES_COLLECTION, PDF_COLLECTION
+        except ModuleNotFoundError:
+            from store.qdrant_store import get_client, CODES_COLLECTION, PDF_COLLECTION
         client = get_client()
         codes_count = client.count(CODES_COLLECTION).count
         pdf_count   = client.count(PDF_COLLECTION).count
