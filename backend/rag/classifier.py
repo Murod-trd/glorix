@@ -129,6 +129,9 @@ class ClassificationResult:
     opi_rule_applied: str = ""
     processing_time_ms: int = 0
     audit_trail: list[dict] = field(default_factory=list)
+    # Actual retrieval counts (not evidence counts) — for accurate meta reporting.
+    retrieved_codes_count: int = 0
+    retrieved_pdf_count: int = 0
 
     def to_dict(self, include_audit: bool = False) -> dict:
         base = {
@@ -218,8 +221,19 @@ def classify(
     pdf_chunks = retrieved.get("pdf_chunks", [])
     _stamp("retrieval", {"codes_found": len(codes), "pdf_chunks_found": len(pdf_chunks)})
 
+    # Actual retrieval counts, reported in meta regardless of refusal/evidence path.
+    n_codes, n_pdf = len(codes), len(pdf_chunks)
+
+    def _rc(*args, **kwargs):
+        # Wrap _clarification_result so every post-retrieval refusal reports the
+        # REAL retrieval counts (metadata only; no classification logic changed).
+        _res = _clarification_result(*args, **kwargs)
+        _res.retrieved_codes_count = n_codes
+        _res.retrieved_pdf_count = n_pdf
+        return _res
+
     if not codes:
-        return _clarification_result(
+        return _rc(
             "База данных пуста или не найдено подходящих позиций",
             ["Загрузите данные ТН ВЭД (запустите build_knowledge_base.py)"],
             [], None, None, None, start_ms, audit
@@ -239,7 +253,7 @@ def classify(
         )
     except Exception as e:
         logger.error(f"LLM failed: {e}")
-        return _clarification_result(
+        return _rc(
             f"LLM недоступна: {e}",
             ["Запустите Ollama: ollama serve"],
             top10, None, None, None, start_ms, audit
@@ -257,7 +271,7 @@ def classify(
         questions = build_refusal_questions(
             Evidence(proposed_code=""), top10[:5], description  # type: ignore[arg-type]
         )
-        return _clarification_result(
+        return _rc(
             llm_resp.clarification_message or "LLM запросила уточнение",
             questions,
             top10, None, None, None, start_ms, audit
@@ -301,7 +315,7 @@ def classify(
 
     if EVIDENCE_REQUIRED and not evidence.is_sufficient:
         questions = build_refusal_questions(evidence, codes[:5], description)
-        return _clarification_result(
+        return _rc(
             "Недостаточно документальных доказательств для выбранного кода: "
             + "; ".join(evidence.insufficiency_reasons),
             questions + evidence.missing_information,
@@ -319,7 +333,7 @@ def classify(
     # Если Rule Engine нашёл блокирующие проблемы — ранний отказ
     if rule_engine_report.blocking_issues:
         questions = build_refusal_questions(evidence, codes[:5], description)
-        return _clarification_result(
+        return _rc(
             "Rule Engine обнаружил блокирующие проблемы: "
             + "; ".join(rule_engine_report.blocking_issues[:2]),
             questions,
@@ -346,7 +360,7 @@ def classify(
 
     if not validation.passed:
         questions = build_refusal_questions(evidence, codes[:5], description)
-        return _clarification_result(
+        return _rc(
             "Валидация не пройдена: " + "; ".join(validation.issues),
             questions,
             top10, evidence, None, None, start_ms, audit,
@@ -386,7 +400,7 @@ def classify(
 
     if DEVIL_BLOCK_OVERRIDE and devil.blocks:
         questions = build_refusal_questions(evidence, codes[:5], description)
-        return _clarification_result(
+        return _rc(
             "Независимая проверка обнаружила серьёзные противоречия: "
             + "; ".join(devil.reasons_against[:2]),
             questions,
@@ -433,7 +447,7 @@ def classify(
     # ── Шаг 12: Финальный порог уверенности ─────────────────────────────
     if adj_confidence_final < MIN_CONFIDENCE_TO_ANSWER:
         questions = build_refusal_questions(evidence, codes[:5], description)
-        return _clarification_result(
+        return _rc(
             f"Недостаточная уверенность: {adj_confidence_final:.2f} "
             f"(порог {MIN_CONFIDENCE_TO_ANSWER}). "
             f"Проблемы: {'; '.join(devil.reasons_against[:1] + validation.warnings[:1])}",
@@ -452,6 +466,8 @@ def classify(
     return ClassificationResult(
         code=proposed_code,
         confidence=adj_confidence_final,
+        retrieved_codes_count=n_codes,
+        retrieved_pdf_count=n_pdf,
         product_features=features,
         rule_engine_report=rule_engine_report,
         requires_clarification=False,

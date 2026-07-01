@@ -541,8 +541,8 @@ def _result_to_response(
     meta = MetaInfo(
         model=model,
         processing_time_ms=result.processing_time_ms,
-        retrieval_codes=len(result.evidence.excel_records) if result.evidence else 0,
-        retrieval_pdf=len(result.evidence.pdf_chunks) if result.evidence else 0,
+        retrieval_codes=result.retrieved_codes_count,
+        retrieval_pdf=result.retrieved_pdf_count,
     )
 
     return ClassifyResponse(
