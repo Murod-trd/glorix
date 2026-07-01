@@ -7,74 +7,68 @@
 Claude
 
 ## Current branch
-claude/fix-tnved-runtime-wiring
+claude/fix-refusal-questions-candidate-get
 
 ## Last commit hash
-004ad24
+1622d58
 
 ## Main objective
-Fix container runtime wiring so tnved reaches host Ollama + Docker Qdrant, and enable the KB build.
+Fix the 500 crash in POST /tnved/classify: build_refusal_questions() called `.get()` on
+CandidateAnalysis objects.
 
 ## Root cause
-1. HEALTH -> OLLAMA: backend/api/main.py /health called hardcoded http://localhost:11434/api/tags.
-   Inside a container `localhost` is the container, not the Windows host -> "Ollama недоступна".
-2. QDRANT SELECTION: store/qdrant_store.get_client() uses QDRANT_URL + USE_EMBEDDED_QDRANT, but compose
-   only set QDRANT_HOST/QDRANT_PORT. With QDRANT_URL unset it fell back to embedded local storage ->
-   "Collection tnved_codes not found" (it wasn't talking to the Docker Qdrant service at all).
-3. OLLAMA CLIENT: rag/llm_client.py calls ollama.chat(...) directly; the ollama python client reads
-   OLLAMA_HOST, which was not set in the container.
+rag/evidence_builder.build_refusal_questions() did `ch = c.get("chapter", c.get("code","")[:2])`,
+assuming every candidate is a dict. It is called from 6 sites in rag/classifier.py:
+  - line 257 passes `top10[:5]` which are CandidateAnalysis dataclass objects (no `.get()`),
+  - lines 303/321/348/388/435 pass `codes[:5]` which are dicts.
+The CandidateAnalysis path (refusal/clarification after retrieval+LLM+evidence) raised
+"'CandidateAnalysis' object has no attribute 'get'" -> 500. It only surfaced in the refusal path,
+which is why /health and many classifications were fine.
 
 ## Files changed
-- infra/local/docker-compose.local.yml (tnved service):
-  + QDRANT_URL=http://qdrant:6333, USE_EMBEDDED_QDRANT=0 (kept QDRANT_HOST/PORT).
-  + OLLAMA_HOST=${OLLAMA_BASE_URL:-http://host.docker.internal:11434} (for the ollama client),
-    alongside existing OLLAMA_BASE_URL (for /health).
-  + EXCEL_DIR=/data/tnved-excel, PDF_DIRS=/data/explanations, STRICT_BUILD/REQUIRE_EXCEL/REQUIRE_PDF=1.
-  + HF_HOME/TRANSFORMERS_CACHE=/root/.cache/huggingface + hf_cache named volume (persists ~2 GB model;
-    lives on G: via Docker disk image).
-  + read-only mounts: ../../docs/reference_data/tnved -> /data/tnved-excel, ../../docs/explanations ->
-    /data/explanations (relative paths avoid the Windows drive-colon issue).
-  + added hf_cache to the volumes: block. Qdrant still 127.0.0.1-only; nothing new exposed.
-- backend/api/main.py (/health only): base = os.getenv("OLLAMA_BASE_URL","http://localhost:11434").rstrip("/");
-  await client.get(f"{base}/api/tags"). No other behavior changed.
-- scripts/windows/build-tnved-kb.ps1 + BUILD_TNVED_KB.bat: run build_knowledge_base.py inside the running
-  tnved container via compose exec; warns first build is slow (~2 GB model, tens of minutes).
-- docs/GLORIX_LOCAL_SERVER_HUB.md: "Build the TN VED knowledge base" section + runtime wiring note.
+- backend/rag/evidence_builder.py — added `_candidate_get(c, key, default)` (dict.get OR getattr)
+  and used it in the competing-chapters loop:
+    code = _candidate_get(c, "code", "") or ""
+    ch   = _candidate_get(c, "chapter", "") or code[:2]
+  Same question text/behavior; now accepts dicts AND dataclass-like candidates.
+- backend/tests/test_build_refusal_questions.py — new regression test:
+  dict candidates; dataclass object candidates (code/chapter); object without chapter (code[:2]
+  fallback). Asserts no raise + returns list.
 
-## Test commands (in this sandbox)
-- python3 -m py_compile backend/api/main.py            -> OK
-- yaml.safe_load(docker-compose.local.yml)            -> OK
-- get_client() branch test with QDRANT_URL set + USE_EMBEDDED_QDRANT=0 (stubbed QdrantClient)
-  -> selects QdrantClient(url="http://qdrant:6333"); PASS (external Docker Qdrant, not embedded).
-- npm run build                                        -> built (RC 0), frontend unaffected.
+## Scan for other type mismatches (classifier.py)
+- build_refusal_questions: line 257 (CandidateAnalysis) + 303/321/348/388/435 (dicts) — all covered.
+- Other `.get()` in classifier.py operate on retrieval dicts: retrieved.get(...) (217/218) and the
+  function at ~480 that BUILDS CandidateAnalysis FROM dict candidates (492-548). Those consume dicts,
+  not CandidateAnalysis, so no crash. No other fix needed. Pipeline NOT refactored.
 
-## Whether curl health checks passed
-NOT run here: sandbox has no Docker/Ollama/GPU, so docker compose + /tnved/health curls could not be
-executed. Fixes verified statically + by import/branch tests. Founder verifies on Windows (below).
+## Tests
+- py_compile rag/evidence_builder.py rag/classifier.py api/main.py tests/test_build_refusal_questions.py -> OK
+- python tests/test_build_refusal_questions.py -> ALL REFUSAL-QUESTION REGRESSION TESTS PASSED
+- pytest tests/test_build_refusal_questions.py tests/test_refusals.py -> 22 passed
+- python tests/unit_tests.py -> 101 passed, 0 failed
+  (One transient failure earlier was ONLY because I set EVIDENCE_MIN_SCORE=0.0 in the shell; with the
+  real default threshold it passes. Not related to this change.)
+
+## Crash-fix only
+This is a crash fix, NOT a classification-quality change. Thresholds, prompts, evidence-score rules,
+refusal logic, question text, and frontend behavior are unchanged. The endpoint may still return
+requires_clarification / low confidence — that is acceptable; the fix only prevents the 500.
 
 ## Founder verification (Windows)
 ```
-docker compose --env-file infra/local/.env.local -f infra/local/docker-compose.local.yml --profile core down --remove-orphans
 docker compose --env-file infra/local/.env.local -f infra/local/docker-compose.local.yml --profile core up -d --build
-docker exec glorix_tnved python -c "import os;print(os.getenv('OLLAMA_BASE_URL'));print(os.getenv('QDRANT_URL'));print(os.getenv('USE_EMBEDDED_QDRANT'))"
-  # expect: http://host.docker.internal:11434 / http://qdrant:6333 / 0
-curl http://localhost:8787/health            # {"ok":true,...}
-curl http://localhost:8787/tnved/health      # ollama ok + qdrant ok (collections may be empty until KB build)
-scripts\windows\BUILD_TNVED_KB.bat           # long first run
-curl http://localhost:8787/tnved/health      # codes_count > 10000, pdf_chunks_count > 0
+curl http://localhost:8787/tnved/health   # stays ok (codes_count 13289, pdf_chunks_count 1694)
+curl -X POST http://localhost:8787/tnved/classify -H "Content-Type: application/json" \
+     -d '{"description":"Отвод металлический Ду-250","include_audit":false}'
+# expect 200 (may be requires_clarification), NOT 500
 ```
-
-## Safety
-No classification logic, thresholds, prompts, evidence/refusal rules, frontend, or auth/security changed.
-Legacy TN VED autofill stays disabled. Qdrant/Ollama remain internal (127.0.0.1); nothing new public.
-No secrets committed.
+Not run in sandbox (no Docker/Ollama here); verified via py_compile + regression + full unit suite.
 
 ## Merged to main
-Yes — fast-forward (local infra/runtime wiring + health-endpoint URL; no classification/auth/security).
+Yes — fast-forward (small backend crash fix; no classification logic/thresholds/prompts/security).
 
 ## Handoff prompt for the other agent
-> You are Codex. Claude wired the tnved container to the Docker Qdrant (QDRANT_URL + USE_EMBEDDED_QDRANT=0)
-> and host Ollama (OLLAMA_HOST/OLLAMA_BASE_URL=host.docker.internal), fixed /health to use OLLAMA_BASE_URL,
-> mounted the reference Excel/PDFs read-only, and added BUILD_TNVED_KB scripts. Verified statically + by
-> import/branch tests; full docker run not possible in sandbox. Do not change classification logic.
-> Update only CODEX_REPORT.md.
+> You are Codex. Claude fixed a 500 crash: build_refusal_questions() in rag/evidence_builder.py now
+> reads candidate fields via _candidate_get() (dict.get OR getattr), so it accepts both dict and
+> CandidateAnalysis candidates. Added tests/test_build_refusal_questions.py. No thresholds/prompts/
+> scoring/classifier changes; 101 unit tests + refusal tests pass. Update only CODEX_REPORT.md.

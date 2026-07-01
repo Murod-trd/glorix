@@ -185,6 +185,15 @@ def build_evidence(
     return evidence
 
 
+def _candidate_get(c, key, default=None):
+    """Read a field from a candidate that may be a dict OR a dataclass-like
+    object (e.g. CandidateAnalysis). Prevents 'X object has no attribute get'
+    when refusal questions are built from CandidateAnalysis instances."""
+    if isinstance(c, dict):
+        return c.get(key, default)
+    return getattr(c, key, default)
+
+
 def build_refusal_questions(
     evidence: Evidence,
     top_candidates: list[dict],
@@ -199,7 +208,8 @@ def build_refusal_questions(
     # Вопросы на основе конкурирующих кодов
     competing_chapters = set()
     for c in top_candidates[:5]:
-        ch = c.get("chapter", c.get("code", "")[:2])
+        code = _candidate_get(c, "code", "") or ""
+        ch = _candidate_get(c, "chapter", "") or code[:2]
         if ch and ch != evidence.proposed_code[:2]:
             competing_chapters.add(ch)
 
