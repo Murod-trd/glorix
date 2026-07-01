@@ -1,4 +1,4 @@
-import { getConfig, backendFetch, unavailable, normalizeClassify } from './_client.js';
+import { getConfig, backendFetch, unavailable, normalizeClassify } from './tnved-ai/_client.js';
 
 /**
  * Consolidated TN VED AI proxy — ONE Vercel Serverless Function (stays under the
