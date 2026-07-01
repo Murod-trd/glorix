@@ -38,6 +38,10 @@ try:
     from backend.jobs import engine as doc_engine
 except ModuleNotFoundError:
     from jobs import engine as doc_engine
+try:
+    from backend.document_ai.normalizer import repair_mojibake_text
+except ModuleNotFoundError:
+    from document_ai.normalizer import repair_mojibake_text
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -352,6 +356,7 @@ async def classify_explain_endpoint(req: ClassifyRequest):
 class DocJobRequest(BaseModel):
     raw_text: str = Field(..., min_length=1)
     tnved: bool = Field(True)
+    use_llm_normalizer: bool = Field(False)
     model: str = Field("qwen2.5:7b-instruct-q4_K_M")
 
 
@@ -374,7 +379,10 @@ async def documents_config():
 
 @app.post("/documents/jobs")
 async def documents_create_job(req: DocJobRequest):
-    return doc_engine.create_job(req.raw_text, {"tnved": req.tnved, "model": req.model})
+    raw_text = repair_mojibake_text(req.raw_text or "")  # defensive: Windows/PowerShell/Excel paste
+    return doc_engine.create_job(raw_text, {"tnved": req.tnved,
+                                            "use_llm_normalizer": req.use_llm_normalizer,
+                                            "model": req.model})
 
 
 @app.get("/documents/jobs/{job_id}")

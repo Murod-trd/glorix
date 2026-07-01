@@ -20,6 +20,32 @@ import re
 import json
 from typing import Optional
 
+
+# ── Mojibake repair ─────────────────────────────────────────────────────────
+# Windows/PowerShell/Excel paste can deliver UTF-8 bytes mis-decoded as Latin-1/
+# CP1252 ("шт" -> "ÑÑ", "НДС" -> "ÐÐÐ¡"). Detect and repair safely; leave correct
+# UTF-8 untouched.
+_MOJI_SIGNAL = re.compile("[\u00c2-\u00ff]{2,}|[\u00d0\u00d1]")
+_CYR = re.compile("[\u0400-\u04ff]")            # Cyrillic block
+_MOJI_MARK = re.compile("[\u00d0\u00d1]")        # residual Ð / Ñ markers
+
+
+def repair_mojibake_text(s):
+    """Repair UTF-8-as-Latin1/CP1252 mojibake. Returns correct UTF-8; no-op if already OK."""
+    if not s or not isinstance(s, str):
+        return s
+    if not _MOJI_SIGNAL.search(s):
+        return s  # already fine (real Cyrillic / ASCII)
+    for enc in ("latin-1", "cp1252"):
+        try:
+            repaired = s.encode(enc, errors="strict").decode("utf-8", errors="strict")
+        except Exception:
+            continue
+        # Accept only if it produced real Cyrillic and removed the mojibake markers.
+        if _CYR.search(repaired) and not _MOJI_MARK.search(repaired):
+            return repaired
+    return s
+
 # ── Unit canonicalization (maps synonyms → a canonical unit; unknown → "") ──
 _UNIT_CANON: dict[str, str] = {}
 def _u(canon: str, aliases: list[str]) -> None:
@@ -45,6 +71,22 @@ _CURRENCY = {
     "¥": "CNY", "try": "TRY", "₺": "TRY", "gbp": "GBP", "£": "GBP",
 }
 _VAT_RATES = {5, 10, 12, 15, 18, 20}
+# Cells like "Цена 13552,69" / "Price 45.00" carry the price inside a labeled text
+# cell; extract the money token after the label (position-independent).
+_PRICE_LABEL = re.compile(r"(?:цена|стоимост|price|сумма|amount|итого|total)", re.I)
+
+
+def _labeled_price(cells: list[str]) -> str:
+    for c in cells:
+        if not _PRICE_LABEL.search(c or ""):
+            continue
+        for tok in re.findall(r"\d[\d  .,]*\d|\d", c):
+            tok = tok.strip()
+            if tok and _is_money_like(tok) and not _is_percent_or_vat(tok) and not _is_tnved(tok):
+                n = _norm_num(tok)
+                if n:
+                    return n
+    return ""
 _MATERIALS = {
     "сталь": "сталь", "стальн": "сталь", "нержавею": "нержавеющая сталь", "чугун": "чугун",
     "алюмин": "алюминий", "медь": "медь", "медн": "медь", "латун": "латунь", "бронз": "бронза",
@@ -183,6 +225,7 @@ def _deterministic_row(cells: list[str], row_id: int) -> dict:
 
     price = ""
     qty = ""
+    labeled_price = _labeled_price(cells)
     # qty preference: a bare integer directly ADJACENT to the unit cell (the most
     # reliable "qty unit"/"unit qty" signal), independent of overall column order.
     unit_idx = next((i for i, c in enumerate(cells) if canon_unit(c)), -1)
@@ -208,6 +251,8 @@ def _deterministic_row(cells: list[str], row_id: int) -> dict:
             price = _norm_num(vals_np[0])
         if not qty and len(vals) > 1:
             qty = _norm_num(vals[-1])
+    if labeled_price and labeled_price != qty:
+        price = labeled_price  # explicit "Цена <num>" beats positional guesses
     if not qty:
         review.append("qty_uncertain")
     if not price:
@@ -339,16 +384,19 @@ def _llm_refine(cells: list[str], base: dict, model: str) -> dict:
 
 def normalize_row(cells: list[str], row_id: int, use_llm: bool = True,
                   model: str = "qwen2.5:7b-instruct-q4_K_M") -> dict:
+    cells = [repair_mojibake_text(c) for c in (cells or [])]
     base = _deterministic_row(cells, row_id)
     if use_llm and _llm_available():
         return _llm_refine(cells, base, model)
     return base
 
 def split_raw_rows(raw_text: str) -> list[list[str]]:
-    """Public: split pasted text into data rows (header rows removed)."""
+    """Public: split pasted text into data rows (header rows removed). Repairs mojibake."""
+    raw_text = repair_mojibake_text(raw_text or "")
     rows = _split_rows(raw_text)
     out = []
     for r in rows:
+        r = [repair_mojibake_text(c) for c in r]
         if _is_header_row(r):
             continue
         # drop pure ordinal-number rows ("1", "2"...) with no other data

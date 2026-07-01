@@ -158,7 +158,7 @@ async function documents(req, res) {
   switch (op) {
     case 'config': method = 'GET';  path = '/documents/config'; break;
     case 'create': method = 'POST'; path = '/documents/jobs';
-      body = { raw_text: String(b.raw_text || ''), tnved: b.tnved !== false, model: b.model || undefined };
+      body = { raw_text: String(b.raw_text || ''), tnved: b.tnved !== false, use_llm_normalizer: b.use_llm_normalizer === true, model: b.model || undefined };
       break;
     case 'status': method = 'GET';  path = `/documents/jobs/${jid}`; break;
     case 'rows':   method = 'GET';  path = `/documents/jobs/${jid}/rows?offset=${Number(b.offset) || 0}&limit=${Number(b.limit) || 500}`; break;

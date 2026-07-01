@@ -22,7 +22,7 @@ async function call(op, payload = {}) {
 }
 
 export const docConfig      = () => call('config');
-export const createDocJob   = (rawText, opts = {}) => call('create', { raw_text: rawText, tnved: opts.tnved !== false, model: opts.model });
+export const createDocJob   = (rawText, opts = {}) => call('create', { raw_text: rawText, tnved: opts.tnved !== false, use_llm_normalizer: opts.useLlmNormalizer === true, model: opts.model });
 export const getDocJob      = (jobId) => call('status', { jobId });
 export const getDocRows     = (jobId, offset = 0, limit = 1000) => call('rows', { jobId, offset, limit });
 export const pauseDocJob    = (jobId) => call('pause', { jobId });
