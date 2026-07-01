@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { getCurrentUser } from '../data/mock';
 import { useAccountType } from '../context/AccountContext';
 import { searchHsCodes, translateProductNameToRu } from '../data/hsCodes';
 import { PRODUCT_UNITS } from '../data/marketplace';
-import { classifySingleTnved, healthTnvedAi } from '../services/tnvedAiClient';
+import { healthTnvedAi } from '../services/tnvedAiClient';
+import { docConfig, createDocJob, getDocJob, getDocRows, pauseDocJob, resumeDocJob, cancelDocJob, retryDocJob } from '../services/docAiClient';
 import { SUBAI_MODULES } from '../ai/glorixAiRegistry';
 
 // Нормализация числового поля из Excel:
@@ -490,6 +491,7 @@ export default function DocumentCenter() {
   const [autofillMsg, setAutofillMsg] = useState(null);  // UI-only status; NEVER written into generated documents
   useEffect(() => {
     // TN VED AI OFF → do NOT call /api/tnved-ai/health; keep a safe inactive state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- derive status from toggle
     if (!tnvedAiOn) { setAiStatus('off'); return; }
     let alive = true;
     setAiStatus('checking');
@@ -507,86 +509,103 @@ export default function DocumentCenter() {
   const [tnvedQuery, setTnvedQuery] = useState('');
   const [tnvedResults, setTnvedResults] = useState([]);
   const [selectedTnved, setSelectedTnved] = useState(null);
-  const [tnvedSearching, setTnvedSearching] = useState(false); // авто-поиск ТН ВЭД после вставки
-  const [batchProgress, setBatchProgress] = useState(0);  // обработано позиций
-  const [batchTotal, setBatchTotal]       = useState(0);  // всего позиций в батче
-  const [batchFilled, setBatchFilled] = useState(0);
-  const [batchReview, setBatchReview] = useState(0);
-  const [batchError,  setBatchError]  = useState(0);
-  const [batchCurrent, setBatchCurrent] = useState('');
-  const [batchElapsed, setBatchElapsed] = useState(0);
-  const [batchDone, setBatchDone] = useState(false);
+  // ── Backend Document AI job state (frontend is UI only; brain is the backend) ──
+  const [jobId, setJobId] = useState(null);
+  const [jobStatus, setJobStatus] = useState(null);   // queued|running|paused|completed|cancelled
+  const [jobTotals, setJobTotals] = useState(null);
+  const [docBackend, setDocBackend] = useState('checking'); // configured|not_configured|error
+  const [offlineMode, setOfflineMode] = useState(false);
+  const editsRef = useRef({});   // {row_id: {field:value}} — preserve manual edits across polls
+  const pollRef = useRef(null);
+  const JOB_KEY = 'glorix_doc_job';
+  const jobProcessing = jobStatus === 'running' || jobStatus === 'queued';
 
   const addItem = () => setItems(prev => [...prev, { name: '', tnved: '', qty: '', unit: '', price: '', specs: '' }]);
-  const updateItem = (i, k, v) => { const arr = [...items]; arr[i][k] = v; setItems(arr); };
+  const updateItem = (i, k, v) => {
+    const arr = [...items]; arr[i][k] = v; setItems(arr);
+    const rid = arr[i]?._rowId;
+    if (rid !== undefined && rid !== null) editsRef.current[rid] = { ...(editsRef.current[rid] || {}), [k]: v };
+  };
   const removeItem = (i) => setItems(prev => prev.filter((_, idx) => idx !== i));
 
-  const handlePaste = async () => {
-    const parsed = parsePaste(pasteText);
-    if (!parsed.length) return;
-    setItems(parsed);
-    setImportSummary(summarizeImport(parsed));
-    setShowPaste(false);
-    setPasteText('');
-    setAutofillMsg(null);
-    setBatchDone(false);
+  const applyRowsToItems = (rows) => {
+    if (!rows || !rows.length) return;
+    setItems(rows.map(r => {
+      const n = r.normalized || {};
+      const res = r.result || {};
+      const base = {
+        name: n.name || '',
+        tnved: res.final_code || n.existing_tnved || '',
+        qty: n.qty || '', unit: n.unit || '', price: n.price || '',
+        specs: n.technical_specs || '',
+        _rowId: r.row_id, _status: r.status, _result: res, _review: (n.fields_needing_review || []),
+      };
+      return { ...base, ...(editsRef.current[r.row_id] || {}) };
+    }));
+  };
 
-    // ── TN VED AI OFF → NO TN VED API calls / analysis / progress. ──
-    if (!tnvedAiOn) return;
+  const stopPolling = () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
 
-    // ── AI-ONLY autofill (row-by-row, small concurrency) via GLORIX AI. ──
-    // Manual codes preserved. Unconfident/unavailable → left BLANK (manual review).
-    // Never uses legacy regex/TF-IDF.
-    const enriched = [...parsed];
-    const unresolved = enriched.map((it, idx) => (!it.tnved ? idx : null)).filter(i => i !== null);
-    if (!unresolved.length) { setAutofillMsg({ type: 'ok', text: 'Все коды ТН ВЭД указаны вручную.' }); return; }
-
-    setTnvedSearching(true);
-    setBatchTotal(unresolved.length);
-    setBatchProgress(0); setBatchFilled(0); setBatchReview(0); setBatchError(0);
-    setBatchCurrent(''); setBatchElapsed(0);
-    const t0 = Date.now();
-    const timer = setInterval(() => setBatchElapsed(Math.round((Date.now() - t0) / 1000)), 1000);
-
-    let done = 0, filled = 0, review = 0, errors = 0, aiUnavailable = false;
-    let cursor = 0;
-    const CONCURRENCY = 4;
-
-    const worker = async () => {
-      while (cursor < unresolved.length) {
-        const idx = unresolved[cursor++];
-        const item = enriched[idx];
-        setBatchCurrent((item.name || '').slice(0, 40));
-        try {
-          const res = await classifySingleTnved(item.name);
-          if (res?.unavailable) aiUnavailable = true;
-          if (res && res.code) { enriched[idx].tnved = res.code; filled++; }
-          else { review++; }
-          if (res && res.error) errors++;
-        } catch {
-          errors++; review++;
-        }
-        done++;
-        setBatchProgress(done); setBatchFilled(filled); setBatchReview(review); setBatchError(errors);
-        setItems([...enriched]);
-      }
+  const startPolling = (id) => {
+    stopPolling();
+    const tick = async () => {
+      const st = await getDocJob(id);
+      if (!st?.ok) { if (st?.unavailable) setDocBackend('not_configured'); stopPolling(); return; }
+      setJobStatus(st.data.status); setJobTotals(st.data.totals);
+      const rr = await getDocRows(id, 0, 5000);
+      if (rr?.ok) applyRowsToItems(rr.data.rows || []);
+      if (st.data.status === 'completed' || st.data.status === 'cancelled') stopPolling();
     };
+    tick();
+    pollRef.current = setInterval(tick, 1500);
+  };
 
-    try {
-      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, unresolved.length) }, worker));
-    } catch (e) {
-      console.error('TNVED AI error:', e);
-    } finally {
-      clearInterval(timer);
-      setBatchElapsed(Math.round((Date.now() - t0) / 1000));
-      setTnvedSearching(false);
-      setBatchCurrent('');
-      setBatchDone(true);
-      if (aiUnavailable) setAutofillMsg({ type: 'warn', text: 'AI ТН ВЭД недоступен — коды оставлены пустыми, введите вручную или проверьте с декларантом.' });
-      else if (filled === 0) setAutofillMsg({ type: 'warn', text: 'AI ТН ВЭД не вернул уверенных кодов — введите вручную или проверьте с декларантом.' });
-      else setAutofillMsg({ type: 'ok', text: `AI ТН ВЭД: подобрано ${filled} из ${unresolved.length}. На проверку: ${review}. Проверьте с декларантом.` });
+  const handlePaste = async () => {
+    const text = pasteText;
+    if (!text.trim()) return;
+    setShowPaste(false); setPasteText(''); setAutofillMsg(null); setOfflineMode(false); setImportSummary(null);
+    // Send RAW paste to the backend Document AI job engine (resumable). Frontend does not parse.
+    const created = await createDocJob(text, { tnved: tnvedAiOn });
+    if (created?.ok && created.data?.job_id) {
+      const id = created.data.job_id;
+      editsRef.current = {};
+      setJobId(id); setJobStatus(created.data.status); setJobTotals(created.data.totals);
+      try { localStorage.setItem(JOB_KEY, id); } catch { /* ignore */ }
+      setAutofillMsg({ type: 'ok', text: `Задание создано в Glorix AI. Строк: ${created.data.row_count}. Прогресс сохраняется на сервере — обновление страницы НЕ сбросит работу.` });
+      startPolling(id);
+    } else {
+      // Honest OFFLINE fallback: local split for MANUAL entry only (no AI codes, not "AI").
+      const parsed = parsePaste(text);
+      setItems(parsed); setImportSummary(summarizeImport(parsed));
+      setOfflineMode(true); setJobId(null); setJobStatus(null); setJobTotals(null);
+      setAutofillMsg({ type: 'warn', text: 'AI backend недоступен — офлайн-режим: строки разобраны только для ручного ввода, коды ТН ВЭД НЕ подбираются. Настройте TNVED_AI_API_URL для полноценной AI-обработки.' });
     }
   };
+
+  const jobPause  = async () => { await pauseDocJob(jobId); stopPolling(); const st = await getDocJob(jobId); if (st?.ok) { setJobStatus(st.data.status); setJobTotals(st.data.totals); } };
+  const jobResume = async () => { const r = await resumeDocJob(jobId); if (r?.ok) { setJobStatus(r.data.status); startPolling(jobId); } };
+  const jobCancel = async () => { await cancelDocJob(jobId); stopPolling(); const st = await getDocJob(jobId); if (st?.ok) { setJobStatus(st.data.status); setJobTotals(st.data.totals); } };
+  const jobRetry  = async () => { const r = await retryDocJob(jobId); if (r?.ok) { setJobStatus(r.data.status); startPolling(jobId); } };
+  const jobClear  = () => { stopPolling(); setJobId(null); setJobStatus(null); setJobTotals(null); editsRef.current = {}; setOfflineMode(false); setImportSummary(null); try { localStorage.removeItem(JOB_KEY); } catch { /* ignore */ } };
+
+  // Config probe + reconnect to an existing job after a browser refresh.
+  useEffect(() => {
+    docConfig().then(c => {
+      if (c?.ok) setDocBackend('configured');
+      else if (c?.unavailable) setDocBackend('not_configured');
+      else setDocBackend('error');
+    });
+    let saved = null;
+    try { saved = localStorage.getItem(JOB_KEY); } catch { /* ignore */ }
+    if (saved) {
+      getDocJob(saved).then(st => {
+        if (st?.ok && st.data) { setJobId(saved); setJobStatus(st.data.status); setJobTotals(st.data.totals); startPolling(saved); }
+        else { try { localStorage.removeItem(JOB_KEY); } catch { /* ignore */ } }
+      });
+    }
+    return () => stopPolling();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [tnvedLoading, setTnvedLoading] = useState(false);
   const [tnvedMeta, setTnvedMeta] = useState(null); // { source, translatedQuery, translationUnavailable }
@@ -971,6 +990,11 @@ export default function DocumentCenter() {
               <div style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 5 }}>
                 Под-ИИ Glorix: {SUBAI_MODULES.map(m => `${m.name} (${m.status === 'active' ? 'активен' : 'план'})`).join(' · ')}
               </div>
+              <div style={{ fontSize: 9, marginTop: 3, color: docBackend === 'configured' ? '#1a7a4a' : 'var(--text-3)' }}>
+                Document AI backend: {docBackend === 'configured' ? 'подключён (обработка на сервере, устойчива к обновлению страницы)'
+                  : docBackend === 'not_configured' ? 'не настроен (TNVED_AI_API_URL) — доступен офлайн ручной режим'
+                  : docBackend === 'error' ? 'ошибка соединения' : 'проверка…'}
+              </div>
             </div>
 
             {/* Import buttons */}
@@ -999,24 +1023,6 @@ export default function DocumentCenter() {
                 <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
                   <button className="btn btn-ghost" onClick={() => setShowPaste(false)} style={{ fontSize: 12, padding: '6px 14px' }}>Отмена</button>
                   <button className="btn btn-primary" onClick={handlePaste} style={{ fontSize: 12, padding: '6px 14px' }}>Импортировать {parsePaste(pasteText).length > 0 ? `(${parsePaste(pasteText).length} строк)` : ''}</button>
-                  {tnvedSearching && (
-                    <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 4 }}>
-                      {batchTotal > 0
-                        ? `⏳ Классифицирую: ${batchProgress} / ${batchTotal}`
-                        : '⏳ Определяю ТН ВЭД...'}
-                    </span>
-                  )}
-                  {tnvedSearching && batchTotal > 0 && (
-                    <div style={{ width: '100%', marginTop: 6, height: 4, background: 'rgba(0,212,170,0.15)', borderRadius: 2 }}>
-                      <div style={{
-                        height: '100%',
-                        borderRadius: 2,
-                        background: 'var(--accent)',
-                        width: `${Math.round(batchProgress / batchTotal * 100)}%`,
-                        transition: 'width 0.3s ease',
-                      }} />
-                    </div>
-                  )}
                 </div>
               </div>
             )}
@@ -1039,20 +1045,32 @@ export default function DocumentCenter() {
                   : <> · все поля распознаны ✓</>}
               </div>
             )}
-            {tnvedAiOn && (tnvedSearching || batchDone) && batchTotal > 0 && (
+            {(jobId || offlineMode) && (
               <div style={{ padding: '10px 12px', marginBottom: 12, borderRadius: 8, background: 'rgba(0,212,170,0.06)', border: '1px solid rgba(0,212,170,0.25)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>
-                  <span>{tnvedSearching ? '🧠 Glorix AI · ТН ВЭД — обработка…' : '✓ Glorix AI · ТН ВЭД — готово'}</span>
-                  <span>{batchProgress} / {batchTotal} · {batchElapsed}s</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, flexWrap: 'wrap' }}>
+                  <span>🧠 Glorix AI · Document AI {jobId ? `— ${jobStatus || '…'}` : '— офлайн (без ИИ)'}</span>
+                  {jobTotals && <span>{jobTotals.done} / {jobTotals.total}</span>}
                 </div>
-                <div style={{ height: 5, background: 'rgba(0,212,170,0.15)', borderRadius: 3, overflow: 'hidden', marginBottom: 6 }}>
-                  <div style={{ height: '100%', width: `${Math.round((batchProgress / Math.max(1, batchTotal)) * 100)}%`, background: 'var(--accent)', transition: 'width .3s ease' }} />
-                </div>
-                <div style={{ fontSize: 10, color: 'var(--text-3)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <span>подобрано: <b style={{ color: '#1a7a4a' }}>{batchFilled}</b></span>
-                  <span>на проверку: <b style={{ color: 'var(--gold)' }}>{batchReview}</b></span>
-                  <span>ошибок: <b style={{ color: '#c0392b' }}>{batchError}</b></span>
-                  {tnvedSearching && batchCurrent && <span>· {batchCurrent}…</span>}
+                {jobTotals && (
+                  <>
+                    <div style={{ height: 5, background: 'rgba(0,212,170,0.15)', borderRadius: 3, overflow: 'hidden', marginBottom: 6 }}>
+                      <div style={{ height: '100%', width: `${Math.round((jobTotals.done / Math.max(1, jobTotals.total)) * 100)}%`, background: 'var(--accent)', transition: 'width .3s ease' }} />
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-3)', display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 6 }}>
+                      <span>классиф.: <b style={{ color: '#1a7a4a' }}>{jobTotals.classified || 0}</b></span>
+                      <span>из кэша: <b style={{ color: '#1a7a4a' }}>{jobTotals.reused_from_cache || 0}</b></span>
+                      <span>вручную: <b>{jobTotals.skipped_manual || 0}</b></span>
+                      <span>на проверку: <b style={{ color: 'var(--gold)' }}>{jobTotals.review || 0}</b></span>
+                      <span>ошибок: <b style={{ color: '#c0392b' }}>{jobTotals.error || 0}</b></span>
+                    </div>
+                  </>
+                )}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {jobId && jobProcessing && <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={jobPause}>⏸ Пауза</button>}
+                  {jobId && !jobProcessing && jobStatus !== 'completed' && jobStatus !== 'cancelled' && <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={jobResume}>▶ Продолжить</button>}
+                  {jobId && (jobTotals?.review > 0 || jobTotals?.error > 0) && <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }} onClick={jobRetry}>↻ Повторить проверку/ошибки</button>}
+                  {jobId && jobStatus !== 'completed' && jobStatus !== 'cancelled' && <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px', color: '#c0392b' }} onClick={jobCancel}>✕ Отменить</button>}
+                  <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px', color: 'var(--text-3)' }} onClick={jobClear}>🗑 Очистить</button>
                 </div>
               </div>
             )}
@@ -1090,8 +1108,31 @@ export default function DocumentCenter() {
                           <input style={{ ...inputStyle, fontSize: 11 }} placeholder="Товар" autoComplete="off" value={item.name} onChange={e => updateItem(i,'name',e.target.value)} />
                         </td>
                         {tnvedAiOn && (
-                        <td style={{ padding: '4px 6px', width: 110 }}>
-                          <input style={{ ...inputStyle, fontSize: 11, background: tnvedSearching && !item.tnved ? 'rgba(0,212,170,0.06)' : undefined }} placeholder={tnvedSearching && !item.tnved ? '⏳ поиск...' : '0000000000'} autoComplete="off" value={item.tnved} onChange={e => updateItem(i,'tnved',e.target.value)} />
+                        <td style={{ padding: '4px 6px', width: 138, verticalAlign: 'top' }}>
+                          <input style={{ ...inputStyle, fontSize: 11,
+                            background: jobProcessing && !item.tnved ? 'rgba(0,212,170,0.06)' : undefined,
+                            borderColor: item._status === 'review' ? 'var(--gold)' : (item._status === 'error' ? '#c0392b' : undefined) }}
+                            placeholder={jobProcessing && !item.tnved ? '⏳…' : '0000000000'} autoComplete="off"
+                            value={item.tnved} onChange={e => updateItem(i,'tnved',e.target.value)} />
+                          {item._status && !['classified','reused_from_cache'].includes(item._status) && (
+                            <div title={(item._result?.reason || '') + (item._result?.missing_information?.length ? ' | Нужно: ' + item._result.missing_information.join('; ') : '')}
+                              style={{ fontSize: 9, marginTop: 2, cursor: 'help',
+                                color: item._status === 'error' ? '#c0392b' : (item._status === 'skipped_manual' ? '#1a7a4a' : 'var(--gold)') }}>
+                              {item._status === 'review' && `🔎 на проверку${item._result?.candidates?.length ? ` · ${item._result.candidates.length} канд.` : ''}`}
+                              {item._status === 'error' && '⚠ ошибка'}
+                              {item._status === 'skipped_manual' && '✓ ручной код'}
+                              {['pending','normalizing','classifying','normalized'].includes(item._status) && '⏳ обработка…'}
+                            </div>
+                          )}
+                          {item._status === 'review' && item._result?.candidates?.length > 0 && (
+                            <div style={{ fontSize: 9, marginTop: 2, color: 'var(--text-3)' }}>
+                              {item._result.candidates.slice(0,3).map((c,ci) => (
+                                <span key={ci} onClick={() => updateItem(i,'tnved',c.code)}
+                                  title={(c.description || '') + (c.reasons_for?.length ? ' | за: ' + c.reasons_for.join('; ') : '')}
+                                  style={{ cursor: 'pointer', textDecoration: 'underline dotted', marginRight: 6, color: 'var(--accent)' }}>{c.code}</span>
+                              ))}
+                            </div>
+                          )}
                         </td>
                         )}
                         <td style={{ padding: '4px 6px', width: 70 }}>

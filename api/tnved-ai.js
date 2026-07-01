@@ -25,6 +25,7 @@ export default async function handler(req, res) {
     case 'classify':        return classify(req, res);
     case 'classify-batch':  return classifyBatch(req, res);
     case 'explain':         return explain(req, res);
+    case 'documents':       return documents(req, res);
     default:
       return res.status(404).json({ ok: false, error: true, reason: `Unknown tnved-ai action: ${action || '(none)'}` });
   }
@@ -132,6 +133,46 @@ async function explain(req, res) {
     });
     if (!httpOk) return res.status(200).json({ ok: false, error: true, reason: `AI backend HTTP ${status}` });
     return res.status(200).json({ ok: true, explain: data });
+  } catch (err) {
+    const reason = err?.name === 'AbortError' ? 'AI backend timeout' : 'AI backend unreachable';
+    return res.status(200).json({ ok: false, error: true, reason });
+  }
+}
+
+
+// ── POST /api/tnved-ai/documents ─────────────────────────────────────────
+// Passthrough to the backend Document AI job engine. One function, no new routes.
+// Body: { op, jobId?, offset?, limit?, raw_text?, tnved?, model?, row_ids? }
+//   op: config | create | status | rows | pause | resume | cancel | retry
+async function documents(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: true, reason: 'POST only' });
+  const { configured, timeoutMs } = getConfig();
+  if (!configured) return res.status(200).json(unavailable('TNVED_AI_API_URL is not configured'));
+
+  const b = req.body || {};
+  const op = String(b.op || '').trim();
+  const jid = encodeURIComponent(String(b.jobId || ''));
+  let method = 'POST';
+  let path = '';
+  let body = null;
+  switch (op) {
+    case 'config': method = 'GET';  path = '/documents/config'; break;
+    case 'create': method = 'POST'; path = '/documents/jobs';
+      body = { raw_text: String(b.raw_text || ''), tnved: b.tnved !== false, model: b.model || undefined };
+      break;
+    case 'status': method = 'GET';  path = `/documents/jobs/${jid}`; break;
+    case 'rows':   method = 'GET';  path = `/documents/jobs/${jid}/rows?offset=${Number(b.offset) || 0}&limit=${Number(b.limit) || 500}`; break;
+    case 'pause':
+    case 'resume':
+    case 'cancel': method = 'POST'; path = `/documents/jobs/${jid}/${op}`; break;
+    case 'retry':  method = 'POST'; path = `/documents/jobs/${jid}/retry`; body = { row_ids: b.row_ids || null }; break;
+    default: return res.status(400).json({ ok: false, error: true, reason: `Unknown documents op: ${op || '(none)'}` });
+  }
+
+  try {
+    const { httpOk, status, data } = await backendFetch(path, { method, timeoutMs, body });
+    if (!httpOk) return res.status(200).json({ ok: false, error: true, reason: `AI backend HTTP ${status}`, status });
+    return res.status(200).json({ ok: true, data });
   } catch (err) {
     const reason = err?.name === 'AbortError' ? 'AI backend timeout' : 'AI backend unreachable';
     return res.status(200).json({ ok: false, error: true, reason });

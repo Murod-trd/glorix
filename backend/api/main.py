@@ -33,6 +33,12 @@ try:
 except ModuleNotFoundError:
     from rag.classifier import classify, ClassificationResult
 
+# Document AI job engine (resumable imports). Dual-mode import (repo-root / container).
+try:
+    from backend.jobs import engine as doc_engine
+except ModuleNotFoundError:
+    from jobs import engine as doc_engine
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
@@ -340,6 +346,71 @@ async def classify_explain_endpoint(req: ClassifyRequest):
         model=req.model,
     )
     return _result_to_explain_response(result)
+
+
+# ── Document AI job endpoints (resumable supplier-table import) ─────────────
+class DocJobRequest(BaseModel):
+    raw_text: str = Field(..., min_length=1)
+    tnved: bool = Field(True)
+    model: str = Field("qwen2.5:7b-instruct-q4_K_M")
+
+
+class DocRetryRequest(BaseModel):
+    row_ids: Optional[list[int]] = None
+
+
+@app.on_event("startup")
+async def _doc_bootstrap():
+    try:
+        doc_engine.bootstrap()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("doc_engine bootstrap failed: %s", e)
+
+
+@app.get("/documents/config")
+async def documents_config():
+    return doc_engine.config_status()
+
+
+@app.post("/documents/jobs")
+async def documents_create_job(req: DocJobRequest):
+    return doc_engine.create_job(req.raw_text, {"tnved": req.tnved, "model": req.model})
+
+
+@app.get("/documents/jobs/{job_id}")
+async def documents_get_job(job_id: str):
+    job = doc_engine.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+    return job
+
+
+@app.get("/documents/jobs/{job_id}/rows")
+async def documents_get_rows(job_id: str, offset: int = 0, limit: int = 500):
+    rows = doc_engine.get_rows(job_id, offset=offset, limit=limit)
+    if rows is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    return rows
+
+
+@app.post("/documents/jobs/{job_id}/pause")
+async def documents_pause(job_id: str):
+    return doc_engine.pause(job_id)
+
+
+@app.post("/documents/jobs/{job_id}/resume")
+async def documents_resume(job_id: str):
+    return doc_engine.resume(job_id)
+
+
+@app.post("/documents/jobs/{job_id}/cancel")
+async def documents_cancel(job_id: str):
+    return doc_engine.cancel(job_id)
+
+
+@app.post("/documents/jobs/{job_id}/retry")
+async def documents_retry(job_id: str, req: DocRetryRequest):
+    return doc_engine.retry(job_id, req.row_ids)
 
 
 @app.get("/health")
