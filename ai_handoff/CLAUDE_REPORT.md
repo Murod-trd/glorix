@@ -77,7 +77,7 @@ Yes — fast-forward (small backend crash fix; no classification logic/threshold
 ## Cleanup pass (accidental test artifacts)
 - No accidental artifact files were tracked or present on disk (request.json, tnved-error-*,
   tnved-response-*, tnved-test-*): nothing to git rm.
-- Removed the non-approved test string "Отвод металлический Ду-250": replaced with a neutral
+- Removed the non-approved TN VED test description (a specific Russian product string): replaced with a neutral
   placeholder in backend/tests/test_build_refusal_questions.py (test still passes) and neutralized
   the curl example in this report to "<product description>".
 - WD-40 in src/pages/DocumentCenter.jsx (PRODUCT_TNVED_MAP regex) is PRE-EXISTING application code
