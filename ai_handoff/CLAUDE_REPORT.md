@@ -7,73 +7,74 @@
 Claude
 
 ## Current branch
-claude/fix-local-stack-qdrant-and-import
+claude/fix-tnved-runtime-wiring
 
 ## Last commit hash
-48d3157
+004ad24
 
 ## Main objective
-Fix two repo bugs that break the Windows local stack: (1) Qdrant healthcheck uses wget (absent in image);
-(2) tnved crashes with ModuleNotFoundError: No module named 'backend'.
+Fix container runtime wiring so tnved reaches host Ollama + Docker Qdrant, and enable the KB build.
 
 ## Root cause
-1. QDRANT HEALTHCHECK: infra/local/docker-compose.local.yml used
-   `test: ["CMD","sh","-c","wget -qO- .../healthz || exit 1"]`. The qdrant/qdrant image ships
-   without wget (and without curl), so the healthcheck always failed ("wget: not found") →
-   container marked unhealthy → tnved's `depends_on: qdrant: condition: service_healthy` was gated
-   on a check that could never pass.
-2. BACKEND IMPORT: backend/api/main.py imported `from backend.rag.classifier import ...` and
-   `from backend.store.qdrant_store import ...`. The rest of the package imports top-level
-   (`from rag.x`, `from store.x`, `from ingestion.x`) — i.e. it is designed to run with the backend
-   dir as root. In the Docker image (WORKDIR /app, `COPY . .` copies backend CONTENTS to /app),
-   there is no `backend` package, so `from backend.<x>` → ModuleNotFoundError and the container
-   restart-looped. (Moving code to /app/backend would instead break the 6 top-level imports, so the
-   correct minimal fix is a dual-mode import.)
+1. HEALTH -> OLLAMA: backend/api/main.py /health called hardcoded http://localhost:11434/api/tags.
+   Inside a container `localhost` is the container, not the Windows host -> "Ollama недоступна".
+2. QDRANT SELECTION: store/qdrant_store.get_client() uses QDRANT_URL + USE_EMBEDDED_QDRANT, but compose
+   only set QDRANT_HOST/QDRANT_PORT. With QDRANT_URL unset it fell back to embedded local storage ->
+   "Collection tnved_codes not found" (it wasn't talking to the Docker Qdrant service at all).
+3. OLLAMA CLIENT: rag/llm_client.py calls ollama.chat(...) directly; the ollama python client reads
+   OLLAMA_HOST, which was not set in the container.
 
 ## Files changed
-- infra/local/docker-compose.local.yml — removed the wget healthcheck (replaced with an explanatory
-  comment + host-side verify command); changed tnved `depends_on` to start-ordering only (`- qdrant`)
-  instead of `condition: service_healthy`. Services still bound to 127.0.0.1; Qdrant never public.
-- backend/api/main.py — dual-mode import (no logic change):
-  add backend dir + repo root to sys.path, then `try: from backend.rag.classifier ... except
-  ModuleNotFoundError: from rag.classifier ...`; same pattern for store.qdrant_store in /health.
-  No change to classification logic, thresholds, evidence rules, LLM prompts, or frontend.
+- infra/local/docker-compose.local.yml (tnved service):
+  + QDRANT_URL=http://qdrant:6333, USE_EMBEDDED_QDRANT=0 (kept QDRANT_HOST/PORT).
+  + OLLAMA_HOST=${OLLAMA_BASE_URL:-http://host.docker.internal:11434} (for the ollama client),
+    alongside existing OLLAMA_BASE_URL (for /health).
+  + EXCEL_DIR=/data/tnved-excel, PDF_DIRS=/data/explanations, STRICT_BUILD/REQUIRE_EXCEL/REQUIRE_PDF=1.
+  + HF_HOME/TRANSFORMERS_CACHE=/root/.cache/huggingface + hf_cache named volume (persists ~2 GB model;
+    lives on G: via Docker disk image).
+  + read-only mounts: ../../docs/reference_data/tnved -> /data/tnved-excel, ../../docs/explanations ->
+    /data/explanations (relative paths avoid the Windows drive-colon issue).
+  + added hf_cache to the volumes: block. Qdrant still 127.0.0.1-only; nothing new exposed.
+- backend/api/main.py (/health only): base = os.getenv("OLLAMA_BASE_URL","http://localhost:11434").rstrip("/");
+  await client.get(f"{base}/api/tags"). No other behavior changed.
+- scripts/windows/build-tnved-kb.ps1 + BUILD_TNVED_KB.bat: run build_knowledge_base.py inside the running
+  tnved container via compose exec; warns first build is slow (~2 GB model, tens of minutes).
+- docs/GLORIX_LOCAL_SERVER_HUB.md: "Build the TN VED knowledge base" section + runtime wiring note.
 
-## Test commands
-- python3 -m py_compile backend/api/main.py                    -> OK
-- python3 -c "import yaml; yaml.safe_load(open(compose))"       -> OK
-- MODE A (Docker /app sim: rag/store/api top-level, NO backend pkg):
-    cd /tmp/appsim && python -c "import api.main"               -> APP_MODE_IMPORT_OK (no 'backend' error)
-- MODE B (backend-cwd, how start.sh/uvicorn runs):
-    cd backend && python -c "import api.main"                   -> BACKEND_CWD_IMPORT_OK
-- npm run build                                                 -> built (RC 0), frontend unaffected
+## Test commands (in this sandbox)
+- python3 -m py_compile backend/api/main.py            -> OK
+- yaml.safe_load(docker-compose.local.yml)            -> OK
+- get_client() branch test with QDRANT_URL set + USE_EMBEDDED_QDRANT=0 (stubbed QdrantClient)
+  -> selects QdrantClient(url="http://qdrant:6333"); PASS (external Docker Qdrant, not embedded).
+- npm run build                                        -> built (RC 0), frontend unaffected.
 
 ## Whether curl health checks passed
-NOT run in this environment: the CI/agent sandbox has no Docker Desktop / Ollama / GPU, so
-`docker compose ... up --build` and the /health curls could not be executed here. The two bugs are
-fixed and verified by: import success in the exact Docker /app layout (proves the tnved crash is gone)
-and removal of the wget healthcheck (proves the qdrant-unhealthy cause is gone).
+NOT run here: sandbox has no Docker/Ollama/GPU, so docker compose + /tnved/health curls could not be
+executed. Fixes verified statically + by import/branch tests. Founder verifies on Windows (below).
 
-## Founder verification (run on the Windows laptop)
+## Founder verification (Windows)
 ```
+docker compose --env-file infra/local/.env.local -f infra/local/docker-compose.local.yml --profile core down --remove-orphans
 docker compose --env-file infra/local/.env.local -f infra/local/docker-compose.local.yml --profile core up -d --build
-docker ps                                   # expect glorix_gateway, glorix_qdrant, glorix_tnved running
-curl http://localhost:6333/healthz          # "healthz check passed"
-curl http://localhost:8787/health           # {"ok":true,...}
-curl http://localhost:8787/tnved/health     # TN VED backend health JSON
+docker exec glorix_tnved python -c "import os;print(os.getenv('OLLAMA_BASE_URL'));print(os.getenv('QDRANT_URL'));print(os.getenv('USE_EMBEDDED_QDRANT'))"
+  # expect: http://host.docker.internal:11434 / http://qdrant:6333 / 0
+curl http://localhost:8787/health            # {"ok":true,...}
+curl http://localhost:8787/tnved/health      # ollama ok + qdrant ok (collections may be empty until KB build)
+scripts\windows\BUILD_TNVED_KB.bat           # long first run
+curl http://localhost:8787/tnved/health      # codes_count > 10000, pdf_chunks_count > 0
 ```
-First tnved start may take time (builds embeddings/KB) but must NOT crash with a Python import error.
 
 ## Safety
-No classification logic/thresholds/prompts changed. No frontend change. Legacy TN VED autofill stays
-disabled. Qdrant/Ollama/DB remain internal (127.0.0.1); nothing new exposed. No secrets committed.
+No classification logic, thresholds, prompts, evidence/refusal rules, frontend, or auth/security changed.
+Legacy TN VED autofill stays disabled. Qdrant/Ollama remain internal (127.0.0.1); nothing new public.
+No secrets committed.
 
 ## Merged to main
-Yes — fast-forward (small local infra/backend packaging fix; no classification/auth/security logic).
+Yes — fast-forward (local infra/runtime wiring + health-endpoint URL; no classification/auth/security).
 
 ## Handoff prompt for the other agent
-> You are Codex. Claude fixed two local-stack bugs: qdrant healthcheck (wget not in image) removed +
-> tnved depends_on relaxed to start-ordering; and backend/api/main.py now imports dual-mode
-> (backend.<pkg> with fallback to <pkg>) so it works in the Docker /app layout. Verified by import in
-> both layouts; full docker run not possible in sandbox. Do not change classification logic. Update
-> only CODEX_REPORT.md.
+> You are Codex. Claude wired the tnved container to the Docker Qdrant (QDRANT_URL + USE_EMBEDDED_QDRANT=0)
+> and host Ollama (OLLAMA_HOST/OLLAMA_BASE_URL=host.docker.internal), fixed /health to use OLLAMA_BASE_URL,
+> mounted the reference Excel/PDFs read-only, and added BUILD_TNVED_KB scripts. Verified statically + by
+> import/branch tests; full docker run not possible in sandbox. Do not change classification logic.
+> Update only CODEX_REPORT.md.

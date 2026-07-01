@@ -61,14 +61,40 @@ services:
     profiles: ["core"]
     # NOT published to the host — only the gateway reaches it on the compose network.
     environment:
+      # Qdrant: use the Docker service, NOT embedded/local storage.
+      # qdrant_store.get_client() keys off QDRANT_URL + USE_EMBEDDED_QDRANT.
+      - QDRANT_URL=http://qdrant:6333
+      - USE_EMBEDDED_QDRANT=0
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
+      # Ollama runs on the Windows HOST. Inside a container `localhost` is the
+      # container itself, so point to host.docker.internal:
+      #   OLLAMA_BASE_URL -> used by the /health check (httpx)
+      #   OLLAMA_HOST     -> read by the `ollama` python client in rag/llm_client.py
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_HOST=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b-instruct-q4_K_M}
+      # Knowledge-base sources (mounted read-only below).
+      - EXCEL_DIR=/data/tnved-excel
+      - PDF_DIRS=/data/explanations
+      - STRICT_BUILD=1
+      - REQUIRE_EXCEL=1
+      - REQUIRE_PDF=1
+      # Real mode on the laptop (no mocks).
       - MOCK_EMBEDDER=${MOCK_EMBEDDER:-0}
       - MOCK_LLM=${MOCK_LLM:-0}
+      # Embedder / HuggingFace cache inside the container, persisted on a named
+      # volume. Named volumes live in Docker's disk image -> on G: once you set
+      # Docker Desktop's disk image location to G:\GLORIX_SERVER\docker-data.
+      - HF_HOME=/root/.cache/huggingface
+      - TRANSFORMERS_CACHE=/root/.cache/huggingface
     volumes:
       - ../../backend/data:/app/data
+      # Official reference data, read-only (relative paths avoid the Windows drive-colon issue):
+      - ../../docs/reference_data/tnved:/data/tnved-excel:ro
+      - ../../docs/explanations:/data/explanations:ro
+      # Persist the ~2 GB embedder model across container rebuilds:
+      - hf_cache:/root/.cache/huggingface
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -104,4 +130,5 @@ services:
 # to G:\GLORIX_SERVER\docker-data so NO heavy data lands on the small C: drive.
 volumes:
   qdrant_data:
+  hf_cache:
   # pg_data:

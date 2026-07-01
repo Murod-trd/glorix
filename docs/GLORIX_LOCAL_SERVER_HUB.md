@@ -120,6 +120,27 @@ gateway, `TNVED_AI_API_URL = https://<public>/tnved` works correctly:
 tnved), checks Docker/Ollama/model, runs health checks, optionally starts the
 tunnel, and prints the exact Vercel env values. There is no per-AI button.
 
+## Build the TN VED knowledge base (first run)
+
+The TN VED backend needs its knowledge base indexed into the Docker Qdrant service
+before `/tnved/health` reports real `codes_count` / `pdf_chunks_count`. After the
+stack is up (`START_GLORIX_SERVER`), run once:
+
+```
+scripts\windows\BUILD_TNVED_KB.bat
+```
+(equivalently: `docker compose --env-file infra/local/.env.local -f infra/local/docker-compose.local.yml --profile core exec tnved python build_knowledge_base.py`)
+
+This reads the full Excel (`docs/reference_data/tnved`, mounted read-only) and the
+100 PDFs (`docs/explanations`, mounted read-only) and indexes them into Qdrant using
+the real embedder. **First build downloads a ~2 GB model and can take tens of minutes
+on CPU — keep the laptop awake.** The embedder cache persists in a named volume, so
+later rebuilds are faster.
+
+Runtime wiring (set by compose, do not change): the container reaches Qdrant via
+`QDRANT_URL=http://qdrant:6333` (`USE_EMBEDDED_QDRANT=0`) and Ollama on the host via
+`OLLAMA_BASE_URL` / `OLLAMA_HOST=http://host.docker.internal:11434`.
+
 ## Connecting Vercel to the local hub
 
 After the tunnel is up and `/tnved/health` is healthy, set in Vercel

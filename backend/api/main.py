@@ -372,7 +372,8 @@ async def health():
     # Проверить Ollama
     try:
         async with httpx.AsyncClient(timeout=3) as client:
-            r = await client.get("http://localhost:11434/api/tags")
+            base = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+            r = await client.get(f"{base}/api/tags")
             if r.status_code == 200:
                 models = [m["name"] for m in r.json().get("models", [])]
                 status["ollama"] = {"status": "ok", "models": models}
