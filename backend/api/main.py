@@ -452,7 +452,7 @@ async def classify_semantic_batch(req: SemanticBatchRequest):
             results.append({**base, "status": "review", "code": "", "confident": False, "confidence": 0.0, "candidates": [], "reason": "запрос слишком короткий"})
             continue
         try:
-            codes = (retriever.retrieve(name, top_k=10) or {}).get("codes", [])
+            codes = (retriever.retrieve(name, top_k=top_k) or {}).get("codes", [])
         except Exception as e:  # noqa: BLE001
             results.append({**base, "status": "error", "code": "", "confident": False, "confidence": 0.0, "candidates": [], "error": True, "reason": str(e)[:200]})
             continue
@@ -494,10 +494,10 @@ async def classify_semantic_batch(req: SemanticBatchRequest):
 
 class AdjudicateBatchRequest(BaseModel):
     items: list[str] = Field(default_factory=list)
-    top_k: int = Field(10)
+    top_k: int = Field(20)
 
 
-def _adjudicate_one(name, retriever, model):
+def _adjudicate_one(name, retriever, model, top_k=20):
     """Semantic retrieve → LLM picks ONE code FROM THE CANDIDATE LIST (grounded;
     a chosen code that is not in the list is rejected → never fabricated)."""
     import json as _json
@@ -508,7 +508,7 @@ def _adjudicate_one(name, retriever, model):
         return {"name": name, "status": "error", "code": "", "confident": False,
                 "confidence": 0.0, "candidates": [], "reason": str(e)[:200], "error": True}
     cands = []
-    for c in codes[:10]:
+    for c in codes[:top_k]:
         code = str(c.get("code") or "").strip()
         if code:
             cands.append({"code": code, "description": (c.get("description") or "")[:160],
@@ -580,6 +580,7 @@ async def classify_adjudicate_batch(req: AdjudicateBatchRequest):
     # so it runs FAST. Overridable via OLLAMA_JUDGE_MODEL. Does not touch OLLAMA_MODEL.
     model = os.getenv("OLLAMA_JUDGE_MODEL", "qwen2.5:3b-instruct-q4_K_M")
     items = (req.items or [])[:50]
+    top_k = max(5, min(int(req.top_k or 20), 30))  # how many candidates the judge sees
     results = []
     for raw in items:
         name = str(raw or "").strip()[:400]
@@ -587,7 +588,7 @@ async def classify_adjudicate_batch(req: AdjudicateBatchRequest):
             results.append({"name": name, "status": "review", "code": "", "confident": False,
                             "confidence": 0.0, "candidates": [], "reason": "запрос слишком короткий"})
             continue
-        results.append(_adjudicate_one(name, retriever, model))
+        results.append(_adjudicate_one(name, retriever, model, top_k))
     return {"ok": True, "engine": "semantic+llm-adjudicator", "results": results}
 
 
