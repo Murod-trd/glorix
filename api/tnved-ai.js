@@ -1,6 +1,6 @@
 import { getConfig, backendFetch, unavailable } from './tnved-ai/_client.js';
 import {
-  normalizeAndTokenize, detectConcept, scoreCandidate, applyDecisionPolicy, DECISION,
+  normalizeAndTokenize, rankTopChapters, scoreCandidate, applyDecisionPolicy, DECISION,
 } from './tnved-ai/_engine.js';
 import { health as dbHealth, queryCandidates, getByCode } from './tnved-ai/_db.js';
 
@@ -40,9 +40,9 @@ function rawTokensOf(text) {
 
 async function classifyText(text) {
   const description = String(text || '').trim();
-  const stems = normalizeAndTokenize(description);
+  const tokens = normalizeAndTokenize(description);   // order preserved
+  const anchor = tokens[0] || '';                     // base noun (Anchor Token)
   const raw = rawTokensOf(description);
-  const concept = detectConcept(raw, stems);
 
   // Exact embedded TN VED code (8–10 digits) — accept ONLY if it exists in the DB.
   for (const t of raw) {
@@ -59,23 +59,29 @@ async function classifyText(text) {
           }],
           reason: 'Код указан в запросе и подтверждён в локальной базе ТН ВЭД.',
           missing_information: [],
-          audit: { query: description, tokens: stems, concept: concept?.id || null, matched_code: row.code },
+          audit: { query: description, tokens, anchor, matched_code: row.code },
         };
       }
     }
   }
 
-  const expanded = concept ? concept.expandedStems : [];
-  const codeHints = concept ? (concept.code_hints || []) : [];
-  const terms = Array.from(new Set([...stems, ...expanded]));
-  const r = await queryCandidates(terms, { codeHints });
+  // Retrieval (candidate pool) — universal title/code matching, no keyword maps.
+  const r = await queryCandidates(tokens, { anchor });
   if (!r.ok) return { dbError: true, reason: r.reason };
 
-  const scored = (r.candidates || []).map((c) => scoreCandidate(terms, c, concept));
-  const decision = applyDecisionPolicy(scored, { activeConcept: concept });
+  // Pass 1 — dynamic Top-N chapters, derived from where the anchor appears in the
+  // NOMENCLATURE (code names) among the retrieved pool. Universal, no hardcoding.
+  const topChapters = rankTopChapters(tokens, anchor, r.candidates, DECISION.TOP_CHAPTERS);
+
+  // Pass 2 — score each candidate (anchor ×10, chapter boost/penalty, drops).
+  const scored = (r.candidates || []).map((c) => scoreCandidate(tokens, c, { anchor, topChapters }));
+  const decision = applyDecisionPolicy(scored);
   decision.audit = {
-    query: description, tokens: stems, concept: concept?.id || null,
-    retrieved: r.candidates?.length || 0, thresholds: DECISION,
+    query: description, tokens, anchor,
+    top_chapters: Array.from(topChapters),
+    retrieved: r.candidates?.length || 0,
+    kept: scored.filter((x) => x && !x.drop).length,
+    thresholds: DECISION,
   };
   return decision;
 }

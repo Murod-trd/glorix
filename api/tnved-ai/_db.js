@@ -26,6 +26,8 @@ const TITLE_COLS = ['title', 'name', 'name_ru', 'description_ru', 'short_name', 
 const DESC_COLS = ['description', 'full_description', 'description_full', 'text', 'body', 'desc'];
 const EXPL_COLS = ['explanations', 'explanation', 'notes', 'note', 'commentary'];
 const TARIFF_COLS = ['tariff', 'duty', 'rate', 'duty_rate'];
+const CH_NUM_COLS = ['chapter', 'group', 'chapter_num', 'glava', 'id'];
+const CH_TXT_COLS = ['explanation', 'explanations', 'text', 'note', 'notes', 'body', 'commentary'];
 
 let _promise = null;
 
@@ -68,7 +70,34 @@ async function open() {
 
   const cnt = db.exec(`SELECT COUNT(*) FROM ${quoteIdent(best.table)}`);
   const rows_count = cnt.length ? Number(cnt[0].values[0][0]) : 0;
-  return { ok: true, db, schema: best, rows_count };
+
+  // Load chapter-level explanations into RAM ONCE (Pass-1 dynamic chapter ranking).
+  // chapter numbers are normalised to 2-digit strings so they match code[:2].
+  let chapters = [];
+  try {
+    const lower = tables.map((t) => String(t).toLowerCase());
+    const ci = lower.indexOf('chapters');
+    if (ci >= 0) {
+      const chTable = tables[ci];
+      const info2 = db.exec(`PRAGMA table_info(${quoteIdent(chTable)})`);
+      const cols2 = info2.length ? info2[0].values.map((r) => r[1]) : [];
+      const chCol = pick(cols2, CH_NUM_COLS);
+      const txtCol = pick(cols2, CH_TXT_COLS);
+      if (chCol && txtCol) {
+        const res = db.exec(`SELECT ${quoteIdent(chCol)}, ${quoteIdent(txtCol)} FROM ${quoteIdent(chTable)}`);
+        if (res.length) {
+          for (const [ch, txt] of res[0].values) {
+            const digits = String(ch == null ? '' : ch).replace(/\D/g, '');
+            if (!digits) continue;
+            const key = digits.padStart(2, '0').slice(-2);
+            chapters.push({ chapter: key, text: String(txt == null ? '' : txt) });
+          }
+        }
+      }
+    }
+  } catch { /* chapters table optional — engine degrades to title-only scoring */ }
+
+  return { ok: true, db, schema: best, rows_count, chapters };
 }
 
 /** Cached DB handle for the warm instance. */
@@ -84,6 +113,7 @@ export async function health() {
     ok: true,
     table: h.schema.table,
     rows_count: h.rows_count,
+    chapters_count: (h.chapters || []).length,
     columns: {
       code: h.schema.code,
       title: h.schema.title,
@@ -91,6 +121,12 @@ export async function health() {
       explanations: h.schema.explanations,
     },
   };
+}
+
+/** All chapter explanation texts, loaded once into RAM (for Pass-1 ranking). */
+export async function getAllChapters() {
+  const h = await getDb();
+  return h.ok ? (h.chapters || []) : [];
 }
 
 /**
@@ -144,6 +180,15 @@ export async function queryCandidates(terms, opts = {}) {
   }
   collect(seedWhere.length ? seedWhere.join(' OR ') : '', seedParams, 150);
 
+  // (1b) Anchor-priority: the base noun (first token) is the most important term,
+  // so fetch its title matches in their OWN bounded query. Prevents a common
+  // modifier (e.g. "металл") from flooding out a rare anchor (e.g. "ножниц")
+  // under the row LIMIT.
+  const anchorTok = String(opts.anchor || '').trim();
+  if (anchorTok.length >= 3) {
+    collect(`${TITLE} LIKE ?`, ['%' + anchorTok + '%'], 200);
+  }
+
   // (2) Term matches over the (short) title column.
   const uterms = Array.from(new Set((terms || []).filter((t) => t && String(t).length >= 3))).slice(0, 12);
   const termWhere = [];
@@ -172,4 +217,4 @@ export async function getByCode(code) {
   return o;
 }
 
-export default { getDb, health, queryCandidates, getByCode, quoteIdent };
+export default { getDb, health, getAllChapters, queryCandidates, getByCode, quoteIdent };
