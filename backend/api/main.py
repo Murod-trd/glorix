@@ -492,6 +492,105 @@ async def classify_semantic_batch(req: SemanticBatchRequest):
     return {"ok": True, "engine": "semantic-hybrid", "results": results}
 
 
+class AdjudicateBatchRequest(BaseModel):
+    items: list[str] = Field(default_factory=list)
+    top_k: int = Field(10)
+
+
+def _adjudicate_one(name, retriever, model):
+    """Semantic retrieve → LLM picks ONE code FROM THE CANDIDATE LIST (grounded;
+    a chosen code that is not in the list is rejected → never fabricated)."""
+    import json as _json
+    import re as _re
+    try:
+        codes = (retriever.retrieve(name, top_k=10) or {}).get("codes", [])
+    except Exception as e:  # noqa: BLE001
+        return {"name": name, "status": "error", "code": "", "confident": False,
+                "confidence": 0.0, "candidates": [], "reason": str(e)[:200], "error": True}
+    cands = []
+    for c in codes[:10]:
+        code = str(c.get("code") or "").strip()
+        if code:
+            cands.append({"code": code, "description": (c.get("description") or "")[:160],
+                          "chapter": c.get("chapter") or code[:2]})
+    if not cands:
+        return {"name": name, "status": "review", "code": "", "confident": False, "confidence": 0.0,
+                "candidates": [], "reason": "нет семантических кандидатов", "missing_information": []}
+
+    valid = {c["code"] for c in cands}
+    try:
+        import ollama
+    except Exception:
+        ollama = None
+    if ollama is None:
+        return {"name": name, "status": "review", "code": "", "confident": False, "confidence": 0.0,
+                "candidates": cands, "reason": "LLM недоступна — выберите из кандидатов вручную",
+                "missing_information": []}
+
+    listing = "\n".join(f'{i + 1}. {c["code"]} — {c["description"]}' for i, c in enumerate(cands))
+    system = (
+        "Ты — эксперт по классификации ТН ВЭД ЕАЭС. Тебе дают товар и СПИСОК кодов-кандидатов "
+        "из официальной базы. Выбери РОВНО ОДИН код ИЗ СПИСКА, который точнее всего соответствует "
+        "товару по материалу и назначению. НИКОГДА не придумывай код, которого нет в списке. Если "
+        "ни один не подходит или данных не хватает — верни code=null. Ответь СТРОГО JSON без пояснений: "
+        '{"code": "<код из списка или null>", "confidence": <0..1>, "reason": "<кратко, по-русски>"}'
+    )
+    user = f"Товар: {name}\nКандидаты:\n{listing}\nВыбери один код ИЗ СПИСКА."
+    try:
+        resp = ollama.chat(model=model, messages=[{"role": "system", "content": system},
+                                                  {"role": "user", "content": user}],
+                           format="json", options={"temperature": 0.1, "num_predict": 300})
+        raw = resp["message"]["content"]
+        m = _re.search(r"\{.*\}", raw, _re.S)
+        data = _json.loads(m.group(0)) if m else {}
+    except Exception as e:  # noqa: BLE001
+        return {"name": name, "status": "review", "code": "", "confident": False, "confidence": 0.0,
+                "candidates": cands, "reason": f"LLM ошибка: {str(e)[:150]}", "missing_information": []}
+
+    chosen = str(data.get("code") or "").strip()
+    conf = float(data.get("confidence", 0) or 0)
+    reason = str(data.get("reason") or "")[:300]
+    # GROUNDING GUARD: accept ONLY a code that is actually in the candidate list.
+    if chosen and chosen in valid and conf >= 0.6:
+        ordered = [c for c in cands if c["code"] == chosen] + [c for c in cands if c["code"] != chosen]
+        return {"name": name, "status": "classified", "code": chosen, "confident": True,
+                "confidence": round(conf, 3), "requires_clarification": False,
+                "candidates": ordered, "reason": reason or "выбрано LLM из кандидатов",
+                "missing_information": []}
+    return {"name": name, "status": "review", "code": "", "confident": False,
+            "confidence": round(conf, 3), "requires_clarification": True, "candidates": cands,
+            "reason": reason or "LLM не уверена — выберите вручную",
+            "missing_information": ["Уточните материал/назначение/тип товара."]}
+
+
+@app.post("/classify/adjudicate-batch")
+async def classify_adjudicate_batch(req: AdjudicateBatchRequest):
+    """ACCURATE path: semantic retrieval → LLM adjudicator picks one code from the
+    candidate list (grounded, never fabricates). Slower (one LLM call per row) —
+    fast on GPU. Cap kept small; for large lists use the resumable job engine."""
+    try:
+        try:
+            from backend.rag.retriever import get_retriever
+        except ModuleNotFoundError:
+            from rag.retriever import get_retriever
+        retriever = get_retriever()
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": True, "reason": f"retriever unavailable: {str(e)[:200]}", "results": []}
+    # Dedicated judge model — small enough (3B) to fit a 4 GB laptop GPU fully,
+    # so it runs FAST. Overridable via OLLAMA_JUDGE_MODEL. Does not touch OLLAMA_MODEL.
+    model = os.getenv("OLLAMA_JUDGE_MODEL", "qwen2.5:3b-instruct-q4_K_M")
+    items = (req.items or [])[:50]
+    results = []
+    for raw in items:
+        name = str(raw or "").strip()[:400]
+        if len(name) < 2:
+            results.append({"name": name, "status": "review", "code": "", "confident": False,
+                            "confidence": 0.0, "candidates": [], "reason": "запрос слишком короткий"})
+            continue
+        results.append(_adjudicate_one(name, retriever, model))
+    return {"ok": True, "engine": "semantic+llm-adjudicator", "results": results}
+
+
 @app.get("/health")
 async def health():
     """Проверка состояния системы."""
