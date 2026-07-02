@@ -5,7 +5,7 @@ import { useAccountType } from '../context/AccountContext';
 import { searchHsCodes, translateProductNameToRu } from '../data/hsCodes';
 import { PRODUCT_UNITS } from '../data/marketplace';
 import { healthTnvedAi, classifyBatchTnved } from '../services/tnvedAiClient';
-import { docConfig, getDocJob, getDocRows, pauseDocJob, resumeDocJob, cancelDocJob, retryDocJob } from '../services/docAiClient';
+import { docConfig, createDocJob, getDocJob, getDocRows, pauseDocJob, resumeDocJob, cancelDocJob, retryDocJob } from '../services/docAiClient';
 import { SUBAI_MODULES } from '../ai/glorixAiRegistry';
 
 // Нормализация числового поля из Excel:
@@ -595,9 +595,29 @@ export default function DocumentCenter() {
       return;
     }
 
-    // FAST autonomous classification: chunked batches to the Vercel SQLite engine.
-    // Seconds for the whole list, no laptop / no neural net, and each chunk stays
-    // well under the serverless timeout (no 504).
+    // PRIMARY: accurate path — background job on the AI server (laptop GPU judge).
+    // The heavy per-row work runs on the backend, so there is NO serverless timeout;
+    // the browser only creates the job and polls progress. Codes fill in row-by-row
+    // and the run can be paused/resumed. Used whenever the AI backend is connected.
+    try {
+      const created = await createDocJob(text, { tnved: true });
+      if (created && created.ok && created.data && created.data.job_id) {
+        const id = created.data.job_id;
+        try { localStorage.setItem(JOB_KEY, id); } catch { /* ignore */ }
+        setJobId(id);
+        setJobStatus(created.data.status || 'queued');
+        setJobTotals(created.data.totals || null);
+        setJobOptTnved(true);
+        setAutofillMsg({ type: 'ok', text: `Запущена обработка на ИИ-сервере: ${rows.length} строк. Точные коды появляются по мере готовности — можно ставить на паузу и продолжать.` });
+        startPolling(id);
+        return;
+      }
+      // created.unavailable / not ok → backend not connected: fall through to fast local engine.
+    } catch { /* backend unreachable → fast local fallback below */ }
+
+    // FALLBACK (AI server not connected): fast autonomous classification via the
+    // Vercel SQLite engine — chunked batches, seconds for the whole list, no laptop
+    // and no neural net. Each chunk stays well under the serverless timeout (no 504).
     const need = [];
     seeded.forEach((it, i) => { if (it._status !== 'skipped_manual') need.push({ i, name: it.name }); });
     const CHUNK = 40;

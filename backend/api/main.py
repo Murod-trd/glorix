@@ -370,6 +370,14 @@ async def _doc_bootstrap():
         doc_engine.bootstrap()
     except Exception as e:  # noqa: BLE001
         logger.warning("doc_engine bootstrap failed: %s", e)
+    # Per-row classifier for the background job = the ACCURATE grounded GPU judge
+    # (semantic top-20 → pick one code from candidates, never fabricates). This is
+    # what powers the website's Import button via the resumable job + progress bar.
+    try:
+        doc_engine.set_classifier(_job_adjudicator)
+        logger.info("job classifier = grounded GPU adjudicator (semantic top-20)")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("set_classifier failed, using default classifier: %s", e)
 
 
 @app.get("/documents/config")
@@ -561,6 +569,47 @@ def _adjudicate_one(name, retriever, model, top_k=20):
             "confidence": round(conf, 3), "requires_clarification": True, "candidates": cands,
             "reason": reason or "LLM не уверена — выберите вручную",
             "missing_information": ["Уточните материал/назначение/тип товара."]}
+
+
+def _job_adjudicator(description: str) -> dict:
+    """Per-row classifier for the resumable job engine: semantic retrieve →
+    grounded GPU judge picks ONE code from the candidates (never fabricates).
+    Returns a dict shaped for jobs.engine._map_result. Degrades to review on error."""
+    name = str(description or "").strip()[:400]
+    if len(name) < 2:
+        return {"code": "", "confidence": 0.0, "requires_clarification": True,
+                "reasoning": "описание слишком короткое", "clarification_message": "описание слишком короткое",
+                "top10_candidates": [], "evidence": {"missing_information": [], "is_sufficient": False},
+                "sources_used": []}
+    try:
+        try:
+            from backend.rag.retriever import get_retriever
+        except ModuleNotFoundError:
+            from rag.retriever import get_retriever
+        retriever = get_retriever()
+    except Exception as e:  # noqa: BLE001
+        return {"code": "", "confidence": 0.0, "requires_clarification": True,
+                "reasoning": f"retriever unavailable: {str(e)[:150]}",
+                "clarification_message": "классификатор недоступен",
+                "top10_candidates": [], "evidence": {"missing_information": [], "is_sufficient": False},
+                "sources_used": []}
+    model = os.getenv("OLLAMA_JUDGE_MODEL", "qwen2.5:3b-instruct-q4_K_M")
+    r = _adjudicate_one(name, retriever, model, 20)
+    classified = r.get("status") == "classified"
+    cands = [{"code": c.get("code"), "description": c.get("description", ""),
+              "chapter": c.get("chapter", ""), "reasons_for": [], "reasons_against": []}
+             for c in (r.get("candidates") or [])]
+    return {
+        "code": r.get("code", "") or "",
+        "confidence": float(r.get("confidence", 0.0) or 0.0),
+        "requires_clarification": (not classified),
+        "reasoning": r.get("reason", ""),
+        "clarification_message": ("" if classified else r.get("reason", "")),
+        "top10_candidates": cands,
+        "evidence": {"missing_information": r.get("missing_information", []),
+                     "is_sufficient": classified},
+        "sources_used": [],
+    }
 
 
 @app.post("/classify/adjudicate-batch")
