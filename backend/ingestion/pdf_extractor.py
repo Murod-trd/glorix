@@ -103,21 +103,61 @@ def extract_pdf(filepath: str | Path) -> list[PdfChunk]:
     return chunks
 
 
+def extract_txt(filepath: str | Path) -> list[PdfChunk]:
+    """Извлечь чанки из .txt-пояснения ТН ВЭД.
+
+    Использует ТОТ ЖЕ чанкер, что и PDF (_build_chunks): одинаковые типы
+    (note/exclusion/example), та же группа из имени файла (ru.NN_...). Страниц
+    в TXT нет → page_num=1. 'Жирность' определяется эвристически по коротким
+    строкам-заголовкам (Глава NN / Раздел / КАПС), чтобы работали распознавание
+    глав, разделов и подзаголовков.
+    """
+    filepath = Path(filepath)
+    source_name = filepath.name
+    try:
+        raw = filepath.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        raw = filepath.read_text(encoding="cp1251", errors="replace")
+
+    paragraphs: list[dict] = []
+    for block in re.split(r"\n\s*\n", raw):          # разбиваем по пустым строкам
+        text = " ".join(line.strip() for line in block.splitlines()).strip()
+        if not text:
+            continue
+        is_heading = len(text) < 150 and (
+            re.match(r"^\s*(глава|раздел)\s", text, re.IGNORECASE) is not None
+            or (text == text.upper() and any(ch.isalpha() for ch in text))
+        )
+        paragraphs.append({
+            "text": text,
+            "page": 1,
+            "bold": is_heading,
+            "size": 12 if is_heading else 10,
+        })
+
+    chunks = _build_chunks(paragraphs, str(filepath))
+    print(f"[PDFExtractor] {source_name}: {len(chunks)} чанков из TXT")
+    return chunks
+
+
 def extract_all_pdfs(pdf_dir: str | Path) -> list[PdfChunk]:
-    """Обработать все PDF в директории."""
+    """Обработать все PDF и TXT в директории."""
     pdf_dir = Path(pdf_dir)
     all_chunks = []
-    pdf_files = sorted(pdf_dir.glob("**/*.pdf"))
-    print(f"[PDFExtractor] Найдено {len(pdf_files)} PDF файлов")
+    doc_files = sorted(pdf_dir.glob("**/*.pdf")) + sorted(pdf_dir.glob("**/*.txt"))
+    print(f"[PDFExtractor] Найдено {len(doc_files)} документов (pdf+txt)")
 
-    for pdf_file in pdf_files:
+    for doc_file in doc_files:
         try:
-            chunks = extract_pdf(pdf_file)
+            if doc_file.suffix.lower() == ".txt":
+                chunks = extract_txt(doc_file)
+            else:
+                chunks = extract_pdf(doc_file)
             all_chunks.extend(chunks)
         except Exception as e:
-            print(f"[PDFExtractor] ОШИБКА {pdf_file.name}: {e}")
+            print(f"[PDFExtractor] ОШИБКА {doc_file.name}: {e}")
 
-    print(f"[PDFExtractor] Итого: {len(all_chunks)} чанков из {len(pdf_files)} файлов")
+    print(f"[PDFExtractor] Итого: {len(all_chunks)} чанков из {len(doc_files)} файлов")
     return all_chunks
 
 

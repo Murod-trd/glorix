@@ -77,6 +77,7 @@ def _find_pdf_files(pdf_dirs: list[Path]) -> list[Path]:
     for pdf_dir in pdf_dirs:
         if pdf_dir.exists():
             files.extend(sorted(pdf_dir.glob("**/*.pdf")))
+            files.extend(sorted(pdf_dir.glob("**/*.txt")))
     return files
 
 
@@ -117,7 +118,7 @@ def main() -> None:
     for path in excel_files:
         print(f"  Excel: {_display(path)}")
     for pdf_dir in pdf_dirs:
-        count = len(list(pdf_dir.glob('**/*.pdf'))) if pdf_dir.exists() else 0
+        count = (len(list(pdf_dir.glob('**/*.pdf'))) + len(list(pdf_dir.glob('**/*.txt')))) if pdf_dir.exists() else 0
         print(f"PDF files found in {_display(pdf_dir)}: {count}")
     print(f"PDF files found total: {len(pdf_files)}")
 
