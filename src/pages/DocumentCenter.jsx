@@ -4,8 +4,8 @@ import { getCurrentUser } from '../data/mock';
 import { useAccountType } from '../context/AccountContext';
 import { searchHsCodes, translateProductNameToRu } from '../data/hsCodes';
 import { PRODUCT_UNITS } from '../data/marketplace';
-import { healthTnvedAi } from '../services/tnvedAiClient';
-import { docConfig, createDocJob, getDocJob, getDocRows, pauseDocJob, resumeDocJob, cancelDocJob, retryDocJob } from '../services/docAiClient';
+import { healthTnvedAi, classifyBatchTnved } from '../services/tnvedAiClient';
+import { docConfig, getDocJob, getDocRows, pauseDocJob, resumeDocJob, cancelDocJob, retryDocJob } from '../services/docAiClient';
 import { SUBAI_MODULES } from '../ai/glorixAiRegistry';
 
 // Нормализация числового поля из Excel:
@@ -486,6 +486,7 @@ export default function DocumentCenter() {
   const [sellerCountry, setSellerCountry] = useState(_me?.country || 'UZ');
   const [buyerCountry, setBuyerCountry] = useState('');
   const [importSummary, setImportSummary] = useState(null);
+  const [batchProgress, setBatchProgress] = useState(null); // {done,total} — fast client-side batch classify
   // GLORIX AI ТН ВЭД backend status (replaces the former, misleading OpenAI key field).
   const [aiStatus, setAiStatus] = useState('checking'); // checking | configured | unavailable | error
   const [autofillMsg, setAutofillMsg] = useState(null);  // UI-only status; NEVER written into generated documents
@@ -568,21 +569,74 @@ export default function DocumentCenter() {
     const text = pasteText;
     if (!text.trim()) return;
     setShowPaste(false); setPasteText(''); setAutofillMsg(null); setOfflineMode(false); setImportSummary(null);
-    // Send RAW paste to the backend Document AI job engine (resumable). Frontend does not parse.
-    const created = await createDocJob(text, { tnved: tnvedAiOn });
-    if (created?.ok && created.data?.job_id) {
-      const id = created.data.job_id;
-      editsRef.current = {};
-      setJobId(id); setJobStatus(created.data.status); setJobTotals(created.data.totals); setJobOptTnved(tnvedAiOn);
-      try { localStorage.setItem(JOB_KEY, id); } catch { /* ignore */ }
-      setAutofillMsg({ type: 'ok', text: `Задание создано в Glorix AI. Строк: ${created.data.row_count}. Прогресс сохраняется на сервере — обновление страницы НЕ сбросит работу.` });
-      startPolling(id);
-    } else {
-      // Honest OFFLINE fallback: local split for MANUAL entry only (no AI codes, not "AI").
-      const parsed = parsePaste(text);
-      setItems(parsed); setImportSummary(summarizeImport(parsed));
-      setOfflineMode(true); setJobId(null); setJobStatus(null); setJobTotals(null);
-      setAutofillMsg({ type: 'warn', text: 'AI backend недоступен — офлайн-режим: строки разобраны только для ручного ввода, коды ТН ВЭД НЕ подбираются. Настройте TNVED_AI_API_URL для полноценной AI-обработки.' });
+    jobClear();                              // fast path is autonomous — drop any old resumable job
+    const rows = parsePaste(text);           // parse locally (instant) — no server needed to split
+    if (!rows.length) { setAutofillMsg({ type: 'warn', text: 'Не удалось распознать строки из вставленного текста.' }); return; }
+    editsRef.current = {};
+
+    // Seed the table immediately so the user sees all rows at once.
+    const seeded = rows.map((r, i) => {
+      const hasManual = r.tnved && isTnvedCode(r.tnved);
+      return {
+        ...r,
+        _rowId: i,
+        _status: hasManual ? 'skipped_manual' : (tnvedAiOn ? 'pending' : 'normalized'),
+        _result: hasManual
+          ? { final_code: r.tnved, candidates: [], reason: 'код указан вручную', missing_information: [] }
+          : null,
+        _review: [],
+      };
+    });
+    setItems(seeded);
+    setImportSummary(summarizeImport(rows));
+
+    if (!tnvedAiOn) {
+      setAutofillMsg({ type: 'ok', text: `Импортировано строк: ${rows.length}. ТН ВЭД выключен — коды не подбирались.` });
+      return;
+    }
+
+    // FAST autonomous classification: chunked batches to the Vercel SQLite engine.
+    // Seconds for the whole list, no laptop / no neural net, and each chunk stays
+    // well under the serverless timeout (no 504).
+    const need = [];
+    seeded.forEach((it, i) => { if (it._status !== 'skipped_manual') need.push({ i, name: it.name }); });
+    const CHUNK = 40;
+    let done = rows.length - need.length;
+    setBatchProgress({ done, total: rows.length });
+    try {
+      for (let c = 0; c < need.length; c += CHUNK) {
+        const slice = need.slice(c, c + CHUNK);
+        const resp = await classifyBatchTnved(slice.map((x) => ({ name: x.name })));
+        const results = Array.isArray(resp?.results) ? resp.results : [];
+        setItems((prev) => {
+          const next = [...prev];
+          slice.forEach((x, k) => {
+            const res = results[k];
+            if (!next[x.i]) return;
+            if (!res) { next[x.i] = { ...next[x.i], _status: 'review', _result: { final_code: '', candidates: [], reason: 'нет ответа классификатора', missing_information: [] } }; return; }
+            next[x.i] = {
+              ...next[x.i],
+              tnved: res.code || '',
+              _status: res.status || 'review',
+              _result: {
+                final_code: res.code || '',
+                candidates: res.candidates || [],
+                reason: res.reason || '',
+                missing_information: res.missing_information || [],
+              },
+              ...(editsRef.current[x.i] || {}),   // never overwrite a manual edit
+            };
+          });
+          return next;
+        });
+        done += slice.length;
+        setBatchProgress({ done, total: rows.length });
+      }
+      setAutofillMsg({ type: 'ok', text: `Готово за секунды: ${rows.length} строк обработано автономным движком (без нейросети и без ноутбука). Уверенные коды проставлены, спорные — «на проверку» с вариантами.` });
+    } catch (e) {
+      setAutofillMsg({ type: 'warn', text: `Классификатор недоступен: ${e?.message || 'ошибка сети'}. Строки импортированы для ручного ввода.` });
+    } finally {
+      setBatchProgress(null);
     }
   };
 
@@ -1037,6 +1091,14 @@ export default function DocumentCenter() {
                 border: autofillMsg.type === 'ok' ? '1px solid rgba(0,212,170,0.3)' : '1px solid rgba(245,166,35,0.32)' }}>
                 <span style={{ fontSize: 13, flexShrink: 0 }}>{autofillMsg.type === 'ok' ? '✓' : '⚠'}</span>
                 <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-2)' }}>{autofillMsg.text}</div>
+              </div>
+            )}
+            {batchProgress && (
+              <div style={{ padding: '8px 12px', marginBottom: 12, borderRadius: 8, background: 'rgba(0,212,170,0.06)', border: '1px solid rgba(0,212,170,0.25)', fontSize: 11, color: 'var(--text-2)' }}>
+                ⚡ Классификация ТН ВЭД (локальный движок): <b>{batchProgress.done}</b> / {batchProgress.total}
+                <div style={{ height: 6, background: 'var(--bg-3)', borderRadius: 4, overflow: 'hidden', marginTop: 5 }}>
+                  <div style={{ height: '100%', width: `${Math.round((batchProgress.done / Math.max(1, batchProgress.total)) * 100)}%`, background: 'var(--accent)', transition: 'width .2s ease' }} />
+                </div>
               </div>
             )}
             {importSummary && (

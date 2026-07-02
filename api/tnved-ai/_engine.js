@@ -170,6 +170,30 @@ function countHits(queryTokens, fieldStemSet) {
   return n;
 }
 
+// RAM cache of chapter-level explanation analysis, computed ONCE per chapter for
+// the lifetime of the warm serverless instance (max 96 chapters). Feeds both
+// positive scoring (token∩explanation) and exclusion penalties. This is what
+// keeps per-row scoring in microseconds even over the full explanation texts.
+const _EXPL_CACHE = new Map();
+const _EXCL_MARKER = /(кроме|за\s+исключ|не\s+включ|не\s+относ|исключа|не\s+вход)/i;
+
+function explDataFor(chapter, rawText) {
+  const key = chapter || '??';
+  const cached = _EXPL_CACHE.get(key);
+  if (cached) return cached;
+  const text = String(rawText || '').slice(0, 8000);
+  const stems = new Set(normalizeAndTokenize(text));
+  const exclStems = new Set();
+  for (const seg of text.split(/[\n.;•]/)) {
+    if (_EXCL_MARKER.test(seg)) {
+      for (const st of normalizeAndTokenize(seg)) exclStems.add(st);
+    }
+  }
+  const data = { stems, exclStems };
+  _EXPL_CACHE.set(key, data);
+  return data;
+}
+
 /**
  * scoreCandidate(queryTokens, candidate, activeConcept) → scored candidate.
  * candidate: { code, chapter, title, description, explanation }
@@ -181,20 +205,28 @@ export function scoreCandidate(queryTokens, candidate, activeConcept) {
   const titleStems = stemsOf(candidate.title);
   const descStems = candidate.description && candidate.description !== candidate.title
     ? stemsOf(candidate.description) : titleStems;
-  const explStems = stemsOf(candidate.explanation);
+  const expl = explDataFor(chapter, candidate.explanation);
 
   const titleHits = countHits(queryTokens, titleStems);
   const descHits = countHits(queryTokens, descStems);
-  const explHits = countHits(queryTokens, explStems);
+  const explHits = countHits(queryTokens, expl.stems);
+  const exclHits = countHits(queryTokens, expl.exclStems);  // words the chapter note EXCLUDES
 
   let score = 0;
   score += 24 * Math.min(titleHits, 3);   // authoritative field, up to 72
   score += 6 * Math.min(descHits, 2);     // up to 12
-  score += 2 * Math.min(explHits, 3);     // broad, noisy context, up to 6
+  score += 3 * Math.min(explHits, 3);     // explanation intersection (chapter-level), up to 9
 
   const reasons = [];
   if (titleHits > 0) reasons.push(`совпадение по наименованию (${titleHits})`);
   if (explHits > 0) reasons.push('упоминание в пояснениях к группе');
+
+  // Penalty for exclusion words: the chapter note explicitly says this kind of
+  // item is NOT included here ("кроме", "за исключением", "не включаются"…).
+  if (exclHits > 0) {
+    score -= 14 * Math.min(exclHits, 3);
+    reasons.push(`штраф: пояснение исключает товар из группы ${chapter}`);
+  }
 
   let conceptPhraseInTitle = false;
   if (activeConcept) {
@@ -272,11 +304,20 @@ export function applyDecisionPolicy(candidates, opts = {}) {
     };
   }
 
-  const top = sorted[0];
-  const second = sorted[1] || { score: 0 };
+  // HARD concept narrowing: when a commercial concept is detected, restrict the
+  // candidate pool to its target groups/headings. Safe fallback: if nothing
+  // aligned was retrieved, keep the full list rather than returning nothing.
+  let pool = sorted;
+  if (activeConcept) {
+    const alignedPool = sorted.filter(aligned);
+    if (alignedPool.length) pool = alignedPool;
+  }
+
+  const top = pool[0];
+  const second = pool[1] || { score: 0 };
   const margin = top.score - second.score;
   const confidence = top.score / 100;
-  const trimmed = (n) => sorted.slice(0, n).map((c) => ({
+  const trimmed = (n) => pool.slice(0, n).map((c) => ({
     code: c.code, description: c.description, chapter: c.chapter,
     tariff: c.tariff, score: c.score, confidence: c.confidence, reasons_for: c.reasons_for,
   }));
@@ -312,7 +353,7 @@ export function applyDecisionPolicy(candidates, opts = {}) {
     reason: top.score < DECISION.AUTO_MIN_SCORE
       ? `Недостаточно уверенности (score ${top.score} < ${DECISION.AUTO_MIN_SCORE}).`
       : `Кандидаты близки (отрыв ${margin} < ${DECISION.AUTO_MIN_MARGIN}) — нужен выбор человека.`,
-    missing_information: missingInfo(activeConcept, sorted),
+    missing_information: missingInfo(activeConcept, pool),
   };
 }
 
