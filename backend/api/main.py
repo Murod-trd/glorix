@@ -517,9 +517,10 @@ def _expand_query(name: str, model: str) -> str:
     system = (
         "Ты помогаешь искать товар в таможенной номенклатуре ТН ВЭД ЕАЭС. "
         "Перепиши короткое торговое название в 1-2 предложения на официальном языке "
-        "номенклатуры: родовое понятие (что это за изделие), материал, назначение и "
-        "общепринятые синонимы. НЕ указывай никаких цифровых кодов. Ответь только "
-        "описанием, без вступлений."
+        "номенклатуры. ОБЯЗАТЕЛЬНО укажи явно: (1) родовой тип изделия одним словом "
+        "(лист, труба, порошок, ткань, проволока, ёмкость и т.п.); (2) из какого "
+        "МАТЕРИАЛА сделано изделие; (3) назначение/функцию; (4) общепринятые синонимы. "
+        "НЕ указывай никаких цифровых кодов. Ответь только описанием, без вступлений."
     )
     try:
         resp = ollama.chat(
@@ -586,8 +587,10 @@ def _adjudicate_one(name, retriever, model, top_k=20):
     system = (
         "Ты — эксперт по классификации ТН ВЭД ЕАЭС. Тебе дают товар и СПИСОК кодов-кандидатов "
         "из официальной базы. Выбери РОВНО ОДИН код ИЗ СПИСКА, который точнее всего соответствует "
-        "товару по материалу и назначению. НИКОГДА не придумывай код, которого нет в списке. Если "
-        "ни один не подходит или данных не хватает — верни code=null. Ответь СТРОГО JSON без пояснений: "
+        "товару по материалу и назначению. НИКОГДА не придумывай код, которого нет в списке. "
+        "Если НЕСКОЛЬКО кандидатов подходят и относятся к одной товарной позиции — выбери "
+        "наиболее точный из них, НЕ отказывайся без причины. Верни code=null ТОЛЬКО если ни "
+        "один кандидат по существу не соответствует товару. Ответь СТРОГО JSON без пояснений: "
         '{"code": "<код из списка или null>", "confidence": <0..1>, "reason": "<кратко, по-русски>"}'
     )
     user = f"Товар: {name}\nКандидаты:\n{listing}\nВыбери один код ИЗ СПИСКА."
@@ -605,13 +608,29 @@ def _adjudicate_one(name, retriever, model, top_k=20):
     chosen = str(data.get("code") or "").strip()
     conf = float(data.get("confidence", 0) or 0)
     reason = str(data.get("reason") or "")[:300]
+
+    def _mk_classified(code, confidence, why):
+        ordered = [c for c in cands if c["code"] == code] + [c for c in cands if c["code"] != code]
+        return {"name": name, "status": "classified", "code": code, "confident": True,
+                "confidence": round(confidence, 3), "requires_clarification": False,
+                "candidates": ordered, "reason": why, "missing_information": []}
+
     # GROUNDING GUARD: accept ONLY a code that is actually in the candidate list.
-    if chosen and chosen in valid and conf >= 0.6:
-        ordered = [c for c in cands if c["code"] == chosen] + [c for c in cands if c["code"] != chosen]
-        return {"name": name, "status": "classified", "code": chosen, "confident": True,
-                "confidence": round(conf, 3), "requires_clarification": False,
-                "candidates": ordered, "reason": reason or "выбрано LLM из кандидатов",
-                "missing_information": []}
+    if chosen and chosen in valid and conf >= 0.55:
+        return _mk_classified(chosen, conf, reason or "выбрано LLM из кандидатов")
+
+    # CONSENSUS FALLBACK (safe, still grounded): if the judge was unsure but the TOP
+    # retrieval hit and >=3 of the top-5 candidates agree on ONE 6-digit subheading,
+    # the search is confident about the product family — take the best-ranked candidate.
+    # Only fires on clear agreement; mixed candidate sets still go to review.
+    top5 = [c["code"] for c in cands[:5] if len(c["code"]) >= 6]
+    if len(top5) >= 3:
+        from collections import Counter as _Counter
+        best_sub, cnt = _Counter(x[:6] for x in top5).most_common(1)[0]
+        if cnt >= 3 and cands[0]["code"][:6] == best_sub:
+            return _mk_classified(cands[0]["code"], max(conf, 0.6),
+                f"верхние кандидаты сходятся на подсубпозиции {best_sub}; выбран лучший по релевантности")
+
     return {"name": name, "status": "review", "code": "", "confident": False,
             "confidence": round(conf, 3), "requires_clarification": True, "candidates": cands,
             "reason": reason or "LLM не уверена — выберите вручную",
