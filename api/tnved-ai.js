@@ -134,10 +134,41 @@ async function classifyBatch(req, res) {
   if (!items.length) return res.status(400).json({ ok: false, error: true, reason: 'items array required', results: [] });
   if (items.length > 50) return res.status(400).json({ ok: false, error: true, reason: 'Max 50 items per batch', results: [] });
 
+  // Normalise inputs to plain strings + keep row ids for order mapping.
+  const norm = items.map((raw) => ({
+    rowId: (raw && typeof raw === 'object') ? raw.row_id : undefined,
+    text: String((raw && typeof raw === 'object') ? (raw.description ?? raw.name ?? raw.query ?? '') : raw).trim().slice(0, 1200),
+  }));
+
+  // PRIMARY: if the accurate laptop engine is connected (TNVED_AI_API_URL), use
+  // its SEMANTIC batch (embeddings + BM25, no LLM) — far better than lexical.
+  const cfg = getConfig();
+  if (cfg.configured) {
+    try {
+      const { httpOk, data } = await backendFetch('/classify/semantic-batch', {
+        method: 'POST', timeoutMs: Math.max(cfg.timeoutMs, 30000),
+        body: { items: norm.map((x) => x.text) },
+      });
+      if (httpOk && data && Array.isArray(data.results)) {
+        const results = data.results.map((r, i) => ({
+          row_id: norm[i]?.rowId,
+          name: norm[i]?.text ?? r.name,
+          status: r.status, code: r.code || '', confident: !!r.confident,
+          confidence: r.confidence, requiresClarification: r.requires_clarification,
+          candidates: r.candidates || [], reason: r.reason || '',
+          missing_information: r.missing_information || [],
+        }));
+        return res.status(200).json({ ok: true, engine: data.engine || 'semantic-hybrid', results });
+      }
+      // else fall through to the local lexical fallback below
+    } catch { /* backend unreachable → local fallback */ }
+  }
+
+  // FALLBACK: local autonomous lexical engine (sql.js) — works with no laptop.
   const results = [];
-  for (const raw of items) {
-    const rowId = (raw && typeof raw === 'object') ? raw.row_id : undefined;
-    const text = String((raw && typeof raw === 'object') ? (raw.description ?? raw.name ?? raw.query ?? '') : raw).trim().slice(0, 1200);
+  for (const one of norm) {
+    const rowId = one.rowId;
+    const text = one.text;
     const base = { row_id: rowId, name: text };
     if (text.length < 2) { results.push({ ...base, status: 'review', code: '', confident: false, candidates: [], reason: 'query too short' }); continue; }
     try {

@@ -421,6 +421,77 @@ async def documents_retry(job_id: str, req: DocRetryRequest):
     return doc_engine.retry(job_id, req.row_ids)
 
 
+class SemanticBatchRequest(BaseModel):
+    items: list[str] = Field(default_factory=list)
+
+
+@app.post("/classify/semantic-batch")
+async def classify_semantic_batch(req: SemanticBatchRequest):
+    """
+    FAST semantic bulk classifier — reuses the hybrid retriever (dense embeddings
+    + BM25 fusion) with NO per-row LLM. Meant for large supplier lists: returns
+    semantically-ranked TN VED candidates in ~tens of ms/row (faster on GPU).
+    Never fabricates a code: only the strong semantic leader is auto-classified,
+    everything else is returned as 'review' with candidates.
+    """
+    try:
+        try:
+            from backend.rag.retriever import get_retriever
+        except ModuleNotFoundError:
+            from rag.retriever import get_retriever
+        retriever = get_retriever()  # singleton, initialized (embedder + BM25)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": True, "reason": f"retriever unavailable: {str(e)[:200]}", "results": []}
+
+    items = (req.items or [])[:200]
+    results = []
+    for raw in items:
+        name = str(raw or "").strip()[:400]
+        base = {"name": name, "requires_clarification": True, "missing_information": []}
+        if len(name) < 2:
+            results.append({**base, "status": "review", "code": "", "confident": False, "confidence": 0.0, "candidates": [], "reason": "запрос слишком короткий"})
+            continue
+        try:
+            codes = (retriever.retrieve(name, top_k=10) or {}).get("codes", [])
+        except Exception as e:  # noqa: BLE001
+            results.append({**base, "status": "error", "code": "", "confident": False, "confidence": 0.0, "candidates": [], "error": True, "reason": str(e)[:200]})
+            continue
+        cands = []
+        for c in codes[:8]:
+            code = str(c.get("code") or "").strip()
+            if not code:
+                continue
+            cands.append({
+                "code": code,
+                "description": c.get("description") or c.get("full_text") or "",
+                "chapter": c.get("chapter") or code[:2],
+                "score": round(float(c.get("rrf_score", c.get("score", 0)) or 0), 5),
+                "reasons_for": ["семантическое совпадение (эмбеддинг+BM25)"],
+            })
+        if not cands:
+            results.append({**base, "status": "review", "code": "", "confident": False, "confidence": 0.0, "candidates": [], "reason": "нет семантических кандидатов"})
+            continue
+        s1 = cands[0]["score"]
+        s2 = cands[1]["score"] if len(cands) > 1 else 0.0
+        strong = s1 > 0 and (s2 == 0 or s1 >= 1.6 * s2)  # clear semantic leader
+        if strong:
+            results.append({
+                "name": name, "status": "classified", "code": cands[0]["code"],
+                "confident": True, "confidence": round(s1 / (s1 + s2 + 1e-9), 3),
+                "requires_clarification": False, "candidates": cands,
+                "reason": "семантический лидер с явным отрывом", "missing_information": [],
+            })
+        else:
+            results.append({
+                "name": name, "status": "review", "code": "",
+                "confident": False, "confidence": 0.0,
+                "requires_clarification": True, "candidates": cands,
+                "reason": "близкие семантические кандидаты — выберите вручную",
+                "missing_information": ["Уточните материал/назначение/тип для выбора между близкими кодами."],
+            })
+    return {"ok": True, "engine": "semantic-hybrid", "results": results}
+
+
 @app.get("/health")
 async def health():
     """Проверка состояния системы."""
