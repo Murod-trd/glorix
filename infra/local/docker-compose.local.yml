@@ -74,6 +74,8 @@ services:
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - OLLAMA_HOST=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b-instruct-q4_K_M}
+      # LLM-судья (выбор кода из кандидатов) — маленькая модель под 4 ГБ GPU.
+      - OLLAMA_JUDGE_MODEL=${OLLAMA_JUDGE_MODEL:-qwen2.5:1.5b-instruct-q4_K_M}
       # Knowledge-base sources (mounted read-only below).
       - EXCEL_DIR=/data/tnved-excel
       - PDF_DIRS=/data/explanations
