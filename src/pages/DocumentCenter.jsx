@@ -4,7 +4,7 @@ import { getCurrentUser } from '../data/mock';
 import { useAccountType } from '../context/AccountContext';
 import { searchHsCodes, translateProductNameToRu } from '../data/hsCodes';
 import { PRODUCT_UNITS } from '../data/marketplace';
-import { healthTnvedAi, classifyBatchTnved } from '../services/tnvedAiClient';
+import { healthTnvedAi } from '../services/tnvedAiClient';
 import { docConfig, createDocJob, getDocJob, getDocRows, pauseDocJob, resumeDocJob, cancelDocJob, retryDocJob } from '../services/docAiClient';
 import { SUBAI_MODULES } from '../ai/glorixAiRegistry';
 
@@ -615,49 +615,29 @@ export default function DocumentCenter() {
       // created.unavailable / not ok → backend not connected: fall through to fast local engine.
     } catch { /* backend unreachable → fast local fallback below */ }
 
-    // FALLBACK (AI server not connected): fast autonomous classification via the
-    // Vercel SQLite engine — chunked batches, seconds for the whole list, no laptop
-    // and no neural net. Each chunk stays well under the serverless timeout (no 504).
-    const need = [];
-    seeded.forEach((it, i) => { if (it._status !== 'skipped_manual') need.push({ i, name: it.name }); });
-    const CHUNK = 40;
-    let done = rows.length - need.length;
-    setBatchProgress({ done, total: rows.length });
-    try {
-      for (let c = 0; c < need.length; c += CHUNK) {
-        const slice = need.slice(c, c + CHUNK);
-        const resp = await classifyBatchTnved(slice.map((x) => ({ name: x.name })));
-        const results = Array.isArray(resp?.results) ? resp.results : [];
-        setItems((prev) => {
-          const next = [...prev];
-          slice.forEach((x, k) => {
-            const res = results[k];
-            if (!next[x.i]) return;
-            if (!res) { next[x.i] = { ...next[x.i], _status: 'review', _result: { final_code: '', candidates: [], reason: 'нет ответа классификатора', missing_information: [] } }; return; }
-            next[x.i] = {
-              ...next[x.i],
-              tnved: res.code || '',
-              _status: res.status || 'review',
-              _result: {
-                final_code: res.code || '',
-                candidates: res.candidates || [],
-                reason: res.reason || '',
-                missing_information: res.missing_information || [],
-              },
-              ...(editsRef.current[x.i] || {}),   // never overwrite a manual edit
-            };
-          });
-          return next;
-        });
-        done += slice.length;
-        setBatchProgress({ done, total: rows.length });
-      }
-      setAutofillMsg({ type: 'ok', text: `Готово за секунды: ${rows.length} строк обработано автономным движком (без нейросети и без ноутбука). Уверенные коды проставлены, спорные — «на проверку» с вариантами.` });
-    } catch (e) {
-      setAutofillMsg({ type: 'warn', text: `Классификатор недоступен: ${e?.message || 'ошибка сети'}. Строки импортированы для ручного ввода.` });
-    } finally {
-      setBatchProgress(null);
-    }
+    // SAFE FALLBACK: the accurate judge (AI server) is NOT reachable. We deliberately
+    // do NOT auto-stamp codes from the weak lexical/semantic engines — a wrong customs
+    // code must never reach a declaration. Every pending row becomes "на проверку"
+    // with an empty code until the AI server is connected.
+    setOfflineMode(true);
+    setBatchProgress(null);
+    setItems((prev) => prev.map((it) => (
+      it._status === 'skipped_manual'
+        ? it
+        : {
+            ...it,
+            tnved: '',
+            _status: 'review',
+            _result: {
+              final_code: '',
+              candidates: [],
+              reason: 'ИИ-сервер (судья) недоступен — код не подобран, чтобы не проставить неверный. Подключите сервер или выберите код вручную.',
+              missing_information: [],
+            },
+            ...(editsRef.current[it._rowId] || {}),
+          }
+    )));
+    setAutofillMsg({ type: 'warn', text: `ИИ-сервер недоступен — импортировано ${rows.length} строк БЕЗ автоподбора кодов (чтобы не проставить неверный код). Все строки помечены «на проверку». Подключите ИИ-сервер и нажмите «Импортировать» снова.` });
   };
 
   const jobPause  = async () => { await pauseDocJob(jobId); stopPolling(); const st = await getDocJob(jobId); if (st?.ok) { setJobStatus(st.data.status); setJobTotals(st.data.totals); } };
