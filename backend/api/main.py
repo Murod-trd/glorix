@@ -505,16 +505,63 @@ class AdjudicateBatchRequest(BaseModel):
     top_k: int = Field(20)
 
 
+def _expand_query(name: str, model: str) -> str:
+    """Rewrite a terse trade name into TN VED nomenclature-style search text
+    (generic type + material + purpose + synonyms). GENERAL for ANY product — it
+    contains NO product-specific data or codes; the local LLM generates it live.
+    Returns '' on any failure so retrieval falls back to the raw name."""
+    try:
+        import ollama
+    except Exception:
+        return ""
+    system = (
+        "Ты помогаешь искать товар в таможенной номенклатуре ТН ВЭД ЕАЭС. "
+        "Перепиши короткое торговое название в 1-2 предложения на официальном языке "
+        "номенклатуры: родовое понятие (что это за изделие), материал, назначение и "
+        "общепринятые синонимы. НЕ указывай никаких цифровых кодов. Ответь только "
+        "описанием, без вступлений."
+    )
+    try:
+        resp = ollama.chat(
+            model=model,
+            messages=[{"role": "system", "content": system},
+                      {"role": "user", "content": f"Название: {name}\nОписание для поиска:"}],
+            options={"temperature": 0.2, "num_predict": 160},
+        )
+        return str(resp["message"]["content"] or "").strip()[:400]
+    except Exception:
+        return ""
+
+
 def _adjudicate_one(name, retriever, model, top_k=20):
     """Semantic retrieve → LLM picks ONE code FROM THE CANDIDATE LIST (grounded;
     a chosen code that is not in the list is rejected → never fabricated)."""
     import json as _json
     import re as _re
+    # QUERY EXPANSION (general, no product-specific data): the LLM rewrites the terse
+    # trade name into nomenclature-style text so the search can bridge colloquial names
+    # to the formal wording of the codes. Retrieval runs on BOTH the original name and
+    # the enriched text; candidates are merged (best RRF score wins). Falls back to
+    # name-only whenever expansion is disabled or the model is unavailable.
+    queries = [name]
+    if os.getenv("TNVED_QUERY_EXPANSION", "1") != "0":
+        expanded = _expand_query(name, model)
+        if expanded and expanded.strip().lower() != name.strip().lower():
+            queries.append(expanded)
+    merged: dict = {}
     try:
-        codes = (retriever.retrieve(name, top_k=10) or {}).get("codes", [])
+        for q in queries:
+            for c in (retriever.retrieve(q, top_k=top_k) or {}).get("codes", []):
+                code = str(c.get("code") or "").strip()
+                if not code:
+                    continue
+                sc = float(c.get("rrf_score") or c.get("score") or 0.0)
+                if code not in merged or sc > merged[code]["_sc"]:
+                    merged[code] = {**c, "_sc": sc}
     except Exception as e:  # noqa: BLE001
         return {"name": name, "status": "error", "code": "", "confident": False,
                 "confidence": 0.0, "candidates": [], "reason": str(e)[:200], "error": True}
+    codes = sorted(merged.values(), key=lambda x: x.get("_sc", 0.0), reverse=True)
     cands = []
     for c in codes[:top_k]:
         code = str(c.get("code") or "").strip()
