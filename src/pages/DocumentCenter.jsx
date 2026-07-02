@@ -490,10 +490,10 @@ export default function DocumentCenter() {
   const [aiStatus, setAiStatus] = useState('checking'); // checking | configured | unavailable | error
   const [autofillMsg, setAutofillMsg] = useState(null);  // UI-only status; NEVER written into generated documents
   useEffect(() => {
-    // TN VED AI OFF → do NOT call /api/tnved-ai/health; keep a safe inactive state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- derive status from toggle
-    if (!tnvedAiOn) { setAiStatus('off'); return; }
+    // Backend connectivity is INDEPENDENT of the TN VED AI toggle: always probe
+    // /health so "подключён" can show even when the classifier is switched OFF.
     let alive = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async status probe
     setAiStatus('checking');
     healthTnvedAi().then(h => {
       if (!alive) return;
@@ -502,7 +502,7 @@ export default function DocumentCenter() {
       else setAiStatus('error');
     }).catch(() => { if (alive) setAiStatus('error'); });
     return () => { alive = false; };
-  }, [tnvedAiOn]);
+  }, []);
   const [companyLogo, setCompanyLogo] = useState(() => {
     try { return localStorage.getItem('glorix_company_logo') || null; } catch { return null; }
   });
@@ -514,11 +514,14 @@ export default function DocumentCenter() {
   const [jobStatus, setJobStatus] = useState(null);   // queued|running|paused|completed|cancelled
   const [jobTotals, setJobTotals] = useState(null);
   const [docBackend, setDocBackend] = useState('checking'); // configured|not_configured|error
+  const [jobOptTnved, setJobOptTnved] = useState(null); // job.options.tnved — respect the JOB, not the live toggle
   const [offlineMode, setOfflineMode] = useState(false);
   const editsRef = useRef({});   // {row_id: {field:value}} — preserve manual edits across polls
   const pollRef = useRef(null);
   const JOB_KEY = 'glorix_doc_job';
   const jobProcessing = jobStatus === 'running' || jobStatus === 'queued';
+  // When a job is loaded, the table reflects the JOB's tnved option, not the live toggle.
+  const displayTnved = jobId ? (jobOptTnved !== false) : tnvedAiOn;
 
   const addItem = () => setItems(prev => [...prev, { name: '', tnved: '', qty: '', unit: '', price: '', specs: '' }]);
   const updateItem = (i, k, v) => {
@@ -552,6 +555,7 @@ export default function DocumentCenter() {
       const st = await getDocJob(id);
       if (!st?.ok) { if (st?.unavailable) setDocBackend('not_configured'); stopPolling(); return; }
       setJobStatus(st.data.status); setJobTotals(st.data.totals);
+      if (st.data.options) setJobOptTnved(st.data.options.tnved !== false);
       const rr = await getDocRows(id, 0, 5000);
       if (rr?.ok) applyRowsToItems(rr.data.rows || []);
       if (st.data.status === 'completed' || st.data.status === 'cancelled') stopPolling();
@@ -569,7 +573,7 @@ export default function DocumentCenter() {
     if (created?.ok && created.data?.job_id) {
       const id = created.data.job_id;
       editsRef.current = {};
-      setJobId(id); setJobStatus(created.data.status); setJobTotals(created.data.totals);
+      setJobId(id); setJobStatus(created.data.status); setJobTotals(created.data.totals); setJobOptTnved(tnvedAiOn);
       try { localStorage.setItem(JOB_KEY, id); } catch { /* ignore */ }
       setAutofillMsg({ type: 'ok', text: `Задание создано в Glorix AI. Строк: ${created.data.row_count}. Прогресс сохраняется на сервере — обновление страницы НЕ сбросит работу.` });
       startPolling(id);
@@ -599,7 +603,7 @@ export default function DocumentCenter() {
     try { saved = localStorage.getItem(JOB_KEY); } catch { /* ignore */ }
     if (saved) {
       getDocJob(saved).then(st => {
-        if (st?.ok && st.data) { setJobId(saved); setJobStatus(st.data.status); setJobTotals(st.data.totals); startPolling(saved); }
+        if (st?.ok && st.data) { setJobId(saved); setJobStatus(st.data.status); setJobTotals(st.data.totals); setJobOptTnved(st.data.options?.tnved !== false); startPolling(saved); }
         else { try { localStorage.removeItem(JOB_KEY); } catch { /* ignore */ } }
       });
     }
@@ -948,14 +952,14 @@ export default function DocumentCenter() {
                           const reader = new FileReader();
                           reader.onload = ev => {
                             setCompanyLogo(ev.target.result);
-                            try { localStorage.setItem('glorix_company_logo', ev.target.result); } catch {}
+                            try { localStorage.setItem('glorix_company_logo', ev.target.result); } catch { /* ignore */ }
                           };
                           reader.readAsDataURL(file);
                         }} />
                       </label>
                       {companyLogo && (
                         <button style={{ ...inputStyle, padding: '0 8px', margin: 0, cursor: 'pointer', flexShrink: 0, background: 'transparent', border: '1px solid var(--border-2)', borderRadius: 6, color: '#c0392b', fontSize: 14 }}
-                          onClick={() => { setCompanyLogo(null); try { localStorage.removeItem('glorix_company_logo'); } catch {} }}>✕</button>
+                          onClick={() => { setCompanyLogo(null); try { localStorage.removeItem('glorix_company_logo'); } catch { /* ignore */ } }}>✕</button>
                       )}
                     </div>
                     {companyLogo && <img src={companyLogo} style={{ marginTop: 6, height: 32, maxWidth: 120, objectFit: 'contain', borderRadius: 4, border: '1px solid var(--border-2)' }} />}
@@ -969,10 +973,10 @@ export default function DocumentCenter() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   🧠 Glorix AI · ТН ВЭД <span style={{ fontWeight: 400, color: 'var(--text-3)' }}>(под-ИИ)</span>
-                  {tnvedAiOn && aiStatus === 'configured' && <span style={{ color: '#1a7a4a', fontWeight: 500 }}>· подключён</span>}
-                  {tnvedAiOn && aiStatus === 'unavailable' && <span style={{ color: 'var(--gold)', fontWeight: 500 }}>· не настроен</span>}
-                  {tnvedAiOn && aiStatus === 'error' && <span style={{ color: '#c0392b', fontWeight: 500 }}>· ошибка соединения</span>}
-                  {tnvedAiOn && aiStatus === 'checking' && <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>· проверка…</span>}
+                  {aiStatus === 'configured' && <span style={{ color: '#1a7a4a', fontWeight: 500 }}>· подключён</span>}
+                  {aiStatus === 'unavailable' && <span style={{ color: 'var(--gold)', fontWeight: 500 }}>· не настроен</span>}
+                  {aiStatus === 'error' && <span style={{ color: '#c0392b', fontWeight: 500 }}>· ошибка соединения</span>}
+                  {aiStatus === 'checking' && <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>· проверка…</span>}
                 </div>
                 <button type="button" onClick={() => setTnvedAiOn(v => !v)}
                   style={{ flexShrink: 0, fontSize: 11, fontWeight: 600, cursor: 'pointer', borderRadius: 999, padding: '4px 12px',
@@ -1080,7 +1084,7 @@ export default function DocumentCenter() {
                 Спецификация товаров ({items.length} позиций)
               </div>
               {/* TN VED verification notice — platform UI only. NOT in generated KP/DOCX/PDF. */}
-              {tnvedAiOn && (
+              {displayTnved && (
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '8px 12px', marginBottom: 12, background: 'rgba(245,166,35,0.08)', border: '1px solid rgba(245,166,35,0.28)', borderRadius: 8 }}>
                 <span style={{ fontSize: 13, lineHeight: 1.4, flexShrink: 0 }}>⚠</span>
                 <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-2)' }}>
@@ -1095,7 +1099,7 @@ export default function DocumentCenter() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 600 }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                      {['№','Наименование', ...(tnvedAiOn ? ['ТН ВЭД'] : []), 'Кол-во','Ед.',`Цена ${({'USD':'$','EUR':'€','RUB':'₽','UZS':'сум','KZT':'₸','UAH':'₴','BYN':'Br','AZN':'₼','AMD':'֏','GEL':'₾','TJS':'SM','TMT':'T','KGS':'с','MDL':'L','CNY':'¥','TRY':'₺','GBP':'£','JPY':'¥'})[currency]||currency}`,'Характеристики',''].map(h => (
+                      {['№','Наименование', ...(displayTnved ? ['ТН ВЭД'] : []), 'Кол-во','Ед.',`Цена ${({'USD':'$','EUR':'€','RUB':'₽','UZS':'сум','KZT':'₸','UAH':'₴','BYN':'Br','AZN':'₼','AMD':'֏','GEL':'₾','TJS':'SM','TMT':'T','KGS':'с','MDL':'L','CNY':'¥','TRY':'₺','GBP':'£','JPY':'¥'})[currency]||currency}`,'Характеристики',''].map(h => (
                         <th key={h} style={{ padding: '6px 8px', textAlign: 'left', fontSize: 10, color: 'var(--text-3)', fontWeight: 700, letterSpacing: 0.5, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -1107,21 +1111,22 @@ export default function DocumentCenter() {
                         <td style={{ padding: '4px 6px', minWidth: 140 }}>
                           <input style={{ ...inputStyle, fontSize: 11 }} placeholder="Товар" autoComplete="off" value={item.name} onChange={e => updateItem(i,'name',e.target.value)} />
                         </td>
-                        {tnvedAiOn && (
+                        {displayTnved && (
                         <td style={{ padding: '4px 6px', width: 138, verticalAlign: 'top' }}>
                           <input style={{ ...inputStyle, fontSize: 11,
                             background: jobProcessing && !item.tnved ? 'rgba(0,212,170,0.06)' : undefined,
                             borderColor: item._status === 'review' ? 'var(--gold)' : (item._status === 'error' ? '#c0392b' : undefined) }}
-                            placeholder={jobProcessing && !item.tnved ? '⏳…' : '0000000000'} autoComplete="off"
+                            placeholder={jobProcessing && !item.tnved ? '⏳…' : 'код не выбран'} autoComplete="off"
                             value={item.tnved} onChange={e => updateItem(i,'tnved',e.target.value)} />
                           {item._status && !['classified','reused_from_cache'].includes(item._status) && (
                             <div title={(item._result?.reason || '') + (item._result?.missing_information?.length ? ' | Нужно: ' + item._result.missing_information.join('; ') : '')}
                               style={{ fontSize: 9, marginTop: 2, cursor: 'help',
-                                color: item._status === 'error' ? '#c0392b' : (item._status === 'skipped_manual' ? '#1a7a4a' : 'var(--gold)') }}>
+                                color: item._status === 'error' ? '#c0392b' : (item._status === 'skipped_manual' ? '#1a7a4a' : (item._status === 'normalized' ? 'var(--text-3)' : 'var(--gold)')) }}>
                               {item._status === 'review' && `🔎 на проверку${item._result?.candidates?.length ? ` · ${item._result.candidates.length} канд.` : ''}`}
                               {item._status === 'error' && '⚠ ошибка'}
                               {item._status === 'skipped_manual' && '✓ ручной код'}
-                              {['pending','normalizing','classifying','normalized'].includes(item._status) && '⏳ обработка…'}
+                              {['pending','normalizing','classifying'].includes(item._status) && '⏳ обработка…'}
+                              {item._status === 'normalized' && '— код не назначен (ТН ВЭД выкл.)'}
                             </div>
                           )}
                           {item._status === 'review' && item._result?.candidates?.length > 0 && (
@@ -1158,7 +1163,7 @@ export default function DocumentCenter() {
                   </tbody>
                   <tfoot>
                     <tr style={{ borderTop: '1px solid var(--border)' }}>
-                      <td colSpan={tnvedAiOn ? 5 : 4} style={{ padding: '8px', fontSize: 12, color: 'var(--text-2)', textAlign: 'right', fontWeight: 600 }}>ИТОГО:</td>
+                      <td colSpan={displayTnved ? 5 : 4} style={{ padding: '8px', fontSize: 12, color: 'var(--text-2)', textAlign: 'right', fontWeight: 600 }}>ИТОГО:</td>
                       <td colSpan={3} style={{ padding: '8px', fontSize: 14, color: 'var(--accent)', fontWeight: 700, fontFamily: 'var(--font-display)' }}>
                         {({'USD':'$','EUR':'€','RUB':'₽','UZS':'сум','KZT':'₸','UAH':'₴','BYN':'Br','AZN':'₼','AMD':'֏','GEL':'₾','TJS':'SM','TMT':'T','KGS':'с','MDL':'L','CNY':'¥','TRY':'₺','GBP':'£','JPY':'¥'})[currency] || currency}{' '}{totalAmount.toLocaleString('ru-RU',{maximumFractionDigits:2})}
                       </td>

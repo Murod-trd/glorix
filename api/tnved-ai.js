@@ -1,18 +1,19 @@
-import { getConfig, backendFetch, unavailable, normalizeClassify } from './tnved-ai/_client.js';
+import { getConfig, backendFetch, unavailable } from './tnved-ai/_client.js';
+import {
+  normalizeAndTokenize, detectConcept, scoreCandidate, applyDecisionPolicy, DECISION,
+} from './tnved-ai/_engine.js';
+import { health as dbHealth, queryCandidates, getByCode } from './tnved-ai/_db.js';
 
 /**
- * Consolidated TN VED AI proxy — ONE Vercel Serverless Function (stays under the
- * Hobby plan's 12-function limit). Dispatches by the dynamic [action] segment.
+ * Consolidated TN VED AI route — ONE Vercel Serverless Function.
  *
- * Public endpoints are UNCHANGED:
- *   GET  /api/tnved-ai/health
- *   POST /api/tnved-ai/classify
- *   POST /api/tnved-ai/classify-batch
- *   POST /api/tnved-ai/explain
+ * health / classify / classify-batch / explain are served by the LOCAL SQLite
+ * expert engine (sql.js WASM + glorix-sql-stemmer-v1). No external AI API, no
+ * client-side models, no BM25/KEYWORD_ROUTES as final authority. Never fabricates
+ * a code — insufficient confidence returns empty code + review + candidates.
  *
- * Each action's behavior (methods, status codes, CORS, error/unavailable/timeout
- * responses) is moved verbatim from the former per-file handlers. Uses the same
- * env vars via _client.js (TNVED_AI_API_URL, TNVED_AI_TIMEOUT_MS).
+ * documents stays a passthrough to the existing Document AI job engine
+ * (backendFetch → TNVED_AI_API_URL). It is intentionally UNCHANGED.
  */
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -31,117 +32,147 @@ export default async function handler(req, res) {
   }
 }
 
+// ── Local classifier core (shared by classify / batch / explain) ────────────
+function rawTokensOf(text) {
+  return String(text || '').toLowerCase().replace(/ё/g, 'е')
+    .match(/[a-zа-я0-9]+(?:-[a-zа-я0-9]+)*/gi) || [];
+}
+
+async function classifyText(text) {
+  const description = String(text || '').trim();
+  const stems = normalizeAndTokenize(description);
+  const raw = rawTokensOf(description);
+  const concept = detectConcept(raw, stems);
+
+  // Exact embedded TN VED code (8–10 digits) — accept ONLY if it exists in the DB.
+  for (const t of raw) {
+    if (/^\d{8,10}$/.test(t)) {
+      const row = await getByCode(t);
+      if (row) {
+        return {
+          status: 'classified', code: row.code, confident: true, confidence: 1,
+          requiresClarification: false,
+          candidates: [{
+            code: row.code, description: row.title, chapter: row.chapter,
+            tariff: row.tariff, score: 100, confidence: 1,
+            reasons_for: ['код указан в запросе и подтверждён в базе ТН ВЭД'],
+          }],
+          reason: 'Код указан в запросе и подтверждён в локальной базе ТН ВЭД.',
+          missing_information: [],
+          audit: { query: description, tokens: stems, concept: concept?.id || null, matched_code: row.code },
+        };
+      }
+    }
+  }
+
+  const expanded = concept ? concept.expandedStems : [];
+  const codeHints = concept ? (concept.code_hints || []) : [];
+  const terms = Array.from(new Set([...stems, ...expanded]));
+  const r = await queryCandidates(terms, { codeHints });
+  if (!r.ok) return { dbError: true, reason: r.reason };
+
+  const scored = (r.candidates || []).map((c) => scoreCandidate(terms, c, concept));
+  const decision = applyDecisionPolicy(scored, { activeConcept: concept });
+  decision.audit = {
+    query: description, tokens: stems, concept: concept?.id || null,
+    retrieved: r.candidates?.length || 0, thresholds: DECISION,
+  };
+  return decision;
+}
+
 // ── GET /api/tnved-ai/health ─────────────────────────────────────────────
 async function health(req, res) {
-  const { configured, timeoutMs } = getConfig();
-  if (!configured) {
-    return res.status(200).json({ ...unavailable('TNVED_AI_API_URL is not configured'), status: 'unavailable' });
-  }
   try {
-    const { httpOk, status, data } = await backendFetch('/health', { timeoutMs });
-    if (!httpOk) {
-      return res.status(200).json({ ok: false, error: true, status: 'error', reason: `AI backend /health HTTP ${status}` });
+    const h = await dbHealth();
+    if (!h.ok) {
+      return res.status(200).json({ ok: false, error: true, status: 'error', reason: h.reason || 'tnved_complete.db not found' });
     }
     return res.status(200).json({
       ok: true,
       status: 'configured',
-      codes_count: data?.qdrant?.codes_count ?? null,
-      pdf_chunks_count: data?.qdrant?.pdf_chunks_count ?? null,
-      backend: data?.status ?? null,
+      backend: 'local-sqlite',
+      engine: 'glorix-sql-stemmer-v1',
+      db: 'tnved_complete.db',
+      table: h.table,
+      rows_count: h.rows_count,
+      columns: h.columns,
     });
   } catch (err) {
-    const reason = err?.name === 'AbortError' ? 'AI backend timeout' : 'AI backend unreachable';
-    return res.status(200).json({ ok: false, error: true, status: 'error', reason });
+    return res.status(200).json({ ok: false, error: true, status: 'error', reason: String(err?.message || err) });
   }
 }
 
 // ── POST /api/tnved-ai/classify ──────────────────────────────────────────
 async function classify(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: true, code: '', reason: 'POST only' });
-
-  const name = String(req.body?.name ?? req.body?.description ?? '').trim();
-  if (name.length < 2) return res.status(400).json({ ok: false, error: true, code: '', reason: 'name too short' });
-
-  const { configured, timeoutMs } = getConfig();
-  if (!configured) return res.status(200).json(unavailable('TNVED_AI_API_URL is not configured'));
+  const text = String(req.body?.description ?? req.body?.name ?? req.body?.query ?? '').trim();
+  if (text.length < 2) return res.status(400).json({ ok: false, error: true, code: '', reason: 'query too short' });
 
   try {
-    // backend requires description length >= 5
-    const description = name.length < 5 ? `Товар: ${name}` : name;
-    const { httpOk, status, data } = await backendFetch('/classify', {
-      method: 'POST', timeoutMs, body: { description },
+    const d = await classifyText(text.slice(0, 1200));
+    if (d.dbError) return res.status(200).json({ ok: false, error: true, status: 'error', code: '', reason: d.reason });
+    return res.status(200).json({
+      ok: true, status: d.status, code: d.code, confident: d.confident, confidence: d.confidence,
+      requiresClarification: d.requiresClarification, candidates: d.candidates,
+      reason: d.reason, missing_information: d.missing_information, audit: d.audit,
     });
-    if (!httpOk) return res.status(200).json({ ok: false, error: true, code: '', reason: `AI backend HTTP ${status}` });
-    return res.status(200).json(normalizeClassify(data));
   } catch (err) {
-    const reason = err?.name === 'AbortError' ? 'AI backend timeout' : 'AI backend unreachable';
-    return res.status(200).json({ ok: false, error: true, code: '', reason });
+    return res.status(200).json({ ok: false, error: true, status: 'error', code: '', reason: String(err?.message || err) });
   }
 }
 
 // ── POST /api/tnved-ai/classify-batch ────────────────────────────────────
 async function classifyBatch(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: true, reason: 'POST only', results: [] });
-
   const items = Array.isArray(req.body?.items) ? req.body.items : [];
   if (!items.length) return res.status(400).json({ ok: false, error: true, reason: 'items array required', results: [] });
   if (items.length > 50) return res.status(400).json({ ok: false, error: true, reason: 'Max 50 items per batch', results: [] });
 
-  const { configured, timeoutMs } = getConfig();
-  if (!configured) {
-    // Explicitly return empty codes — never fabricate.
-    return res.status(200).json({
-      ...unavailable('TNVED_AI_API_URL is not configured'),
-      results: items.map(name => ({ name: String(name || '').trim(), code: '', confident: false })),
-    });
-  }
-
   const results = [];
   for (const raw of items) {
-    const name = String(raw || '').trim();
-    if (name.length < 2) { results.push({ name, code: '', confident: false }); continue; }
+    const rowId = (raw && typeof raw === 'object') ? raw.row_id : undefined;
+    const text = String((raw && typeof raw === 'object') ? (raw.description ?? raw.name ?? raw.query ?? '') : raw).trim().slice(0, 1200);
+    const base = { row_id: rowId, name: text };
+    if (text.length < 2) { results.push({ ...base, status: 'review', code: '', confident: false, candidates: [], reason: 'query too short' }); continue; }
     try {
-      const description = name.length < 5 ? `Товар: ${name}` : name;
-      const { httpOk, data } = await backendFetch('/classify', { method: 'POST', timeoutMs, body: { description } });
-      if (!httpOk) { results.push({ name, code: '', confident: false, error: true }); continue; }
-      const n = normalizeClassify(data);
-      results.push({ name, code: n.code, confident: n.confident, confidence: n.confidence });
-    } catch {
-      results.push({ name, code: '', confident: false, error: true });
+      const d = await classifyText(text);
+      if (d.dbError) { results.push({ ...base, status: 'error', code: '', confident: false, error: true, reason: d.reason }); continue; }
+      results.push({
+        ...base, status: d.status, code: d.code, confident: d.confident, confidence: d.confidence,
+        requiresClarification: d.requiresClarification, candidates: d.candidates,
+        reason: d.reason, missing_information: d.missing_information,
+      });
+    } catch (err) {
+      results.push({ ...base, status: 'error', code: '', confident: false, error: true, reason: String(err?.message || err) });
     }
   }
   return res.status(200).json({ ok: true, results });
 }
 
 // ── POST /api/tnved-ai/explain ───────────────────────────────────────────
-// The AI backend explains a DESCRIPTION (POST /classify/explain), not a bare code.
-// If a code is supplied without a description, we forward the code as the
-// description text (limited). Honest limitation documented in the migration doc.
 async function explain(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: true, reason: 'POST only' });
-
-  const description = String(req.body?.description ?? req.body?.code ?? '').trim();
-  if (description.length < 2) return res.status(400).json({ ok: false, error: true, reason: 'description or code required' });
-
-  const { configured, timeoutMs } = getConfig();
-  if (!configured) return res.status(200).json(unavailable('TNVED_AI_API_URL is not configured'));
+  const text = String(req.body?.description ?? req.body?.query ?? req.body?.code ?? '').trim();
+  if (text.length < 2) return res.status(400).json({ ok: false, error: true, reason: 'description or code required' });
 
   try {
-    const text = description.length < 5 ? `Код/товар: ${description}` : description;
-    const { httpOk, status, data } = await backendFetch('/classify/explain', {
-      method: 'POST', timeoutMs, body: { description: text, include_audit: true },
+    const d = await classifyText(text.slice(0, 1200));
+    if (d.dbError) return res.status(200).json({ ok: false, error: true, status: 'error', reason: d.reason });
+    return res.status(200).json({
+      ok: true,
+      explain: {
+        description: text, status: d.status, code: d.code, confidence: d.confidence,
+        reason: d.reason, missing_information: d.missing_information,
+        candidates: d.candidates, audit: d.audit,
+      },
     });
-    if (!httpOk) return res.status(200).json({ ok: false, error: true, reason: `AI backend HTTP ${status}` });
-    return res.status(200).json({ ok: true, explain: data });
   } catch (err) {
-    const reason = err?.name === 'AbortError' ? 'AI backend timeout' : 'AI backend unreachable';
-    return res.status(200).json({ ok: false, error: true, reason });
+    return res.status(200).json({ ok: false, error: true, status: 'error', reason: String(err?.message || err) });
   }
 }
 
-
 // ── POST /api/tnved-ai/documents ─────────────────────────────────────────
-// Passthrough to the backend Document AI job engine. One function, no new routes.
+// UNCHANGED passthrough to the existing Document AI job engine. Do not break.
 // Body: { op, jobId?, offset?, limit?, raw_text?, tnved?, model?, row_ids? }
 //   op: config | create | status | rows | pause | resume | cancel | retry
 async function documents(req, res) {
@@ -152,8 +183,8 @@ async function documents(req, res) {
   const b = req.body || {};
   const op = String(b.op || '').trim();
   const jid = encodeURIComponent(String(b.jobId || ''));
-  let method = 'POST';
-  let path = '';
+  let method;
+  let path;
   let body = null;
   switch (op) {
     case 'config': method = 'GET';  path = '/documents/config'; break;
